@@ -1,0 +1,43 @@
+.superpowers/
+node_modules/
+.env
+.env.local
+*.log
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/
+logs/
+
+# Schwere Binaerdateien (werden beim Deployment/Build befuellt, NICHT ins Repo)
+install/python/
+install/wheels/
+install/jre/
+install/instantclient/
+install/nssm.exe
+install/Suite8XRechnungSlim-*.zip
+
+# Validation-Artefakte (gross, werden bei Build hinzugefuegt)
+validation/xrechnung-*/kosit-validator.jar
+validation/xrechnung-*/ubl-2.1/
+validation/xrechnung-*/resources/
+
+.pytest_cache/
+.token_cache.bin
+.tmp_*
+
+# Hotel-spezifische Konfigurationen (NICHT ins Repo - sensible/personenbezogene Daten)
+slim/config/hotel.json
+slim/config/connection.json
+slim/config/connection.key
+slim/config/app_settings.json
+slim/config/update.json
+slim/config/local_admin.json
+slim/config/.jwt_secret
+slim/config/.token_cache.bin
+slim/config/.setup_done
+slim/data/
+slim/logs/

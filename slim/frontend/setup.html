@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slim-Setup - Suite8 XRechnung</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #fff; --fg: #1a1a1a;
+    --accent: #2d7a3c; --accent-h: #1e5a2a;
+    --warn: #c8861a; --err: #b13a2c;
+    --border: #d8dce2; --muted: #6a7280;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); margin: 0;
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 780px; margin: 24px auto; padding: 0 24px; }
+  header { text-align: center; margin-bottom: 24px; }
+  header h1 { color: var(--accent); margin: 0 0 4px; font-size: 24px; }
+  header p { color: var(--muted); margin: 0; font-size: 13px; }
+
+  .steps { display: flex; gap: 6px; margin-bottom: 24px; flex-wrap: wrap;
+           justify-content: center; }
+  .step-dot { display: flex; align-items: center; gap: 6px;
+              padding: 6px 12px; background: #fff; border: 1px solid var(--border);
+              border-radius: 16px; font-size: 12px; color: var(--muted); }
+  .step-dot.active { border-color: var(--accent); color: var(--accent);
+                     font-weight: 600; }
+  .step-dot.done { background: var(--accent); color: #fff;
+                   border-color: var(--accent); }
+  .step-dot .num { display: inline-block; width: 18px; height: 18px;
+                   border-radius: 50%; text-align: center; line-height: 18px;
+                   background: rgba(0,0,0,.08); font-size: 11px; }
+  .step-dot.done .num { background: rgba(255,255,255,.25); }
+
+  .card { background: var(--panel); border: 1px solid var(--border);
+          border-radius: 6px; padding: 28px 32px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .card h2 { margin: 0 0 4px; font-size: 20px; color: var(--accent); }
+  .card .sub { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+
+  label { display: block; font-weight: 600; font-size: 13px; margin-top: 14px;
+          margin-bottom: 4px; }
+  input[type="text"], input[type="password"], input[type="number"],
+  input[type="email"] {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid var(--border); border-radius: 4px; background: #fff;
+    font-family: inherit;
+  }
+  input[type="text"].mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  input:focus { outline: none; border-color: var(--accent); }
+  textarea { width: 100%; min-height: 160px; padding: 10px;
+             border: 1px solid var(--border); border-radius: 4px;
+             font-family: ui-monospace, "SF Mono", Consolas, monospace;
+             font-size: 12px; background: #fafbfc; }
+  small.hint { color: var(--muted); font-size: 12px; display: block; margin-top: 4px; }
+
+  .actions { display: flex; justify-content: space-between; align-items: center;
+             margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
+  button { padding: 10px 22px; font-size: 15px; font-weight: 600;
+           border: 0; border-radius: 4px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-h); }
+  button.secondary { background: #fff; color: var(--fg); border: 1px solid var(--border); }
+  button.secondary:hover { background: #f8f9fa; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .alert { padding: 12px 16px; border-radius: 4px; margin: 12px 0;
+           font-size: 14px; line-height: 1.5; }
+  .alert.ok { background: #e7f3ea; color: var(--accent); border: 1px solid #c4e0cb; }
+  .alert.warn { background: #fdf3df; color: #8a5b15; border: 1px solid #f0d390; }
+  .alert.err { background: #f9e1dd; color: var(--err); border: 1px solid #ecb6ac; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: #f8f9fa; font-weight: 600; font-size: 12px; color: var(--muted); }
+  td.status { width: 28px; text-align: center; font-size: 16px; }
+  td.status.ok { color: var(--accent); }
+  td.status.bad { color: var(--err); }
+  td.val { color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+  .copybtn { float: right; padding: 4px 12px; font-size: 12px; }
+  pre.sql { background: #1a1f24; color: #e8e8e8; padding: 14px; border-radius: 4px;
+            font-size: 12px; overflow-x: auto; white-space: pre-wrap;
+            max-height: 320px; overflow-y: auto; }
+
+  .udef-row { display: grid; grid-template-columns: 1fr 220px; gap: 12px;
+              align-items: end; margin-bottom: 12px; padding: 12px;
+              background: #f8f9fa; border: 1px solid var(--border); border-radius: 4px; }
+  .udef-row label { margin-top: 0; }
+  .udef-row input { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .udef-row .name { font-family: ui-monospace, Consolas, monospace;
+                    font-size: 11px; color: var(--muted); }
+
+  .pattern-test { background: #f8f9fa; padding: 16px; border-radius: 4px;
+                  border: 1px solid var(--border); margin-top: 16px; }
+  .pattern-test h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase;
+                     letter-spacing: .05em; color: var(--muted); }
+
+  .spinner { display: inline-block; width: 14px; height: 14px;
+             border: 2px solid #ccc; border-top-color: var(--accent);
+             border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Slim-Setup</h1>
+    <p>Suite8 XRechnung Slim - Einrichtungs-Assistent</p>
+  </header>
+
+  <div class="steps" id="steps"></div>
+
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+// ════════════════ Datenmodell ════════════════
+const STEPS = [
+  {id: "welcome",  title: "Willkommen"},
+  {id: "db",       title: "Datenbank"},
+  {id: "standard", title: "Stammdaten"},
+  {id: "udef",     title: "UDEF-Keys"},
+  {id: "pattern",  title: "Pattern"},
+  {id: "trigger",  title: "Trigger-SQL"},
+  {id: "hotel",    title: "Hotel"},
+  {id: "finish",   title: "Fertig"},
+];
+
+const state = {
+  step: 0,
+  db: {tns_alias: "", username: "", password: "",
+       tns_admin: "", oracle_client_lib_dir: ""},
+  db_ok: false,
+  standard: null,        // {items, missing_count}
+  udef: null,            // {items}
+  pattern: {subject: "Rechnung\\s+Nr\\.?\\s*(?P<zinv_number>\\d+)",
+            filename: "",
+            template: "{zinv_number}.xml"},
+  trigger_sql: "",
+  hotel: {hotel_code: "", hotel_long_name: "", absender_email: "",
+          default_payment_terms_days: 14, currency: "EUR",
+          seller_contact_name: "Buchhaltung",
+          seller_contact_phone: "", seller_contact_email: ""},
+  finish_result: null,
+};
+
+// ════════════════ Helper ════════════════
+function $(sel) { return document.querySelector(sel); }
+function esc(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"']/g, c =>
+    ({"&": "&amp;","<": "&lt;",">": "&gt;","\"": "&quot;","'": "&#39;"}[c]));
+}
+async function api(method, path, body) {
+  const opt = {method, headers: {"Content-Type": "application/json"}};
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  let j = null;
+  try { j = await r.json(); } catch { /* might be empty */ }
+  if (!r.ok) {
+    const msg = (j && j.detail) || ("HTTP " + r.status);
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return j;
+}
+
+// ════════════════ Step-Indikator ════════════════
+function renderSteps() {
+  $("#steps").innerHTML = STEPS.map((s, i) => {
+    const cls = i === state.step ? "active" :
+                i <  state.step ? "done"   : "";
+    return `<div class="step-dot ${cls}">
+              <span class="num">${i + 1}</span>${esc(s.title)}
+            </div>`;
+  }).join("");
+}
+
+// ════════════════ Schritte ════════════════
+function renderStep() {
+  renderSteps();
+  const id = STEPS[state.step].id;
+  if (id === "welcome")  return renderWelcome();
+  if (id === "db")       return renderDb();
+  if (id === "standard") return renderStandard();
+  if (id === "udef")     return renderUdef();
+  if (id === "pattern")  return renderPattern();
+  if (id === "trigger")  return renderTrigger();
+  if (id === "hotel")    return renderHotel();
+  if (id === "finish")   return renderFinish();
+}
+
+function nextStep()  { state.step = Math.min(state.step + 1, STEPS.length - 1); renderStep(); }
+function prevStep()  { state.step = Math.max(state.step - 1, 0); renderStep(); }
+
+// ──────── 1. Willkommen ────────
+function renderWelcome() {
+  $("#card").innerHTML = `
+    <h2>Willkommen zur Slim-Einrichtung</h2>
+    <p class="sub">Dieser Assistent fuehrt Sie in 7 Schritten durch die Konfiguration.</p>
+
+    <p>Sie werden gleich:</p>
+    <ol style="line-height:1.8">
+      <li>Die Verbindung zur Suite8-Datenbank prüfen</li>
+      <li>Die Hotel-Stammdaten in Suite8 überprüfen</li>
+      <li>Drei XRechnung-spezifische Werte in Suite8 anlegen</li>
+      <li>Das Rechnungsnummer-Erkennungs-Muster eingeben und live testen</li>
+      <li>Ein SQL-Skript für Ihren Datenbank-Administrator erhalten</li>
+      <li>Die Hotel-Stammdaten der App eingeben</li>
+      <li>Den Service starten</li>
+    </ol>
+
+    <div class="alert warn">
+      <strong>Wichtig:</strong> Halten Sie die <strong>Oracle-Zugangsdaten</strong>
+      (TNS-Alias, Username, Passwort) bereit. Sie bekommen diese von Ihrer
+      IT-Abteilung.
+    </div>
+
+    <div class="actions">
+      <span></span>
+      <button class="primary" onclick="nextStep()">Los geht's &rarr;</button>
+    </div>
+  `;
+}
+
+// ──────── 2. DB ────────
+function renderDb() {
+  const d = state.db;
+  $("#card").innerHTML = `
+    <h2>Datenbank-Verbindung</h2>
+    <p class="sub">Zugangsdaten zur Suite8-Oracle-Datenbank.</p>
+
+    <label>TNS-Alias oder Connect-String <small class="hint">Drei Varianten erlaubt:<br>
+      a) <strong>TNS-Alias</strong> aus der <code>tnsnames.ora</code> &mdash; z.B. <code>V8</code><br>
+      b) <strong>Easy Connect</strong> direkt &mdash; z.B. <code>db-host:1521/V8LIVE</code><br>
+      c) <strong>Voller Connect-String</strong> &mdash; <code>(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=...)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=...)))</code><br>
+      Wenn der Alias nicht auflösbar ist, am einfachsten Variante b nutzen.</small></label>
+    <input type="text" class="mono" id="db_tns" value="${esc(d.tns_alias)}">
+
+    <label>Benutzername <small class="hint">Oracle-User mit Lese- und Schreibrechten auf Suite8</small></label>
+    <input type="text" class="mono" id="db_user" value="${esc(d.username)}">
+
+    <label>Passwort</label>
+    <input type="password" id="db_pw" value="${esc(d.password)}">
+
+    <label>TNS-Admin-Pfad <small class="hint">Verzeichnis mit <code>tnsnames.ora</code>, z.B. <code>C:\\ORACLE\\client\\...\\network\\admin</code><br>
+      Nur ausfüllen wenn oben ein TNS-Alias (Variante a) eingegeben wurde. Bei Easy Connect / Connect-String leer lassen.<br>
+      Leer = die App sucht automatisch in den üblichen Oracle-Client-Pfaden.</small></label>
+    <input type="text" class="mono" id="db_tns_admin" value="${esc(d.tns_admin)}">
+
+    <div id="db_result"></div>
+
+    <div class="actions">
+      <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+      <button class="primary" id="db_test_btn" onclick="testDb()">Verbindung testen</button>
+    </div>
+  `;
+}
+async function testDb() {
+  const d = state.db;
+  d.tns_alias       = $("#db_tns").value.trim();
+  d.username        = $("#db_user").value.trim();
+  d.password        = $("#db_pw").value;
+  d.tns_admin       = $("#db_tns_admin").value.trim();
+  if (!d.tns_alias || !d.username || !d.password) {
+    $("#db_result").innerHTML =
+      `<div class="alert err">Bitte TNS-Alias, Benutzername und Passwort ausfüllen.</div>`;
+    return;
+  }
+  const btn = $("#db_test_btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Teste...';
+  $("#db_result").innerHTML = "";
+  try {
+    const r = await api("POST", "/api/setup/db/test", d);
+    if (r.ok) {
+      state.db_ok = true;
+      $("#db_result").innerHTML =
+        `<div class="alert ok">Verbindung steht. Angemeldet als <code>${esc(r.user)}</code> an Datenbank <code>${esc(r.db_name)}</code>.</div>`;
+      btn.disabled = false; btn.textContent = "Weiter →";
+      btn.onclick = nextStep;
+    } else {
+      $("#db_result").innerHTML =
+        `<div class="alert err"><strong>Verbindung fehlgeschlagen:</strong><br>${esc(r.error)}</div>`;
+      btn.disabled = false; btn.textContent = "Verbindung testen";
+    }
+  } catch (e) {
+    $("#db_result").innerHTML =
+      `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "Verbindung testen";
+  }
+}
+
+// ──────── 3. Standard-Stammdaten ────────
+async function renderStandard() {
+  $("#card").innerHTML = `
+    <h2>Hotel-Stammdaten in Suite8</h2>
+    <p class="sub">Wir prüfen, ob alle Pflichtfelder in Suite8 (WUSS-Tabelle) gepflegt sind.
+    Diese Werte werden direkt aus Suite8 gelesen.</p>
+    <p><span class="spinner"></span> Lese...</p>
+  `;
+  try {
+    const r = await api("GET", "/api/setup/wuss/standard");
+    state.standard = r;
+    const rows = r.items.map(it => `
+      <tr>
+        <td class="status ${it.ok ? "ok" : "bad"}">${it.ok ? "✓" : "✗"}</td>
+        <td><code>${esc(it.name)}</code></td>
+        <td>${esc(it.desc)}</td>
+        <td class="val">${esc(it.value || "—")}</td>
+      </tr>`).join("");
+    const allOk = r.missing_count === 0;
+    $("#card").innerHTML = `
+      <h2>Hotel-Stammdaten in Suite8</h2>
+      <p class="sub">Diese Werte werden aus der <code>WUSS</code>-Tabelle gelesen
+      (Configuration &rarr; Property &rarr; Property Information in Suite8).</p>
+      <table>
+        <thead><tr><th></th><th>Key</th><th>Bedeutung</th><th>Wert</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${allOk
+        ? `<div class="alert ok">Alle ${r.items.length} Pflichtfelder sind in Suite8 gesetzt.</div>`
+        : `<div class="alert err"><strong>${r.missing_count} Felder fehlen.</strong>
+            Bitte erst in Suite8 unter <em>Configuration &rarr; Property &rarr;
+            Property Information</em> nachpflegen. Ohne diese Felder schlaegt
+            die XRechnung-Validierung fehl.</div>`}
+      <div class="actions">
+        <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+        <div>
+          <button class="secondary" onclick="renderStandard()">Erneut prüfen</button>
+          ${allOk
+            ? `<button class="primary" onclick="nextStep()">Weiter &rarr;</button>`
+            : `<button class="primary" onclick="nextStep()">Trotzdem weiter</button>`}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    $("#card").innerHTML = `
+      <h2>Hotel-Stammdaten</h2>
+      <div class="alert err">Datenbank nicht erreichbar: ${esc(e.message)}</div>
+      <div class="actions">
+        <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+        <button class="primary" onclick="renderStandard()">Erneut versuchen</button>
+      </div>`;
+  }
+}
+
+// ──────── 4. UDEF-Keys ────────
+async function renderUdef() {
+  $("#card").innerHTML = `<h2>UDEF-Keys für XRechnung</h2><p><span class="spinner"></span> Lese...</p>`;
+  try {
+    const r = await api("GET", "/api/setup/wuss/udef");
+    state.udef = r;
+    const rows = r.items.map(it => {
+      const v = it.present ? it.current_value : it.default;
+      const tag = it.present
+        ? `<small class="hint" style="color:var(--accent)">Bereits in Suite8 vorhanden — wird NICHT verändert</small>`
+        : it.required
+          ? `<small class="hint" style="color:var(--err)">Pflicht, wird in Suite8 angelegt</small>`
+          : `<small class="hint">Optional, leer lassen wenn nicht benötigt</small>`;
+      return `
+        <div class="udef-row">
+          <div>
+            <label>${esc(it.label)}</label>
+            <div class="name">${esc(it.name)}</div>
+            ${tag}
+          </div>
+          <input type="text" data-key="${esc(it.name)}"
+                 value="${esc(v)}"
+                 ${it.present ? "disabled" : ""}>
+        </div>`;
+    }).join("");
+    $("#card").innerHTML = `
+      <h2>XRechnung-Werte in Suite8 anlegen</h2>
+      <p class="sub">Drei Konfigurationswerte werden für die XRechnung benötigt.
+      Sie werden in der <code>WUSS</code>-Tabelle gespeichert und koennen jederzeit
+      über Suite8 oder per <code>UPDATE</code> geändert werden.</p>
+      ${rows}
+      <div id="udef_result"></div>
+      <div class="actions">
+        <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+        <button class="primary" id="udef_save_btn" onclick="saveUdef()">In Suite8 anlegen</button>
+      </div>`;
+  } catch (e) {
+    $("#card").innerHTML = `
+      <h2>UDEF-Keys</h2>
+      <div class="alert err">${esc(e.message)}</div>
+      <div class="actions">
+        <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+        <button class="primary" onclick="renderUdef()">Erneut versuchen</button>
+      </div>`;
+  }
+}
+async function saveUdef() {
+  const values = {};
+  document.querySelectorAll("[data-key]").forEach(inp => {
+    if (!inp.disabled) values[inp.dataset.key] = inp.value.trim();
+  });
+  const btn = $("#udef_save_btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Speichere...';
+  try {
+    const r = await api("POST", "/api/setup/wuss/udef", {values});
+    const parts = [];
+    if (r.inserted.length)         parts.push(`<strong>${r.inserted.length} Werte angelegt:</strong> ${r.inserted.map(esc).join(", ")}`);
+    if (r.skipped_existing.length) parts.push(`<strong>${r.skipped_existing.length} schon vorhanden:</strong> ${r.skipped_existing.map(esc).join(", ")}`);
+    let html = `<div class="alert ok">${parts.join("<br>")}</div>`;
+    if (r.blocked.length) {
+      html += `<div class="alert err"><strong>${r.blocked.length} fehlgeschlagen:</strong><br>` +
+        r.blocked.map(b => `<code>${esc(b.name)}</code>: ${esc(b.error)}`).join("<br>") +
+        `</div>`;
+    }
+    $("#udef_result").innerHTML = html;
+    btn.disabled = false; btn.textContent = "Weiter →";
+    btn.onclick = nextStep;
+  } catch (e) {
+    $("#udef_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "In Suite8 anlegen";
+  }
+}
+
+// ──────── 5. Pattern ────────
+function renderPattern() {
+  const p = state.pattern;
+  $("#card").innerHTML = `
+    <h2>Rechnungsnummer-Erkennung</h2>
+    <p class="sub">Suite8 schickt für jede Rechnung eine Mail mit dem Folio-PDF.
+    Wir müssen aus dem <strong>Betreff</strong> der Mail die Rechnungs-Nummer
+    herauslesen. Geben Sie unten einen echten Betreff aus Suite8 ein und
+    <strong>tippen Sie die Rechnungsnummer dazu</strong> — der Assistent
+    erstellt das Muster automatisch. Versendet Ihr Hotel deutsche und
+    englische Betreffe, füllen Sie beide aus; daraus wird EIN gemeinsames
+    Muster gebaut.</p>
+
+    <div class="pattern-test" style="background:#e7f3ea; border-color:#c4e0cb">
+      <h3 style="color:var(--accent)">Pattern automatisch erstellen</h3>
+
+      <label>Beispiel-Betreff <strong>deutsch</strong></label>
+      <input type="text" class="mono" id="gen_example_de"
+             placeholder="z.B. Wir sagen Danke - Ihre Rechnung Nr. 144853">
+      <label>Welche Zahl ist die Rechnungsnummer?</label>
+      <input type="text" class="mono" id="gen_number_de" placeholder="z.B. 144853">
+
+      <label style="margin-top:12px">Beispiel-Betreff <strong>englisch</strong>
+        <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <input type="text" class="mono" id="gen_example_en"
+             placeholder="z.B. Your invoice - Invoice number 144853">
+      <label>Welche Zahl ist die Rechnungsnummer?</label>
+      <input type="text" class="mono" id="gen_number_en" placeholder="z.B. 144853">
+
+      <div style="margin-top:10px">
+        <button class="primary" onclick="generatePattern()">
+          Pattern erzeugen
+        </button>
+        <span id="gen_result" style="margin-left:10px"></span>
+      </div>
+      <small class="hint" style="margin-top:8px">
+        Tipp: kopieren Sie den Betreff direkt aus dem Suite8-Mail-Editor
+        oder aus dem Posteingang einer schon versendeten Rechnung.
+      </small>
+    </div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px">
+        Erweitert: Pattern manuell bearbeiten
+      </summary>
+      <div style="margin-top:12px">
+        <label>Muster für den Betreff</label>
+        <input type="text" class="mono" id="pat_subject" value="${esc(p.subject)}">
+        <small class="hint">Trifft auf "<em>Ihre Rechnung Nr. 12345</em>" und liest <code>12345</code>.</small>
+
+        <label>Muster für den Dateinamen (optional)</label>
+        <input type="text" class="mono" id="pat_filename" value="${esc(p.filename)}">
+        <small class="hint">Nur ausfüllen wenn der Mail-Betreff KEINE Rechnungsnummer enthält.
+        Achtung: Suite8 schreibt im PDF-Namen die <em>interne ID</em>, nicht die Rechnungsnummer
+        — dann <code>(?P&lt;zinv_id&gt;\\d+)</code> nutzen statt <code>(?P&lt;zinv_number&gt;...)</code>.</small>
+
+        <label>Dateiname der XRechnung-XML</label>
+        <input type="text" class="mono" id="pat_tmpl" value="${esc(p.template)}">
+        <small class="hint">"<code>{zinv_number}</code>" wird durch die echte Rechnungsnummer ersetzt.</small>
+      </div>
+    </details>
+
+    <div class="pattern-test">
+      <h3>Pattern gegen Beispiel prüfen</h3>
+      <label>Test-Betreff</label>
+      <input type="text" class="mono" id="test_subject" placeholder="z.B. Ihre Rechnung Nr. 144853">
+      <label>Test-Dateiname (optional)</label>
+      <input type="text" class="mono" id="test_filename" placeholder="z.B. Folio_IND_144853.pdf">
+      <div style="margin-top:8px">
+        <button class="secondary" onclick="testPattern()">Pattern jetzt testen</button>
+        <span id="pat_test_result" style="margin-left:8px"></span>
+      </div>
+    </div>
+
+    <div id="pat_save_result"></div>
+
+    <div class="actions">
+      <button class="secondary" onclick="prevStep()">&larr; Zurück</button>
+      <button class="primary" id="pat_save_btn" onclick="savePattern()">Pattern speichern</button>
+    </div>`;
+}
+
+async function generatePattern() {
+  const out = $("#gen_result");
+  const exDe = ($("#gen_example_de").value || "").trim();
+  const nrDe = ($("#gen_number_de").value || "").trim();
+  const exEn = ($("#gen_example_en").value || "").trim();
+  const nrEn = ($("#gen_number_en").value || "").trim();
+
+  const examples = [];
+  if (exDe || nrDe) {
+    if (!exDe || !nrDe) {
+      out.innerHTML = `<span style="color:var(--err)">Deutsch: bitte Betreff UND Rechnungsnummer eintragen.</span>`;
+      return;
+    }
+    examples.push({example: exDe, number: nrDe});
+  }
+  if (exEn || nrEn) {
+    if (!exEn || !nrEn) {
+      out.innerHTML = `<span style="color:var(--err)">Englisch: bitte Betreff UND Rechnungsnummer eintragen.</span>`;
+      return;
+    }
+    examples.push({example: exEn, number: nrEn});
+  }
+  if (!examples.length) {
+    out.innerHTML = `<span style="color:var(--err)">Bitte mindestens einen Betreff mit Rechnungsnummer eingeben.</span>`;
+    return;
+  }
+
+  out.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api("POST", "/api/config/pattern/generate", {
+      examples: examples, kind: "zinv_number",
+    });
+    if (r.ok) {
+      // Pattern ins manuelle Feld übernehmen und Test-Betreff vorbelegen
+      $("#pat_subject").value = r.pattern;
+      $("#test_subject").value = examples[0].example;
+      const warn = r.warning
+        ? `<div class="alert warn" style="margin-top:8px;font-size:12px">${esc(r.warning)}</div>`
+        : "";
+      out.innerHTML =
+        `<span style="color:var(--accent);font-weight:600">
+           ✓ Pattern erzeugt — Rechnungsnummer(n) <code>${esc(r.matched.join(", "))}</code> erkannt.
+         </span>${warn}`;
+      // Automatisch live testen, damit der User sofort sieht dass es geht
+      setTimeout(testPattern, 200);
+    } else {
+      out.innerHTML = `<span style="color:var(--err)">✗ ${esc(r.error)}</span>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--err)">${esc(e.message)}</span>`;
+  }
+}
+async function testPattern() {
+  const out = $("#pat_test_result");
+  out.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api("POST", "/api/config/pattern/test", {
+      subject_pattern: $("#pat_subject").value,
+      filename_pattern: $("#pat_filename").value,
+      subject: $("#test_subject").value,
+      filename: $("#test_filename").value,
+    });
+    if (r.matched) {
+      out.innerHTML = `<span style="color:var(--accent);font-weight:600">✓ Treffer:
+        <code>${esc(r.result)}</code> (als ${esc(r.kind)} aus ${esc(r.source)})</span>`;
+    } else {
+      out.innerHTML = `<span style="color:var(--err)">✗ Kein Treffer: ${esc(r.error || "")}</span>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--err)">${esc(e.message)}</span>`;
+  }
+}
+async function savePattern() {
+  const btn = $("#pat_save_btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    state.pattern.subject  = $("#pat_subject").value;
+    state.pattern.filename = $("#pat_filename").value;
+    state.pattern.template = $("#pat_tmpl").value || "{zinv_number}.xml";
+    await api("POST", "/api/setup/pattern", {
+      subject_pattern: state.pattern.subject,
+      filename_pattern: state.pattern.filename,
+      attachment_name_template: state.pattern.template,
+    });
+    $("#pat_save_result").innerHTML = `<div class="alert ok">Gespeichert.</div>`;
+    btn.disabled = false; btn.textContent = "Weiter →";
+    btn.onclick = nextStep;
+  } catch (e) {
+    $("#pat_save_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "Pattern speichern";
+  }
+}
+
+// ──────── 6. Trigger-SQL ────────
+async function renderTrigger() {
+  $("#card").innerHTML = `<h2>SQL für Datenbank-Administrator</h2><p><span class="spinner"></span> Erstelle SQL...</p>`;
+  try {
+    const r = await api("GET", "/api/setup/trigger-sql");
+    state.trigger_sql = r.sql;
+    $("#card").innerHTML = `
+      <h2>SQL für Datenbank-Administrator</h2>
+      <p class="sub">Damit Suite8 die Mails zurueckhält, bis die XRechnung
+      angehängt ist, muss ein Trigger in der Datenbank aktiv sein.</p>
+
+      <div class="alert warn">
+        Bitte das folgende SQL <strong>einmalig</strong> an Ihren Suite8-Administrator
+        weitergeben. Er fuehrt es als <code>V8LIVE</code>-User oder DBA aus.
+      </div>
+
+      <div>
+        <button class="secondary copybtn" onclick="copyTriggerSql(this)">In Zwischenablage kopieren</button>
+        <strong style="font-size:13px;color:var(--muted)">Trigger-SQL</strong>
+      </div>
+      <pre class="sql" id="trigger_sql_box">${esc(state.trigger_sql)}</pre>
+
+      <p style="font-size:13px;color:var(--muted)">Sobald der DBA das SQL ausgefuehrt hat,
+      koennen Sie hier weitermachen. Der Trigger muss
+      <strong>nicht</strong> jetzt sofort aktiv sein — die App laeuft auch ohne, sie verarbeitet
+      dann nur erst dann etwas, wenn der Trigger steht.</p>
+
+      <div class="actions">
+        <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+        <button class="primary" onclick="nextStep()">Verstanden, weiter &rarr;</button>
+      </div>`;
+  } catch (e) {
+    $("#card").innerHTML = `<div class="alert err">${esc(e.message)}</div>
+      <div class="actions"><button class="secondary" onclick="prevStep()">&larr; Zurueck</button></div>`;
+  }
+}
+function copyTriggerSql(btn) {
+  navigator.clipboard.writeText(state.trigger_sql).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "Kopiert!";
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+// ──────── 7. Hotel ────────
+function renderHotel() {
+  const h = state.hotel;
+  $("#card").innerHTML = `
+    <h2>Hotel-Daten der App</h2>
+    <p class="sub">Diese Daten werden ins XRechnung-XML eingetragen. Sie überschreiben
+    die Suite8-Stammdaten NICHT — sie ergänzen sie nur für Felder, die in Suite8 nicht
+    gepflegt werden (z.B. der Ansprechpartner).</p>
+
+    <label>Hotel-Code <small class="hint">3-stellig, z.B. <code>HHB</code></small></label>
+    <input type="text" class="mono" id="h_code" value="${esc(h.hotel_code)}">
+
+    <label>Hotel-Name <small class="hint">offizielle Bezeichnung</small></label>
+    <input type="text" id="h_name" value="${esc(h.hotel_long_name)}">
+
+    <label>Absender-E-Mail</label>
+    <input type="email" id="h_email" value="${esc(h.absender_email)}">
+
+    <label>Zahlungsziel (Tage)</label>
+    <input type="number" id="h_days" value="${h.default_payment_terms_days}" min="0" max="365">
+
+    <h3 style="margin-top:24px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
+      Ansprechpartner Buchhaltung
+    </h3>
+
+    <label>Name</label>
+    <input type="text" id="h_sc_name" value="${esc(h.seller_contact_name)}">
+    <label>Telefon</label>
+    <input type="text" id="h_sc_phone" value="${esc(h.seller_contact_phone)}">
+    <label>E-Mail</label>
+    <input type="email" id="h_sc_email" value="${esc(h.seller_contact_email)}">
+
+    <div id="hotel_result"></div>
+
+    <div class="actions">
+      <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+      <button class="primary" id="hotel_save_btn" onclick="saveHotel()">Speichern</button>
+    </div>`;
+}
+async function saveHotel() {
+  const h = state.hotel;
+  h.hotel_code             = $("#h_code").value.trim();
+  h.hotel_long_name        = $("#h_name").value.trim();
+  h.absender_email         = $("#h_email").value.trim();
+  h.default_payment_terms_days = parseInt($("#h_days").value, 10) || 14;
+  h.seller_contact_name    = $("#h_sc_name").value.trim();
+  h.seller_contact_phone   = $("#h_sc_phone").value.trim();
+  h.seller_contact_email   = $("#h_sc_email").value.trim();
+  if (!h.hotel_code || !h.hotel_long_name) {
+    $("#hotel_result").innerHTML = `<div class="alert err">Hotel-Code und Hotel-Name sind Pflicht.</div>`;
+    return;
+  }
+  const btn = $("#hotel_save_btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    await api("POST", "/api/setup/hotel", h);
+    $("#hotel_result").innerHTML = `<div class="alert ok">Gespeichert.</div>`;
+    btn.disabled = false; btn.textContent = "Weiter →";
+    btn.onclick = nextStep;
+  } catch (e) {
+    $("#hotel_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "Speichern";
+  }
+}
+
+// ──────── 8. Finish ────────
+function renderFinish() {
+  $("#card").innerHTML = `
+    <h2>Einrichtung abschließen</h2>
+    <p class="sub">Wenn Sie auf <strong>Service installieren und starten</strong> klicken,
+    wird die App als Windows-Dienst registriert und gestartet. Sie laeuft dann automatisch
+    bei jedem Server-Start.</p>
+
+    <ul style="line-height:1.8">
+      <li>Service-Name: <code>Suite8XRechnungSlim</code></li>
+      <li>URL: <code>http://127.0.0.1:8022/</code></li>
+      <li>Logs: <code>slim\\logs\\service-stdout.log</code></li>
+    </ul>
+
+    <div class="alert warn">
+      Der Service kann nur installiert werden, wenn dieser Setup-Wizard
+      als <strong>Administrator</strong> gestartet wurde. Falls nicht: das
+      Skript <code>slim\\install\\install_slim.cmd</code> später manuell als Admin ausfuehren.
+    </div>
+
+    <div id="finish_result"></div>
+
+    <div class="actions">
+      <button class="secondary" onclick="prevStep()">&larr; Zurueck</button>
+      <button class="primary" id="finish_btn" onclick="doFinish()">Service installieren und starten</button>
+    </div>`;
+}
+async function doFinish() {
+  const btn = $("#finish_btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Wird installiert...';
+  try {
+    const r = await api("POST", "/api/setup/finish");
+    state.finish_result = r;
+    const svc = r.service || {};
+    let html = `<div class="alert ok"><strong>Setup abgeschlossen.</strong></div>`;
+    if (svc.attempted) {
+      if (svc.installed) {
+        html += `<div class="alert ok">Service wurde installiert und gestartet.</div>`;
+      } else {
+        html += `<div class="alert warn"><strong>Service-Installation nicht durchgekommen</strong>
+          (oft: fehlende Admin-Rechte). Bitte <code>slim\\install\\install_slim.cmd</code>
+          manuell als Administrator ausfuehren.<br><br><strong>Detail:</strong>
+          <pre style="font-size:11px">${esc((svc.output || "").slice(0,500))}</pre>
+        </div>`;
+      }
+    }
+    html += `<p style="margin-top:24px;text-align:center">
+      <a href="/" style="padding:12px 24px;background:var(--accent);color:#fff;
+         text-decoration:none;border-radius:4px;font-weight:600;display:inline-block">
+         &rarr; Zur Status-Seite
+      </a></p>`;
+    $("#finish_result").innerHTML = html;
+    btn.style.display = "none";
+  } catch (e) {
+    $("#finish_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "Service installieren und starten";
+  }
+}
+
+// ════════════════ Boot ════════════════
+(async function init() {
+  try {
+    const s = await api("GET", "/api/setup/status");
+    if (s.setup_done) {
+      $("#card").innerHTML = `
+        <h2>Setup bereits abgeschlossen</h2>
+        <p>Die App ist schon eingerichtet.</p>
+        <div class="actions">
+          <span></span>
+          <a href="/" style="padding:10px 22px;background:var(--accent);color:#fff;
+             text-decoration:none;border-radius:4px;font-weight:600">Zur Status-Seite</a>
+        </div>`;
+      $("#steps").style.display = "none";
+      return;
+    }
+  } catch {}
+  renderStep();
+})();
+</script>
+</body>
+</html>

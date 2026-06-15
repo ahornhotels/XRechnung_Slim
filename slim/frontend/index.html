@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suite8 XRechnung Slim</title>
+<style>
+  /* ── Theme: Hell (Default) ───────────────────────────────── */
+  :root {
+    --bg: #f4f5f7;
+    --fg: #1a1a1a;
+    --accent: #2d7a3c;
+    --accent-dark: #1e5a2a;
+    --accent-fg: #ffffff;
+    --error: #b13a2c;
+    --warning: #c8861a;
+    --panel: #ffffff;
+    --border: #d8dce2;
+    --muted: #6a7280;
+    --banner-bg: #fdf3df;
+    --banner-fg: #8a5b15;
+    --banner-border: #f0d390;
+    --modal-bg: rgba(0,0,0,.5);
+    --code-bg: #f8f9fa;
+  }
+  /* ── Theme: Dunkel (alt) ─────────────────────────────────── */
+  [data-theme="dark"] {
+    --bg: #111;
+    --fg: #e8e8e8;
+    --accent: #b6d100;
+    --accent-dark: #225c2b;
+    --accent-fg: #000000;
+    --error: #c4452b;
+    --warning: #e0a800;
+    --panel: #1c1c1c;
+    --border: #2a2a2a;
+    --muted: #888;
+    --banner-bg: #4a2a13;
+    --banner-fg: #ffd47a;
+    --banner-border: #c8861a;
+    --modal-bg: rgba(0,0,0,.7);
+    --code-bg: #0a0a0a;
+  }
+  /* ── Theme: Auto (folgt OS) ──────────────────────────────── */
+  @media (prefers-color-scheme: dark) {
+    [data-theme="auto"] {
+      --bg: #111; --fg: #e8e8e8; --accent: #b6d100; --accent-dark: #225c2b;
+      --accent-fg: #000000; --error: #c4452b; --warning: #e0a800;
+      --panel: #1c1c1c; --border: #2a2a2a; --muted: #888;
+      --banner-bg: #4a2a13; --banner-fg: #ffd47a; --banner-border: #c8861a;
+      --modal-bg: rgba(0,0,0,.7); --code-bg: #0a0a0a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: baseline; gap: 24px;
+  }
+  header h1 { font-size: 18px; margin: 0; color: var(--accent); font-weight: 600; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  section { margin-bottom: 32px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--muted); border-bottom: 1px solid var(--border);
+       padding-bottom: 6px; margin: 0 0 12px; }
+  .stat-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px 16px; min-width: 160px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--muted);
+                      text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-card .value { font-size: 22px; font-weight: 600; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border);
+           text-align: left; vertical-align: top; font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase;
+       letter-spacing: 0.04em; font-size: 11px; }
+  .err { color: var(--error); white-space: pre-wrap; font-family: monospace;
+         font-size: 12px; }
+  button {
+    background: var(--accent); color: var(--accent-fg); border: 0;
+    padding: 4px 12px; border-radius: 3px; cursor: pointer; font-weight: 600;
+    font-size: 12px;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { background: var(--muted); cursor: not-allowed; opacity: .6; }
+  pre.audit { background: var(--panel); border: 1px solid var(--border);
+              padding: 12px; border-radius: 4px; overflow-x: auto;
+              max-height: 400px; font-size: 12px; }
+  .event { display: inline-block; padding: 1px 6px; border-radius: 3px;
+           font-size: 11px; font-weight: 600; }
+  .event-attach_ok { background: var(--accent); color: var(--accent-fg); }
+  .event-validator_fail, .event-kosit_fail, .event-attach_fail,
+  .event-xml_build_fail, .event-zinv_not_found, .event-pattern_no_match,
+  .event-pattern_ambiguous, .event-poller_crash,
+  .event-poller_db_error { background: var(--error); color: #fff; }
+  .event-retry_triggered { background: var(--warning); color: #fff; }
+  .muted { color: var(--muted); }
+  .footer { color: var(--muted); font-size: 11px; padding: 24px; text-align: center; }
+  .section-head { display: flex; justify-content: space-between;
+                  align-items: center; border-bottom: 1px solid var(--border);
+                  padding-bottom: 6px; margin: 0 0 12px; }
+  .section-head h2 { border: 0; padding: 0; margin: 0; }
+  .modal-bg { position: fixed; inset: 0; background: var(--modal-bg);
+              display: flex; align-items: center; justify-content: center;
+              z-index: 100; padding: 24px; }
+  .modal { background: var(--panel); color: var(--fg);
+           border: 1px solid var(--border); border-radius: 6px;
+           max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto;
+           padding: 24px; }
+  .modal h3 { margin: 0 0 4px; color: var(--accent); font-size: 18px; }
+  .modal p.muted { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .modal table { width: 100%; }
+  .modal td { padding: 4px 6px; vertical-align: middle; }
+  .modal td input { width: 100%; padding: 4px 6px; background: var(--bg);
+                    color: var(--fg); border: 1px solid var(--border);
+                    border-radius: 3px; font-family: inherit; }
+  .modal td.k { font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+                color: var(--muted); width: 32%; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px;
+                    margin-top: 16px; padding-top: 12px;
+                    border-top: 1px solid var(--border); }
+  .modal .actions button.secondary { background: transparent;
+                                     color: var(--fg);
+                                     border: 1px solid var(--border); }
+  .modal .actions button.danger { background: var(--error); color: #fff; }
+  .modal .actions button.danger:hover { background: var(--error); opacity: .85; }
+  .cfg-grid { display: grid; grid-template-columns: 180px 1fr; gap: 8px 12px;
+              align-items: center; margin-bottom: 12px; }
+  .cfg-grid input { background: var(--bg); color: var(--fg);
+                    border: 1px solid var(--border); padding: 6px 8px;
+                    font-family: monospace; font-size: 13px; border-radius: 3px; }
+  .cfg-grid input:focus { border-color: var(--accent); outline: none; }
+  .cfg-grid code { font-size: 11px; background: var(--panel); padding: 1px 4px;
+                   border-radius: 3px; }
+  .cfg-test { background: var(--panel); border: 1px solid var(--border);
+              padding: 12px 16px; border-radius: 4px; margin: 12px 0; }
+  .cfg-test h3 { font-size: 12px; text-transform: uppercase; margin: 0 0 8px;
+                 color: var(--muted); letter-spacing: 0.05em; }
+  .cfg-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .ok { color: var(--accent); }
+  .bad { color: var(--error); }
+  .alert-banner { background: var(--banner-bg); border: 2px solid var(--banner-border);
+                  color: var(--banner-fg); padding: 12px 16px; border-radius: 4px;
+                  margin: 0 0 16px; font-size: 13px; }
+  .alert-banner ul { margin: 4px 0 0 18px; padding: 0; }
+  details.mapping { background: var(--panel); border: 1px solid var(--border);
+                    border-radius: 4px; padding: 12px 16px; margin-top: 8px; }
+  details.mapping > summary { cursor: pointer; color: var(--muted);
+                              font-size: 13px; font-weight: 600;
+                              text-transform: uppercase; letter-spacing: .05em; }
+  details.mapping > summary:hover { color: var(--accent); }
+  .map-tabs { display: flex; gap: 4px; margin-top: 12px; flex-wrap: wrap; }
+  .map-tab { padding: 4px 10px; background: var(--bg); color: var(--muted);
+             border: 1px solid var(--border); border-radius: 3px;
+             cursor: pointer; font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
+  .map-tab.active { background: var(--accent); color: var(--accent-fg);
+                    border-color: var(--accent); }
+  .theme-switcher { margin-left: auto; display: flex; gap: 4px; }
+  .theme-switcher button { padding: 4px 8px; background: transparent;
+                           color: var(--muted); border: 1px solid var(--border);
+                           font-size: 11px; font-weight: 400; }
+  .theme-switcher button.active { background: var(--accent);
+                                  color: var(--accent-fg);
+                                  border-color: var(--accent); }
+  .theme-switcher button:hover:not(.active) { color: var(--fg); }
+  .map-desc { font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  pre.sql-src { background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+                padding: 12px; border-radius: 3px; overflow: auto;
+                font-size: 11px; max-height: 460px; white-space: pre;
+                font-family: ui-monospace, Consolas, monospace; }
+  textarea.sql-edit { width: 100%; min-height: 360px; background: var(--bg);
+                      color: var(--fg); border: 1px solid var(--accent);
+                      padding: 12px; border-radius: 3px;
+                      font-size: 11px; white-space: pre;
+                      font-family: ui-monospace, Consolas, monospace;
+                      resize: vertical; }
+  .badge-override { display: inline-block; padding: 1px 6px;
+                    background: var(--warning); color: #000;
+                    font-size: 10px; font-weight: 600; border-radius: 3px;
+                    margin-left: 6px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Suite8 XRechnung Slim</h1>
+  <div class="meta">
+    <span id="hotel">…</span> · Port <span id="port">…</span> ·
+    letzter Poll-Lauf: <span id="last_run">noch nicht</span>
+  </div>
+  <div class="theme-switcher" id="theme_switcher" title="Theme wechseln">
+    <button data-theme="light" onclick="setTheme('light')">Hell</button>
+    <button data-theme="dark"  onclick="setTheme('dark')">Dunkel</button>
+    <button data-theme="auto"  onclick="setTheme('auto')">Auto</button>
+  </div>
+</header>
+<main>
+
+  <div id="warnings_banner"></div>
+  <div id="update_banner"></div>
+
+  <section>
+    <div class="section-head">
+      <h2>Letzter Polling-Lauf</h2>
+      <button onclick="forcePoll(this)" id="forcepoll_btn">Jetzt einmal pollen (Trace)</button>
+    </div>
+    <div class="stat-row" id="summary"></div>
+    <div id="forcepoll_trace"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Pending WMAIs <span class="muted" id="pending_count"></span></h2>
+      <button onclick="retryAll(this)" id="bulk_btn">Alle Fehler erneut versuchen</button>
+    </div>
+    <table id="pending_table">
+      <thead><tr>
+        <th>WMAI</th><th>Datei</th><th>Betreff</th><th>Empfaenger</th>
+        <th>WMAI_ERROR</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <div id="modal_container"></div>
+
+  <section>
+    <h2>Audit-Log (letzte 50)</h2>
+    <pre class="audit" id="audit"></pre>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>XML-Archiv <span class="muted" id="archive_count"></span></h2>
+      <button onclick="refreshArchive()">Aktualisieren</button>
+    </div>
+    <p class="muted" style="margin-top:0">
+      Alle erzeugten XRechnung-XMLs (neueste zuerst, max. 100). Die
+      SHA256-Prüfung weist nach, dass eine Datei seit der Erstellung
+      nicht verändert wurde.
+    </p>
+    <div class="cfg-actions" style="margin-bottom:8px">
+      <input id="archive_q" type="text" placeholder="Nach Rechnungsnummer / Dateiname filtern"
+             style="flex:1" onkeydown="if(event.key==='Enter')refreshArchive()">
+      <button onclick="refreshArchive()">Suchen</button>
+    </div>
+    <table id="archive_table">
+      <thead><tr>
+        <th>Datei</th><th>Monat</th><th>Geändert</th><th>Größe</th>
+        <th>SHA256</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Trigger-SQL für DBA <span class="muted" style="text-transform:none;letter-spacing:0">(falls noch nicht installiert)</span></h2>
+    <p class="muted" style="margin-top:0">Damit Suite8 die Folio-Mails an die Slim weiterreicht, muss dieses SQL einmal als
+    V8LIVE / Suite8-DBA ausgeführt werden. Es spiegelt das aktuelle Pattern wider.</p>
+    <details class="mapping" id="trigger_details">
+      <summary>SQL anzeigen / kopieren</summary>
+      <pre class="sql-src" id="trigger_sql">Klicken zum Laden ...</pre>
+      <button class="map-tab" onclick="copyTriggerSql()">In Zwischenablage kopieren</button>
+      <button class="map-tab" onclick="loadTriggerSql()">Aktualisieren</button>
+      <span id="trigger_copy_status" style="margin-left:8px"></span>
+    </details>
+  </section>
+
+  <section>
+    <h2>Mapping &amp; SQL-Quellen <span class="muted" style="text-transform:none;letter-spacing:0">(für Techniker / DBA)</span></h2>
+    <details class="mapping" id="mapping_details">
+      <summary>Anzeigen wie Suite8 → XRechnung gemappt wird</summary>
+      <p class="map-desc" id="map_intro" style="margin-top:10px"></p>
+      <div class="map-tabs" id="map_tabs"></div>
+      <p class="map-desc" id="map_current_desc"></p>
+      <pre class="sql-src" id="map_src">Laden...</pre>
+      <textarea class="sql-edit" id="map_edit" style="display:none"></textarea>
+      <p class="map-desc">
+        <button class="map-tab" onclick="copyMapping()">In Zwischenablage kopieren</button>
+        <button class="map-tab" id="map_edit_btn" onclick="enterEditMode()"
+                style="display:none">Bearbeiten</button>
+        <button class="map-tab" id="map_save_btn" onclick="saveOverride()"
+                style="display:none;background:var(--accent);color:#000">
+          Speichern</button>
+        <button class="map-tab" id="map_cancel_btn" onclick="cancelEdit()"
+                style="display:none">Abbrechen</button>
+        <button class="map-tab" id="map_reset_btn" onclick="resetOverride()"
+                style="display:none;background:var(--error);color:#fff">
+          Auf Original zurücksetzen</button>
+        <span id="map_copy_status" style="margin-left:8px"></span>
+      </p>
+    </details>
+  </section>
+
+  <section>
+    <h2>Pattern-Konfiguration</h2>
+    <p class="muted" style="margin-top:0">
+      Suite8 erzeugt Folio-Mails mit hotel-spezifischem Subject / Filename.
+      Einfachster Weg: <strong>echten Betreff einer Folio-Mail eintragen,
+      die Rechnungsnummer dazu tippen</strong> und auf "Pattern erzeugen" klicken.
+      Gibt es deutsche und englische Betreffe, beide ausfüllen — daraus wird
+      EIN gemeinsames Muster gebaut.
+    </p>
+    <div class="cfg-test" style="background:rgba(34,92,43,.2); border-color:var(--accent-dark)">
+      <h3 style="color:var(--accent)">Pattern automatisch erstellen</h3>
+      <div class="cfg-grid">
+        <label>Beispiel-Betreff deutsch</label>
+        <input id="gen_example_de" type="text"
+               placeholder="z.B. Wir sagen Danke - Ihre Rechnung Nr. 144853">
+        <label>Rechnungsnummer darin</label>
+        <input id="gen_number_de" type="text" placeholder="z.B. 144853">
+        <label>Beispiel-Betreff englisch <span class="muted">(optional)</span></label>
+        <input id="gen_example_en" type="text"
+               placeholder="z.B. Your invoice - Invoice number 144853">
+        <label>Rechnungsnummer darin</label>
+        <input id="gen_number_en" type="text" placeholder="z.B. 144853">
+      </div>
+      <div class="cfg-actions">
+        <button onclick="generatePattern()">Pattern erzeugen</button>
+        <span id="gen_result" class="muted"></span>
+      </div>
+    </div>
+    <div class="cfg-grid">
+      <label>Subject-Pattern</label>
+      <input id="cfg_subject" type="text" placeholder="z.B. Rechnung Nr\.? (?P&lt;zinv_number&gt;\d+)">
+      <label>Filename-Pattern</label>
+      <input id="cfg_filename" type="text" placeholder="z.B. Folio.*_(?P&lt;zinv_number&gt;\d+)\.pdf$">
+      <label>Anhang-Dateiname</label>
+      <input id="cfg_template" type="text" placeholder="{zinv_number}.xml">
+    </div>
+    <div class="cfg-test">
+      <h3>Pattern testen (nichts gespeichert)</h3>
+      <div class="cfg-grid">
+        <label>Test-Subject</label>
+        <input id="test_subject" type="text" placeholder="Wir sagen Danke - Ihre Rechnung Nr. 12345">
+        <label>Test-Filename</label>
+        <input id="test_filename" type="text" placeholder="Folio_IND_12345.pdf">
+      </div>
+      <button onclick="testPattern()">Testen</button>
+      <span id="test_result" class="muted"></span>
+    </div>
+    <div class="cfg-actions">
+      <button onclick="savePattern()">Speichern</button>
+      <button onclick="reloadPattern()" style="background:var(--muted);color:#fff">Verwerfen</button>
+      <span id="cfg_status" class="muted"></span>
+    </div>
+  </section>
+
+</main>
+<div class="footer">Suite8 XRechnung Slim – kein Login, bind 127.0.0.1.
+Auto-Refresh alle 15s.</div>
+
+<script>
+// ──────── Theme-Switcher ────────
+function setTheme(name) {
+  document.documentElement.setAttribute("data-theme", name);
+  try { localStorage.setItem("slim-theme", name); } catch {}
+  document.querySelectorAll("#theme_switcher button").forEach(b => {
+    b.classList.toggle("active", b.dataset.theme === name);
+  });
+}
+(function initTheme() {
+  let saved = "light";
+  try { saved = localStorage.getItem("slim-theme") || "light"; } catch {}
+  setTheme(saved);
+})();
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts || {});
+  if (!r.ok) throw new Error(url + " -> " + r.status);
+  return r.json();
+}
+
+function escapeHtml(s) {
+  return (s === null || s === undefined) ? "" :
+    String(s).replace(/[&<>"']/g, c =>
+      ({"&": "&amp;","<": "&lt;",">": "&gt;","\"": "&quot;","'": "&#39;"}[c]));
+}
+
+async function refreshStatus() {
+  try {
+    const s = await fetchJSON("/api/status");
+    document.getElementById("hotel").textContent = s.hotel || "(keine Hotel-Config)";
+    document.getElementById("port").textContent = location.port || "8022";
+    document.getElementById("last_run").textContent = s.last_run || "noch nicht";
+
+    // Warnungs-Banner (mail_strategy, kein Pattern, skipped_strategy)
+    const banner = document.getElementById("warnings_banner");
+    if (s.warnings && s.warnings.length) {
+      banner.innerHTML =
+        `<div class="alert-banner"><strong>Aufgepasst:</strong>` +
+        `<ul>${s.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`;
+    } else {
+      banner.innerHTML = "";
+    }
+
+    const summary = s.last_run_summary || {};
+    const stats = [
+      ["Attached", summary.attached || 0],
+      ["Failed", summary.failed || 0],
+      ["No-Match", summary.no_match || 0],
+      ["Ambiguous", summary.ambiguous || 0],
+      ["Strategy", s.mail_strategy || "?"],
+      ["Interval", (s.interval_seconds || "?") + "s"],
+    ];
+    document.getElementById("summary").innerHTML = stats.map(([k, v]) =>
+      `<div class="stat-card"><div class="label">${escapeHtml(k)}</div>
+       <div class="value">${escapeHtml(v)}</div></div>`).join("");
+  } catch (e) {
+    document.getElementById("summary").innerHTML =
+      `<div class="err">Status nicht erreichbar: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Trigger-SQL lazy-load + Kopieren
+let _triggerSql = "";
+async function loadTriggerSql() {
+  try {
+    const j = await fetchJSON("/api/trigger-sql");
+    _triggerSql = j.sql || "";
+    document.getElementById("trigger_sql").textContent = _triggerSql;
+  } catch (e) {
+    document.getElementById("trigger_sql").textContent = "Fehler: " + e.message;
+  }
+}
+async function copyTriggerSql() {
+  if (!_triggerSql) await loadTriggerSql();
+  try {
+    await navigator.clipboard.writeText(_triggerSql);
+    const s = document.getElementById("trigger_copy_status");
+    s.className = "ok"; s.textContent = "Kopiert.";
+    setTimeout(() => { s.textContent = ""; }, 2000);
+  } catch (e) {
+    document.getElementById("trigger_copy_status").textContent = "Kopieren fehlgeschlagen";
+  }
+}
+document.getElementById("trigger_details").addEventListener("toggle", e => {
+  if (e.target.open && !_triggerSql) loadTriggerSql();
+});
+
+async function refreshPending() {
+  try {
+    const p = await fetchJSON("/api/pending");
+    document.getElementById("pending_count").textContent =
+      "(" + p.count + ")";
+    const tbody = document.querySelector("#pending_table tbody");
+    if (p.count === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">
+        Keine wartenden WMAIs.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = p.items.map(r => `
+      <tr>
+        <td>${escapeHtml(r.wmai_id)}</td>
+        <td>${escapeHtml(r.filename)}</td>
+        <td>${escapeHtml((r.subject || "").slice(0, 80))}</td>
+        <td>${escapeHtml(r.to)}</td>
+        <td class="err">${escapeHtml(r.error || "")}</td>
+        <td style="white-space:nowrap">${r.error ? `
+          <button onclick="retry(${r.wmai_id}, this)">Neu versuchen</button>
+          <button onclick="openOverride(${r.wmai_id})"
+                  style="background:var(--warning);color:#000;margin-left:4px">
+            Override</button>` : ""}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    document.querySelector("#pending_table tbody").innerHTML =
+      `<tr><td colspan="6" class="err">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function forcePoll(btn) {
+  btn.disabled = true; btn.textContent = "Läuft...";
+  const out = document.getElementById("forcepoll_trace");
+  out.innerHTML = `<div class="muted" style="padding:12px">Pollt manuell...</div>`;
+  try {
+    const r = await fetchJSON("/api/poller/run-now", {method: "POST"});
+    let html = `<div class="alert-banner" style="margin-top:12px;background:#1f2c1c;border-color:var(--accent-dark);color:#d4f0c4">`
+             + `<strong>Trace-Ergebnis</strong> (Dauer ${r.elapsed_seconds || "?"} s, `
+             + `${r.summary.total} pending; match=${r.summary.match}, `
+             + `no_match=${r.summary.no_match}, validator_fail=${r.summary.validator_fail}, `
+             + `kosit_fail=${r.summary.kosit_fail}, ready=${r.summary.ready_to_attach})</div>`;
+    html += `<div class="muted" style="font-family:monospace;font-size:11px;margin:8px 0">`
+          + `mail_strategy=${escapeHtml(r.config.mail_strategy)}<br>`
+          + `subject_pattern=${escapeHtml(r.config.subject_pattern || "<leer>")}<br>`
+          + `filename_pattern=${escapeHtml(r.config.filename_pattern || "<leer>")}</div>`;
+    if (r.abort_reason) {
+      html += `<div class="err" style="padding:8px;background:rgba(196,69,43,.2);border:1px solid var(--error);border-radius:3px;margin:6px 0">`
+            + `<strong>Abbruch:</strong> ${escapeHtml(r.abort_reason)}</div>`;
+    }
+    for (const w of (r.wmais || [])) {
+      html += `<details class="mapping" style="margin:6px 0">`
+            + `<summary><strong>WMAI ${w.wmai_id}</strong> → <code>${escapeHtml(w.outcome)}</code>`
+            + ` <span class="muted">subject=${escapeHtml((w.subject||"").slice(0,80))}</span></summary>`
+            + `<table style="margin:8px 0"><tbody>`;
+      for (const e of w.events) {
+        const icon = e.ok ? `<span class="ok">✓</span>` : `<span class="bad">✗</span>`;
+        html += `<tr><td style="width:30px">${icon}</td><td>${escapeHtml(e.step)}</td>`
+              + `<td><code style="font-size:11px">${escapeHtml(e.detail)}</code></td></tr>`;
+      }
+      html += `</tbody></table></details>`;
+    }
+    out.innerHTML = html;
+  } catch (e) {
+    out.innerHTML = `<div class="err" style="padding:12px">Fehler: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Jetzt einmal pollen (Trace)";
+  }
+}
+
+async function retry(wmai_id, btn) {
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    await fetchJSON(`/api/wmai/${wmai_id}/retry`, {method: "POST"});
+    setTimeout(refreshAll, 500);
+  } catch (e) {
+    btn.textContent = "Fehler";
+    alert("Retry fehlgeschlagen: " + e.message);
+  }
+}
+
+async function retryAll(btn) {
+  if (!confirm("WMAI_ERROR für ALLE pending Einträge mit Fehler zuruecksetzen?\n"
+             + "Der nächste Poll-Lauf probiert sie alle erneut.")) return;
+  btn.disabled = true;
+  btn.textContent = "Setze zurueck...";
+  try {
+    const r = await fetchJSON("/api/wmai/retry-all", {method: "POST"});
+    alert(`${r.cleared_count} WMAI(s) zurueckgesetzt.`
+        + (r.failed_count ? `\n${r.failed_count} fehlgeschlagen.` : ""));
+    setTimeout(refreshAll, 500);
+  } catch (e) {
+    alert("Bulk-Retry fehlgeschlagen: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Alle Fehler erneut versuchen";
+  }
+}
+
+// ──────── Override-Modal ────────
+const OVERRIDE_FIELD_LABELS = {
+  customerendpointid:             "Kunden-E-Mail (BR-DE-15)",
+  customername:                   "Kundenname",
+  customerstreetname:             "Kunden-Straße",
+  customercityname:               "Kunden-Ort",
+  customerpostalzone:             "Kunden-PLZ",
+  customeridentificationcode:     "Kunden-Land (ISO2, z.B. DE)",
+  buyerreference:                 "Kaeuferreferenz / Leitweg-ID",
+  suppliercontactname:            "Ansprechpartner Buchhaltung",
+  suppliercontacttelephone:       "Ansprechpartner Telefon",
+  suppliercontactelectronicmail:  "Ansprechpartner E-Mail",
+  suppliername:                   "Hotel-Name",
+  supplierstreetname:             "Hotel-Straße",
+  suppliercityname:               "Hotel-Ort",
+  supplierpostalzone:             "Hotel-PLZ",
+  supplieridentificationcode:     "Hotel-Land (ISO2)",
+  suppliercompanyid:              "Hotel-UStID",
+  payeefinancialaccountid:        "IBAN",
+  billingreferenceid:             "Bezugs-Rechnungsnummer (CreditNote)",
+  billingreferenceissuedate:      "Bezugs-Datum (YYYY-MM-DD)",
+  duedate:                        "Fälligkeit (YYYY-MM-DD)",
+};
+
+async function openOverride(wmai_id) {
+  let data;
+  try {
+    data = await fetchJSON(`/api/wmai/${wmai_id}/override`);
+  } catch (e) {
+    alert("Override konnte nicht geladen werden: " + e.message);
+    return;
+  }
+  const current = data.values || {};
+  const keys = data.allowed_keys || Object.keys(OVERRIDE_FIELD_LABELS);
+
+  const rows = keys.map(k => {
+    const label = OVERRIDE_FIELD_LABELS[k] || k;
+    const v = current[k] || "";
+    return `<tr>
+      <td>${escapeHtml(label)}<br><span class="k">${escapeHtml(k)}</span></td>
+      <td><input data-key="${escapeHtml(k)}" type="text" value="${escapeHtml(v)}"></td>
+    </tr>`;
+  }).join("");
+
+  const html = `
+    <div class="modal-bg" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h3>Override für WMAI ${escapeHtml(wmai_id)}</h3>
+        <p class="muted">Hier eingetragene Werte überschreiben das Suite8-Original
+          für GENAU diese Rechnung. Nach erfolgreichem Anhängen wird der
+          Override automatisch gelöscht. Leer lassen = Suite8-Wert behalten.</p>
+        <table><tbody>${rows}</tbody></table>
+        <div class="actions">
+          <button class="secondary" onclick="closeModal()">Abbrechen</button>
+          <button class="danger" onclick="deleteOverride(${wmai_id})">
+            Override löschen</button>
+          <button onclick="saveOverride(${wmai_id})">Speichern + erneut versuchen</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById("modal_container").innerHTML = html;
+}
+
+function closeModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("modal_container").innerHTML = "";
+}
+
+async function saveOverride(wmai_id) {
+  const values = {};
+  document.querySelectorAll("#modal_container [data-key]").forEach(inp => {
+    const v = inp.value.trim();
+    if (v) values[inp.dataset.key] = v;
+  });
+  try {
+    await fetchJSON(`/api/wmai/${wmai_id}/override`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({values}),
+    });
+    closeModal();
+    setTimeout(refreshAll, 300);
+  } catch (e) {
+    alert("Speichern fehlgeschlagen: " + e.message);
+  }
+}
+
+async function deleteOverride(wmai_id) {
+  if (!confirm("Override löschen?")) return;
+  try {
+    await fetchJSON(`/api/wmai/${wmai_id}/override`, {method: "DELETE"});
+    closeModal();
+    setTimeout(refreshAll, 300);
+  } catch (e) {
+    alert("Löschen fehlgeschlagen: " + e.message);
+  }
+}
+
+async function refreshAudit() {
+  try {
+    const a = await fetchJSON("/api/audit/tail?n=50");
+    const el = document.getElementById("audit");
+    if (a.count === 0) {
+      el.innerHTML = "<span class='muted'>Noch keine Audit-Einträge.</span>";
+      return;
+    }
+    el.innerHTML = a.items.slice().reverse().map(e => {
+      const evCls = "event event-" + (e.event || "?");
+      const det = e.details
+        ? " " + escapeHtml(JSON.stringify(e.details).slice(0, 200))
+        : "";
+      const wmai = e.wmai_id ? ` wmai=${e.wmai_id}` : "";
+      const zinv = e.zinv_number ? ` zinv=${e.zinv_number}` : "";
+      return `<div>${escapeHtml(e.ts)} <span class="${evCls}">${escapeHtml(e.event)}</span>${escapeHtml(wmai)}${escapeHtml(zinv)}${det}</div>`;
+    }).join("");
+  } catch (e) {
+    document.getElementById("audit").innerHTML =
+      `<span class="err">Audit nicht erreichbar: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([refreshStatus(), refreshPending(), refreshAudit()]);
+}
+
+// ──────── XML-Archiv ────────
+function fmtSize(bytes) {
+  if (bytes === null || bytes === undefined) return "";
+  if (bytes < 1024) return bytes + " B";
+  return (bytes / 1024).toFixed(1) + " KB";
+}
+
+async function refreshArchive() {
+  const tbody = document.querySelector("#archive_table tbody");
+  const q = document.getElementById("archive_q").value.trim();
+  const url = "/api/archive?limit=100" + (q ? "&q=" + encodeURIComponent(q) : "");
+  try {
+    const a = await fetchJSON(url);
+    document.getElementById("archive_count").textContent = "(" + a.count + ")";
+    if (a.count === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">
+        ${q ? "Keine Treffer." : "Noch keine archivierten XMLs."}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = a.items.map(it => {
+      const dl = "/api/archive/file?path=" + encodeURIComponent(it.rel_path);
+      const reportPath = it.rel_path.replace(/\.xml$/i, ".kosit-report.xml");
+      const reportBtn = it.has_kosit_report
+        ? `<a href="/api/archive/file?path=${encodeURIComponent(reportPath)}">
+             <button>Bericht</button></a>` : "";
+      const verifyBtn = it.has_sha256
+        ? `<button data-path="${escapeHtml(it.rel_path)}"
+                   onclick="verifyArchive(this)">Prüfen</button>`
+        : `<span class="muted">keine .sha256</span>`;
+      return `
+      <tr>
+        <td>${escapeHtml(it.name)}</td>
+        <td>${escapeHtml(it.bucket)}</td>
+        <td>${escapeHtml((it.mtime || "").slice(0, 16).replace("T", " "))}</td>
+        <td>${fmtSize(it.size)}</td>
+        <td class="verify-cell">${verifyBtn}</td>
+        <td style="white-space:nowrap">
+          <a href="${dl}"><button>⬇ XML</button></a>
+          ${reportBtn}
+        </td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    tbody.innerHTML =
+      `<tr><td colspan="6" class="err">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function verifyArchive(btn) {
+  const cell = btn.closest("td");
+  try {
+    const r = await fetchJSON(
+      "/api/archive/verify?path=" + encodeURIComponent(btn.dataset.path));
+    cell.innerHTML = r.ok
+      ? `<span class="ok">✔ OK</span>`
+      : `<span class="err">✘ ${r.expected === null
+          ? "Seitendatei fehlt" : "ABWEICHUNG — Datei verändert!"}</span>`;
+  } catch (e) {
+    cell.innerHTML = `<span class="err">Prüfung fehlgeschlagen</span>`;
+  }
+}
+
+// ──────── Updater ────────
+async function checkUpdate() {
+  const banner = document.getElementById("update_banner");
+  try {
+    const r = await fetchJSON("/api/update/check");
+    if (r.error) {
+      banner.innerHTML = `<div class="alert-banner" style="background:#1c1c1c;border-color:var(--muted);color:var(--muted)">`
+                       + `<strong>Update-Check:</strong> ${escapeHtml(r.error)} `
+                       + `<small>(aktuelle Version ${escapeHtml(r.current_version)})</small></div>`;
+      return;
+    }
+    if (!r.available) {
+      banner.innerHTML = `<div class="alert-banner" style="background:#1c2c1c;border-color:var(--accent-dark);color:var(--accent)">`
+                       + `Version ${escapeHtml(r.current_version)} ist aktuell. `
+                       + `<button class="map-tab" onclick="checkUpdate()" style="margin-left:8px">Erneut prüfen</button></div>`;
+      return;
+    }
+    const sizeText = r.asset_size_mb ? ` (${r.asset_size_mb} MB)` : "";
+    banner.innerHTML = `<div class="alert-banner" style="background:#2a3c4a;border-color:#4a90c4;color:#a0d4f0">`
+      + `<strong>Update verfügbar:</strong> ${escapeHtml(r.current_version)} → ${escapeHtml(r.latest_version)}${sizeText}<br>`
+      + `<small>${escapeHtml(r.release_notes || "").slice(0, 300)}</small><br>`
+      + `<button class="primary" style="margin-top:8px" onclick="applyUpdate(this)" id="apply_update_btn">Jetzt aktualisieren</button>`
+      + ` <a href="${escapeHtml(r.release_url || "#")}" target="_blank" style="margin-left:8px;color:var(--accent)">Release-Details</a>`
+      + `</div>`;
+  } catch (e) {
+    banner.innerHTML = `<div class="alert-banner">Update-Check fehlgeschlagen: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function applyUpdate(btn) {
+  if (!confirm("Update jetzt herunterladen und anwenden?\n\n"
+             + "Der Service startet danach automatisch neu (~10 Sekunden)."
+             + "\n\nLaufende Polling-Operationen werden abgebrochen.")) return;
+  btn.disabled = true;
+  btn.textContent = "Lade & installiere...";
+  try {
+    const r = await fetchJSON("/api/update/apply", {method: "POST"});
+    const banner = document.getElementById("update_banner");
+    if (r.applied) {
+      banner.innerHTML = `<div class="alert-banner" style="background:#1c2c1c;border-color:var(--accent);color:var(--accent)">`
+                       + `<strong>Update angewendet:</strong> ${escapeHtml(r.from_version)} → ${escapeHtml(r.to_version)}.<br>`
+                       + `Kopiert: <code>${(r.copied || []).join(", ")}</code><br>`
+                       + (r.failed && r.failed.length ? `<span class="bad">Fehler: ${r.failed.join(", ")}</span><br>` : "")
+                       + `${escapeHtml(r.message)}</div>`;
+      // Nach 10 s neu laden
+      setTimeout(() => { location.reload(); }, 10000);
+    } else {
+      banner.innerHTML = `<div class="alert-banner">${escapeHtml(r.message)}</div>`;
+      btn.disabled = false; btn.textContent = "Jetzt aktualisieren";
+    }
+  } catch (e) {
+    alert("Update fehlgeschlagen: " + e.message);
+    btn.disabled = false; btn.textContent = "Jetzt aktualisieren";
+  }
+}
+
+// Beim Seitenaufruf einmal automatisch checken (silent, kein Spam)
+setTimeout(checkUpdate, 1500);
+
+// ──────── Mapping / SQL-Quellen-Viewer + Editor ────────
+let _mappingTemplates = null;
+let _mappingCurrent = null;
+let _editMode = false;
+
+async function loadMappingList() {
+  try {
+    const j = await fetchJSON("/api/sql/templates");
+    _mappingTemplates = j.items.concat([{
+      name: "VIEWS_Customized_final.txt",
+      description: "Original-Views (CREATE VIEW + CREATE FUNCTION) — historische Referenz",
+      url: j.views_source_url,
+      readonly: true,
+    }]);
+    document.getElementById("map_intro").textContent = j.note || "";
+    renderMappingTabs();
+  } catch (e) {
+    document.getElementById("map_src").textContent = "Fehler: " + e.message;
+  }
+}
+
+function renderMappingTabs() {
+  const tabs = document.getElementById("map_tabs");
+  tabs.innerHTML = _mappingTemplates.map((t, i) => {
+    const badge = t.overridden ? '<span class="badge-override">geändert</span>' : '';
+    return `<button class="map-tab ${i === 0 ? "active" : ""}" data-i="${i}"
+             onclick="showMapping(${i})">${escapeHtml(t.name)}${badge}</button>`;
+  }).join("");
+  showMapping(0);
+}
+
+async function showMapping(idx) {
+  exitEditMode();
+  const t = _mappingTemplates[idx];
+  _mappingCurrent = t;
+  document.querySelectorAll(".map-tab[data-i]").forEach(b => {
+    b.classList.toggle("active", parseInt(b.dataset.i, 10) === idx);
+  });
+  const desc = (t.description || "")
+    + (t.overridden ? " — DIESE VERSION wird aktuell vom Poller genutzt (Operator-Override aktiv)." : "");
+  document.getElementById("map_current_desc").textContent = desc;
+  const pre = document.getElementById("map_src");
+  pre.textContent = "Laden...";
+  try {
+    const r = await fetch(t.url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    pre.textContent = await r.text();
+  } catch (e) {
+    pre.textContent = "Fehler: " + e.message;
+  }
+  // Edit/Reset-Buttons nur fuer editierbare Templates (nicht fuer views-source)
+  document.getElementById("map_edit_btn").style.display =
+    t.readonly ? "none" : "inline-block";
+  document.getElementById("map_reset_btn").style.display =
+    (!t.readonly && t.overridden) ? "inline-block" : "none";
+}
+
+async function copyMapping() {
+  if (!_mappingCurrent) return;
+  const text = _editMode
+    ? document.getElementById("map_edit").value
+    : document.getElementById("map_src").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    const s = document.getElementById("map_copy_status");
+    s.className = "ok";
+    s.textContent = "Kopiert.";
+    setTimeout(() => { s.textContent = ""; }, 2000);
+  } catch (e) {
+    document.getElementById("map_copy_status").textContent = "Kopieren fehlgeschlagen";
+  }
+}
+
+function enterEditMode() {
+  if (!_mappingCurrent || _mappingCurrent.readonly) return;
+  _editMode = true;
+  const pre = document.getElementById("map_src");
+  const ta = document.getElementById("map_edit");
+  ta.value = pre.textContent;
+  pre.style.display = "none";
+  ta.style.display = "block";
+  document.getElementById("map_edit_btn").style.display = "none";
+  document.getElementById("map_reset_btn").style.display = "none";
+  document.getElementById("map_save_btn").style.display = "inline-block";
+  document.getElementById("map_cancel_btn").style.display = "inline-block";
+}
+
+function exitEditMode() {
+  _editMode = false;
+  document.getElementById("map_src").style.display = "block";
+  document.getElementById("map_edit").style.display = "none";
+  document.getElementById("map_save_btn").style.display = "none";
+  document.getElementById("map_cancel_btn").style.display = "none";
+}
+
+function cancelEdit() {
+  exitEditMode();
+  showMapping(_mappingTemplates.indexOf(_mappingCurrent));
+}
+
+async function saveOverride() {
+  const name = _mappingCurrent.name;
+  const sql = document.getElementById("map_edit").value;
+  const s = document.getElementById("map_copy_status");
+  s.className = "muted";
+  s.textContent = "Validiere und speichere...";
+  try {
+    // Erst validieren
+    const v = await fetchJSON(`/api/sql/templates/${encodeURIComponent(name)}/validate`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sql}),
+    });
+    if (!v.ok) {
+      s.className = "bad";
+      s.textContent = "Validierung fehlgeschlagen: " + v.error;
+      return;
+    }
+    // Dann speichern
+    await fetchJSON(`/api/sql/templates/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sql}),
+    });
+    s.className = "ok";
+    s.textContent = "Gespeichert. Wirkt im nächsten Poll-Lauf.";
+    // Liste neu laden, damit Override-Badge sichtbar wird
+    _mappingTemplates = null;
+    await loadMappingList();
+  } catch (e) {
+    s.className = "bad";
+    s.textContent = "Fehler: " + e.message;
+  }
+}
+
+async function resetOverride() {
+  const name = _mappingCurrent.name;
+  if (!confirm(`Override fuer ${name} loeschen?\n`
+             + `Der Poller nutzt danach wieder die Repo-Vorlage.`)) return;
+  const s = document.getElementById("map_copy_status");
+  try {
+    await fetchJSON(`/api/sql/templates/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+    s.className = "ok";
+    s.textContent = "Override entfernt - Repo-Vorlage ist wieder aktiv.";
+    _mappingTemplates = null;
+    await loadMappingList();
+  } catch (e) {
+    s.className = "bad";
+    s.textContent = "Fehler: " + e.message;
+  }
+}
+
+// Lazy-Load beim ersten Aufklappen des Details-Blocks
+document.getElementById("mapping_details").addEventListener("toggle", e => {
+  if (e.target.open && !_mappingTemplates) loadMappingList();
+});
+
+// ---- Pattern-Editor ----
+async function reloadPattern() {
+  try {
+    const p = await fetchJSON("/api/config/pattern");
+    document.getElementById("cfg_subject").value =
+      p.suite8_recognize_subject_pattern || "";
+    document.getElementById("cfg_filename").value =
+      p.suite8_recognize_filename_pattern || "";
+    document.getElementById("cfg_template").value =
+      p.suite8_attachment_name_template || "{zinv_number}.xml";
+    const s = document.getElementById("cfg_status");
+    s.className = "muted";
+    s.textContent = "(geladen)";
+  } catch (e) {
+    const s = document.getElementById("cfg_status");
+    s.className = "bad";
+    s.textContent = "Laden fehlgeschlagen: " + e.message;
+  }
+}
+
+async function savePattern() {
+  const payload = {
+    suite8_recognize_subject_pattern: document.getElementById("cfg_subject").value,
+    suite8_recognize_filename_pattern: document.getElementById("cfg_filename").value,
+    suite8_attachment_name_template: document.getElementById("cfg_template").value
+      || "{zinv_number}.xml",
+  };
+  const s = document.getElementById("cfg_status");
+  try {
+    const r = await fetch("/api/config/pattern", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.detail || ("HTTP " + r.status));
+    }
+    s.className = "ok";
+    s.textContent = "Gespeichert. Wirkt im nächsten Poll-Lauf.";
+  } catch (e) {
+    s.className = "bad";
+    s.textContent = "Fehler: " + e.message;
+  }
+}
+
+async function generatePattern() {
+  const out = document.getElementById("gen_result");
+  const exDe = (document.getElementById("gen_example_de").value || "").trim();
+  const nrDe = (document.getElementById("gen_number_de").value || "").trim();
+  const exEn = (document.getElementById("gen_example_en").value || "").trim();
+  const nrEn = (document.getElementById("gen_number_en").value || "").trim();
+
+  const examples = [];
+  if (exDe || nrDe) {
+    if (!exDe || !nrDe) {
+      out.className = "bad";
+      out.textContent = "Deutsch: bitte Betreff UND Rechnungsnummer eintragen.";
+      return;
+    }
+    examples.push({example: exDe, number: nrDe});
+  }
+  if (exEn || nrEn) {
+    if (!exEn || !nrEn) {
+      out.className = "bad";
+      out.textContent = "Englisch: bitte Betreff UND Rechnungsnummer eintragen.";
+      return;
+    }
+    examples.push({example: exEn, number: nrEn});
+  }
+  if (!examples.length) {
+    out.className = "bad";
+    out.textContent = "Bitte mindestens einen Betreff mit Rechnungsnummer eingeben.";
+    return;
+  }
+
+  out.className = "muted";
+  out.textContent = "...";
+  try {
+    const r = await fetchJSON("/api/config/pattern/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({examples, kind: "zinv_number"}),
+    });
+    if (r.ok) {
+      document.getElementById("cfg_subject").value = r.pattern;
+      document.getElementById("test_subject").value = examples[0].example;
+      out.className = "ok";
+      out.textContent = `Pattern erzeugt - Nummer(n) ${r.matched.join(", ")} erkannt`
+                      + (r.warning ? ` (${r.warning.slice(0, 80)}...)` : "");
+      // Direkt live testen, damit der Operator sofort Sicherheit hat.
+      testPattern();
+    } else {
+      out.className = "bad";
+      out.textContent = r.error;
+    }
+  } catch (e) {
+    out.className = "bad";
+    out.textContent = "Fehler: " + e.message;
+  }
+}
+
+async function testPattern() {
+  const payload = {
+    subject_pattern: document.getElementById("cfg_subject").value,
+    filename_pattern: document.getElementById("cfg_filename").value,
+    subject: document.getElementById("test_subject").value,
+    filename: document.getElementById("test_filename").value,
+  };
+  const out = document.getElementById("test_result");
+  try {
+    const r = await fetch("/api/config/pattern/test", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      out.className = "bad";
+      out.textContent = "Validierungsfehler: " + (j.detail || r.status);
+      return;
+    }
+    if (j.matched) {
+      out.className = "ok";
+      out.textContent = `Match: zinv_number=${j.result} (aus ${j.source})`;
+    } else {
+      out.className = "bad";
+      out.textContent = j.error || "Kein Match.";
+    }
+  } catch (e) {
+    out.className = "bad";
+    out.textContent = "Fehler: " + e.message;
+  }
+}
+
+refreshAll();
+reloadPattern();
+refreshArchive();
+setInterval(refreshAll, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "_hinweis": "Diese Datei nach update.json kopieren wenn das GitHub-Repo PRIVAT ist und ein Personal Access Token (PAT) gebraucht wird. Bei oeffentlichem Repo nicht noetig - dann greift der Default.",
+  "_pat_anlegen": "GitHub -> Settings -> Developer Settings -> Personal Access Tokens -> Fine-grained -> 'contents:read' auf das eine Repo geben",
+
+  "enabled": true,
+  "owner": "ahornhotels",
+  "repo": "Suite8XRechnung",
+
+  "_pat_token_hinweis": "Klartext-PAT hier eintragen - der Wizard verschluesselt ihn beim ersten Lauf in Fernet-Format und ersetzt diesen Eintrag.",
+  "pat_token": ""
+}

@@ -1,0 +1,16 @@
+{
+  "hotel_code": "MYH",
+  "hotel_long_name": "Mein Hotel GmbH",
+  "absender_email": "invoice@my-hotel.com",
+  "default_payment_terms_days": 14,
+  "currency": "EUR",
+  "xrechnung_profile_id": "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0",
+  "mail_strategy": "suite8",
+  "suite8_recognize_subject_pattern": "Rechnung\\s+Nr\\.?\\s*(?P<zinv_number>\\d+)",
+  "suite8_recognize_filename_pattern": "",
+  "suite8_poll_interval_seconds": 30,
+  "suite8_attachment_name_template": "{zinv_number}.xml",
+  "seller_contact_name": "Buchhaltung",
+  "seller_contact_phone": "",
+  "seller_contact_email": ""
+}

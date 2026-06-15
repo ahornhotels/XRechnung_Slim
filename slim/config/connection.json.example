@@ -1,0 +1,7 @@
+{
+  "tns_alias": "V8",
+  "username": "<oracle-user>",
+  "tns_admin": "C:\\ORACLE\\client\\Administrator\\product\\19.0.0\\client_1\\network\\admin",
+  "oracle_client_lib_dir": "",
+  "password": "<via Setup-Skript Fernet-verschluesselt eintragen>"
+}

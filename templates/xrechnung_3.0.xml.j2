@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ubl:Invoice xmlns:ubl="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+             xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+             xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+  <cbc:ID>{{ header.id }}</cbc:ID>
+  <cbc:IssueDate>{{ header.issuedate }}</cbc:IssueDate>
+{% if header.duedate %}  <cbc:DueDate>{{ header.duedate }}</cbc:DueDate>
+{% endif %}  <cbc:InvoiceTypeCode>{{ header.invoicetypecode }}</cbc:InvoiceTypeCode>
+{% if header.note %}  <cbc:Note>{{ header.note|e }}</cbc:Note>
+{% endif %}  <cbc:DocumentCurrencyCode>{{ header.documentcurrencycode }}</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>{{ header.buyerreference|e }}</cbc:BuyerReference>
+
+  {% if header.startdate and header.enddate %}
+  <cac:InvoicePeriod>
+    <cbc:StartDate>{{ header.startdate }}</cbc:StartDate>
+    <cbc:EndDate>{{ header.enddate }}</cbc:EndDate>
+  </cac:InvoicePeriod>
+  {% endif %}
+
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      {% if header.suppliercontactelectronicmail %}
+      <cbc:EndpointID schemeID="EM">{{ header.suppliercontactelectronicmail }}</cbc:EndpointID>
+      {% endif %}
+      <cac:PartyName><cbc:Name>{{ header.suppliername|e }}</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>{{ header.supplierstreetname|e }}</cbc:StreetName>
+        <cbc:CityName>{{ header.suppliercityname|e }}</cbc:CityName>
+        <cbc:PostalZone>{{ header.supplierpostalzone }}</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>{{ header.supplieridentificationcode }}</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme>
+        <cbc:CompanyID>{{ header.suppliercompanyid }}</cbc:CompanyID>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:PartyTaxScheme>
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>{{ (header.supplierregistrationname or header.suppliername)|e }}</cbc:RegistrationName>
+      </cac:PartyLegalEntity>
+      {# BR-DE-5: cac:Contact (BT-41) ist Pflicht. Mindestens cbc:Name.
+         Fallback auf suppliername wird im invoice_fetcher gesetzt, damit hier
+         immer ein Name vorhanden ist. #}
+      <cac:Contact>
+        <cbc:Name>{{ (header.suppliercontactname or header.suppliername or 'Buchhaltung')|e }}</cbc:Name>
+        {% if header.suppliercontacttelephone %}<cbc:Telephone>{{ header.suppliercontacttelephone }}</cbc:Telephone>{% endif %}
+        {% if header.suppliercontactelectronicmail %}<cbc:ElectronicMail>{{ header.suppliercontactelectronicmail }}</cbc:ElectronicMail>{% endif %}
+      </cac:Contact>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+
+  <cac:AccountingCustomerParty>
+    <cac:Party>
+      {% if header.customerendpointid %}
+      <cbc:EndpointID schemeID="EM">{{ header.customerendpointid }}</cbc:EndpointID>
+      {% endif %}
+      <cac:PartyName><cbc:Name>{{ header.customername|e }}</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>{{ header.customerstreetname|e }}</cbc:StreetName>
+        <cbc:CityName>{{ header.customercityname|e }}</cbc:CityName>
+        <cbc:PostalZone>{{ header.customerpostalzone }}</cbc:PostalZone>
+        <cac:Country><cbc:IdentificationCode>{{ header.customeridentificationcode }}</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>{{ (header.customerregistrationname or header.customername)|e }}</cbc:RegistrationName>
+      </cac:PartyLegalEntity>
+    </cac:Party>
+  </cac:AccountingCustomerParty>
+
+  <cac:PaymentMeans>
+    <cbc:PaymentMeansCode>30</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount>
+      <cbc:ID>{{ header.payeefinancialaccountid }}</cbc:ID>
+      <cbc:Name>{{ (header.payeefinancialaccountname or header.suppliername)|e }}</cbc:Name>
+      {% if header.payeefinancialaccountbic %}
+      <cac:FinancialInstitutionBranch>
+        <cbc:ID>{{ header.payeefinancialaccountbic }}</cbc:ID>
+      </cac:FinancialInstitutionBranch>
+      {% endif %}
+    </cac:PayeeFinancialAccount>
+  </cac:PaymentMeans>
+
+  {# Document-Level-Allowances (Pfand-Rueckgabe / Gutschrift / Storno-Verrechnung).
+     Werden in xml_builder._split_negative_lines_to_allowances aus negativen
+     Invoice-Lines gemappt, damit BR-27 (no negative line) und BR-S-01
+     (category-mismatch) nicht ausgeloest werden. #}
+  {% for al in (allowances or []) %}
+  <cac:AllowanceCharge>
+    <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+    <cbc:AllowanceChargeReason>{{ al.reason|e }}</cbc:AllowanceChargeReason>
+    <cbc:Amount currencyID="{{ header.documentcurrencycode }}">{{ al.amount|fmt }}</cbc:Amount>
+    <cac:TaxCategory>
+      <cbc:ID>{{ al.category }}</cbc:ID>
+      <cbc:Percent>{{ al.percent|fmt }}</cbc:Percent>
+      <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+    </cac:TaxCategory>
+  </cac:AllowanceCharge>
+  {% endfor %}
+
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.invoicetaxtotal|fmt }}</cbc:TaxAmount>
+    {% for t in tax_breakdown %}
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="{{ header.documentcurrencycode }}">{{ t.taxableamount|fmt }}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="{{ header.documentcurrencycode }}">{{ t.taxamount|fmt }}</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:ID>{{ t.taxcategoryid }}</cbc:ID>
+        <cbc:Percent>{{ t.taxcategorypercent|fmt }}</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>
+    {% endfor %}
+  </cac:TaxTotal>
+
+  <cac:LegalMonetaryTotal>
+    {# UBL erzwingt feste Reihenfolge der Total-Bloecke:
+       LineExt (BT-106) → TaxExcl (BT-109) → TaxIncl (BT-112) →
+       AllowanceTotal (BT-107) → ChargeTotal (BT-108) → Prepaid (BT-113) →
+       Rounding (BT-114) → Payable (BT-115). #}
+    <cbc:LineExtensionAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.invoicenet|fmt }}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="{{ header.documentcurrencycode }}">{{ (totals.taxexclusiveamount if totals.taxexclusiveamount is defined else totals.invoicenet)|fmt }}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.invoicegross|fmt }}</cbc:TaxInclusiveAmount>
+    {# BT-107: Summe der Document-Level-Allowances (Pflicht wenn BG-20 vorhanden,
+       siehe BR-CO-11). Nur wenn > 0 emittieren. #}
+    {% if totals.allowancetotalamount is defined and (totals.allowancetotalamount|float) > 0 %}
+    <cbc:AllowanceTotalAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.allowancetotalamount|fmt }}</cbc:AllowanceTotalAmount>
+    {% endif %}
+    {% set _gross = totals.invoicegross|float %}
+    {% set _spay = (totals.spay_cl|default(0))|float %}
+    {% set _prepaid = (header.get('prepaidamount') if header.get('prepaidamount') is not none else (_gross - _spay)) %}
+    {% set _payable = (header.get('payableamount') if header.get('payableamount') is not none else _spay) %}
+    {% if _prepaid|float > 0 %}
+    <cbc:PrepaidAmount currencyID="{{ header.documentcurrencycode }}">{{ _prepaid|fmt }}</cbc:PrepaidAmount>
+    {% endif %}
+    <cbc:PayableAmount currencyID="{{ header.documentcurrencycode }}">{{ _payable|fmt }}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+
+  {% for line in lines %}
+  <cac:InvoiceLine>
+    <cbc:ID>{{ loop.index }}</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="C62">{{ line.invoicedquantity }}</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="{{ header.documentcurrencycode }}">{{ (line.lineextensionamountnet or line.lineextensionamount)|fmt }}</cbc:LineExtensionAmount>
+    <cac:Item>
+      <cbc:Name>{{ line.itemname|e }}</cbc:Name>
+      <cac:ClassifiedTaxCategory>
+        <cbc:ID>{{ line.classifiedtaxcategoryid }}</cbc:ID>
+        <cbc:Percent>{{ line.classifiedtaxcategorypercent|fmt }}</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:ClassifiedTaxCategory>
+    </cac:Item>
+    <cac:Price>
+      <cbc:PriceAmount currencyID="{{ header.documentcurrencycode }}">{{ (line.priceamount or line.lineextensionamount)|fmt }}</cbc:PriceAmount>
+    </cac:Price>
+  </cac:InvoiceLine>
+  {% endfor %}
+</ubl:Invoice>
