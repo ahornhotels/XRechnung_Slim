@@ -4,7 +4,7 @@ Standalone-Variante der Suite8 XRechnung MiniApp: schlanker Hintergrund-Poller, 
 
 ## Architektur in einem Satz
 
-Ein zweiter NSSM-Service (`Suite8XRechnungSlim`, Port 8022) auf demselben Host wie die Vollversion, teilt sich den Code-Stack (`modules/`, `templates/`, `validation/`, `install/jre/`) und nutzt eine **eigene Konfiguration** unter `slim/config/`.
+Ein eigenständiger NSSM-Service (`Suite8XRechnungSlim`, Port 8022). Bringt seinen kompletten Code-Stack (`modules/`, `templates/`, `validation/`, `install/`) selbst mit (vendored) und nutzt eine **eigene Konfiguration** unter `slim/config/`. Eine Big-App-Installation ist nicht erforderlich.
 
 ## Was es macht
 

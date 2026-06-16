@@ -53,7 +53,7 @@ sichtbar.
 | Manueller XRechnung-Download | ja | **nein** - alles geht ueber den Poller |
 | Browser-Suchmaske im Archiv | ja | **nein** - XMLs liegen im Dateisystem |
 | Benutzeranmeldung / Rollen | LDAP + 6 Rechte | **nein** - bind auf 127.0.0.1, wer Server-Zugang hat darf alles |
-| Auto-Updater | ja | **nein** - Update per Hand bzw. ueber die Vollversion |
+| Auto-Updater | ja | **ja** - inkrementell aus GitHub (nur geaenderte Dateien) |
 | Backup-Job | ja (SQLite) | **nein** - `slim\data\` selbst sichern (z.B. `robocopy`) |
 | Statistik / Reports | ja | **nein** - Auswertung auf der JSONL-Log-Datei |
 
@@ -216,15 +216,17 @@ install\python\python.exe scripts\diagnose_tns.py
 | `validator_fail` mit "Kunden-E-Mail fehlt" | XCOM-Eintrag fehlt | Override im UI eintragen ODER in Suite8 nachpflegen |
 | `kosit_fail` mit BR-DE-X | Schematron-Regel verletzt | Fehlertext zeigt die Regel; meistens ist ein Pflichtfeld in WUSS leer |
 | `zinv_not_found` | Pattern liefert eine Zahl, die nicht in Suite8 existiert | Pattern auf `(?P<zinv_id>...)` statt `(?P<zinv_number>...)` umstellen wenn der Filename gemeint ist |
-| Service-Crash beim Start | KoSIT-JAR oder JRE fehlt | Vollversion installieren (sie liefert beides mit) |
+| Service-Crash beim Start | KoSIT-JAR oder JRE fehlt | Voll-Bundle-ZIP erneut entpacken (es liefert JRE + KoSIT-JAR mit) |
 
 ---
 
 ## Support / Updates
 
-Updates kommen ueber `git pull` auf das Repository oder ueber die
-Vollversions-Updater-Funktion (geteilte Module wie `xml_builder` und
-`kosit_validator` ziehen automatisch mit).
+Updates laufen ueber den eingebauten **inkrementellen Updater** (UI:
+"Update pruefen/anwenden"): er holt aus dem GitHub-Repo
+`ahornhotels/XRechnung_Slim` nur die seit der laufenden Version
+geaenderten Dateien. Erstinstallationen dagegen ueber das Voll-Bundle-ZIP
+aus dem GitHub-Release.
 
 Bei Bugs / Wuenschen: GitHub-Issue auf `ahornhotels/XRechnung_Slim`
 oder direkt an die IT-Verantwortlichen.
