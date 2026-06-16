@@ -28,3 +28,19 @@ python -m slim.main_slim          # App lokal starten (Config in slim/config/)
 
 Konfiguration liegt unter `slim/config/` (siehe `*.example`-Dateien).
 Echte Hotel-Konfigurationen und Secrets sind git-ignoriert.
+
+## Lizenz
+
+Copyright (C) 2026 Ahorn Hotels
+
+Dieses Programm ist freie Software: Sie können es unter den Bedingungen der
+**GNU General Public License v3.0** (oder einer späteren Version) weitergeben
+und/oder modifizieren — siehe [`LICENSE`](LICENSE). Es wird ohne jegliche
+Gewährleistung bereitgestellt.
+
+**Drittkomponenten** behalten ihre jeweils eigene Lizenz:
+- `validation/xrechnung-3.0.2/` — KoSIT/EN16931-Validierungsartefakte, Apache-2.0
+  (siehe die dortigen `README.md`/`CHANGELOG.md`).
+- Laufzeit-Bundle (git-ignoriert, nicht Teil des Repos): Oracle Instant Client
+  (proprietär, **nicht** redistribuierbar), Adoptium Temurin JRE (GPLv2+CE),
+  portable Python (PSF), pip-Wheels (jeweils eigene, permissive Lizenzen).
