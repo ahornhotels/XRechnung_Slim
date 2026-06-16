@@ -83,9 +83,9 @@ IF NOT EXIST "%PY%" (
   echo.
   echo  Erwartet:   %PY%
   echo.
-  echo  Loesung:    Das Voll-Bundle-ZIP ^(XRechnung_Slim-^<version^>.zip^)
-  echo              erneut vollstaendig entpacken - es bringt den
-  echo              eingebetteten Python unter install\python selbst mit.
+  echo  Loesung:    Den Online-Installer install_online.ps1 erneut
+  echo              ausfuehren - er laedt den eingebetteten Python nach
+  echo              install\python.
   echo.
   echo  Druecken Sie eine Taste um dieses Fenster zu schliessen.
   pause

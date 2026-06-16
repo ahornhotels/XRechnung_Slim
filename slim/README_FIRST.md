@@ -216,7 +216,7 @@ install\python\python.exe scripts\diagnose_tns.py
 | `validator_fail` mit "Kunden-E-Mail fehlt" | XCOM-Eintrag fehlt | Override im UI eintragen ODER in Suite8 nachpflegen |
 | `kosit_fail` mit BR-DE-X | Schematron-Regel verletzt | Fehlertext zeigt die Regel; meistens ist ein Pflichtfeld in WUSS leer |
 | `zinv_not_found` | Pattern liefert eine Zahl, die nicht in Suite8 existiert | Pattern auf `(?P<zinv_id>...)` statt `(?P<zinv_number>...)` umstellen wenn der Filename gemeint ist |
-| Service-Crash beim Start | KoSIT-JAR oder JRE fehlt | Voll-Bundle-ZIP erneut entpacken (es liefert JRE + KoSIT-JAR mit) |
+| Service-Crash beim Start | KoSIT-JAR oder JRE fehlt | Online-Installer (`install_online.ps1`) erneut ausfuehren - er laedt JRE + KoSIT-JAR nach |
 
 ---
 
@@ -225,8 +225,8 @@ install\python\python.exe scripts\diagnose_tns.py
 Updates laufen ueber den eingebauten **inkrementellen Updater** (UI:
 "Update pruefen/anwenden"): er holt aus dem GitHub-Repo
 `ahornhotels/XRechnung_Slim` nur die seit der laufenden Version
-geaenderten Dateien. Erstinstallationen dagegen ueber das Voll-Bundle-ZIP
-aus dem GitHub-Release.
+geaenderten Dateien. Erstinstallationen laufen ueber den Online-Installer
+(siehe `INSTALL_FROM_GITHUB.md`).
 
 Bei Bugs / Wuenschen: GitHub-Issue auf `ahornhotels/XRechnung_Slim`
 oder direkt an die IT-Verantwortlichen.

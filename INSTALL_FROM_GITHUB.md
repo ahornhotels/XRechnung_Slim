@@ -1,15 +1,10 @@
 # Installation aus GitHub
 
-Zwei Wege. **Online-Installer** (empfohlen, kleiner Download) oder
-**Voll-Bundle-ZIP** (offline/deterministisch).
-
-Voraussetzungen in beiden Fällen: Windows Server, Administrator-Rechte und ein
+Voraussetzungen: Windows Server, Administrator-Rechte, Internetzugang und ein
 auf dem Suite8-Server **bereits vorhandener Oracle-Client** (wird genutzt, nicht
-mitgeliefert). Der Online-Installer braucht zusätzlich Internetzugang.
+mitgeliefert).
 
----
-
-## Weg A — Online-Installer (empfohlen)
+## 1. Online-Installer ausführen
 
 Lädt Quellcode, portables Python, Temurin JRE, NSSM und den KoSIT-Validator
 selbst aus dem Netz. **Ein** PowerShell-Befehl (als Administrator):
@@ -27,19 +22,10 @@ Optionen:
 Der Installer richtet alles unter dem Zielordner ein (Default
 `C:\FIDELIO\XRechnung_Slim`) und erkennt den vorhandenen Oracle-Client.
 
-## Weg B — Voll-Bundle-ZIP (offline)
+> `git clone` allein genügt **nicht** — die Binärbausteine (Python, JRE, NSSM,
+> KoSIT-Jar) sind git-ignoriert und werden erst vom Installer nachgeladen.
 
-1. Auf `github.com/ahornhotels/XRechnung_Slim` → **Releases** → Asset
-   `XRechnung_Slim-<version>.zip` herunterladen.
-2. Nach z. B. `C:\FIDELIO\XRechnung_Slim` entpacken (enthält bereits Python,
-   JRE, KoSIT — komplett).
-
-> Hinweis: `git clone` allein genügt **nicht** — die Binärbausteine sind
-> git-ignoriert und nur im Online-Installer bzw. im Release-ZIP enthalten.
-
----
-
-## Gemeinsamer Abschluss (beide Wege)
+## 2. Einrichtung abschließen
 
 1. `slim\setup_slim.cmd` **als Administrator** starten.
 2. Wizard im Browser auf `http://127.0.0.1:8022/`:
@@ -49,7 +35,7 @@ Der Installer richtet alles unter dem Zielordner ein (Default
      Oracle (V8LIVE) aus.
 3. Der Dienst `Suite8XRechnungSlim` wird installiert (Autostart, Port 8022).
 
-## Updates
+## 3. Updates
 
 Später im UI **„Update prüfen / anwenden"** → der inkrementelle Updater holt
 aus `ahornhotels/XRechnung_Slim` nur die geänderten Dateien. Konfiguration und
@@ -57,12 +43,11 @@ Daten bleiben erhalten.
 
 ---
 
-## Für Maintainer: Repo installierbar machen (einmalig pro Release)
+## Für Maintainer: neues Release veröffentlichen
 
 ```powershell
-# 1) Code + Tag pushen
-git push origin master ; git push origin v1.9.0
-# 2a) Online-Weg: nichts weiter nötig (Installer zieht den Source-Tag direkt)
-# 2b) Offline-Weg: Bundle bauen + als Release-Asset veröffentlichen
-powershell -ExecutionPolicy Bypass -File build_release.ps1 -Publish
+git push origin master ; git push origin vX.Y.Z
 ```
+Dann auf GitHub aus dem Tag `vX.Y.Z` ein **Release** anlegen (Release-Notes
+eintragen). Mehr dazu in [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md). Ein
+Asset ist nicht nötig — der Online-Installer zieht den Quellcode direkt.

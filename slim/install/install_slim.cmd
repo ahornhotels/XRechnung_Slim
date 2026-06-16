@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM Suite8 XRechnung SLIM - NSSM-Installation
-REM Voraussetzungen (im Voll-Bundle-ZIP enthalten):
+REM Voraussetzungen (vom Online-Installer install_online.ps1 bereitgestellt):
 REM   - install\python\python.exe
 REM   - install\nssm.exe
 REM   - install\jre\bin\java.exe (KoSIT)

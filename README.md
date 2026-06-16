@@ -27,8 +27,8 @@ powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.c
 ```
 
 Danach `slim\setup_slim.cmd` als Administrator → Wizard auf
-`http://127.0.0.1:8022/`. Voraussetzungen, Offline-Bundle-Variante und der
-DBA-Trigger-Schritt: siehe **[INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md)**.
+`http://127.0.0.1:8022/`. Voraussetzungen und der DBA-Trigger-Schritt:
+siehe **[INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md)**.
 
 ## Updates
 
@@ -46,7 +46,7 @@ neu. Konfiguration und Daten bleiben erhalten. Versionspflege:
 - `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM (git-ignoriert).
   Der Oracle-Client wird vom Suite8-Server genutzt, nicht mitgeliefert.
 - `tests_slim/` — Testsuite
-- `install_online.ps1` / `build_release.ps1` — Online-Installer / Offline-Bundle-Build
+- `install_online.ps1` — Online-Installer (lädt Abhängigkeiten selbst)
 
 ## Entwicklung
 

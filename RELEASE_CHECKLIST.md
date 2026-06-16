@@ -19,17 +19,13 @@ Schrittfolge, um eine neue Version zu veröffentlichen. `X.Y.Z` jeweils ersetzen
 - [ ] `git push origin master`
 - [ ] `git push origin vX.Y.Z`
 
-## 4. GitHub-Release + (optional) Offline-Bundle
-- [ ] **Variante A (online genügt):** Auf GitHub aus dem Tag `vX.Y.Z` ein
-      **Release** erstellen, Release-Notes eintragen. Kein Asset nötig — der
-      Online-Installer zieht das Source-ZIP des Tags direkt.
-- [ ] **Variante B (Offline-Bundle anbieten):**
-      `powershell -ExecutionPolicy Bypass -File build_release.ps1 -Publish -Notes "..."`
-      → baut `dist\XRechnung_Slim-X.Y.Z.zip` und legt das Release inkl. Asset an.
-      (Voraussetzung: `install\` lokal mit den Binärdateien befüllt + `gh` angemeldet.)
+## 4. GitHub-Release
+- [ ] Auf GitHub aus dem Tag `vX.Y.Z` ein **Release** erstellen, Release-Notes
+      eintragen. Kein Asset nötig — der Online-Installer zieht den Quellcode
+      des Tags direkt.
 
 ## 5. Verifizieren
-- [ ] Release-Seite zeigt Tag `vX.Y.Z` (und ggf. das ZIP-Asset).
+- [ ] Release-Seite zeigt Tag `vX.Y.Z`.
 - [ ] Auf einer Test-/Hotel-Instanz im UI **„Update prüfen"** → bietet `X.Y.Z` an.
 - [ ] **„Update anwenden"** → nur geänderte Dateien werden geladen, Dienst startet
       neu, `VERSION` zeigt danach `X.Y.Z`. Config/Daten unverändert.
