@@ -144,7 +144,7 @@ def test_attach_ok_zinv_id_pattern_uses_fetch_invoice_directly(tmp_path, mocked_
     with patch.object(poller, "load_hotel_config", return_value=hotel), \
          patch.object(poller, "get_connection", return_value=cm), \
          patch.object(poller, "find_pending_wmai",
-                      return_value=[_wmai_row(101, "Folio_IND_AHORN_144853.pdf")]), \
+                      return_value=[_wmai_row(101, "Folio_IND_TEST_144853.pdf")]), \
          patch.object(poller.invoice_fetcher, "find_zinv_id_by_number") as find_nr, \
          patch.object(poller.invoice_fetcher, "fetch_invoice",
                       return_value=fetched_invoice) as fetch, \

@@ -30,11 +30,11 @@ def test_status_returns_state(client):
     state["last_run_summary"] = {"attached": 3, "failed": 0,
                                  "no_match": 0, "ambiguous": 0}
     with patch.object(status_api, "load_hotel_config",
-                      return_value={"hotel_code": "HHB"}):
+                      return_value={"hotel_code": "TST"}):
         r = c.get("/api/status")
     assert r.status_code == 200
     j = r.json()
-    assert j["hotel"] == "HHB"
+    assert j["hotel"] == "TST"
     assert j["interval_seconds"] == 30
     assert j["last_run_summary"]["attached"] == 3
 

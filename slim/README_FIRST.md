@@ -226,5 +226,5 @@ Updates kommen ueber `git pull` auf das Repository oder ueber die
 Vollversions-Updater-Funktion (geteilte Module wie `xml_builder` und
 `kosit_validator` ziehen automatisch mit).
 
-Bei Bugs / Wuenschen: GitHub-Issue auf `ahornhotels/Suite8XRechnung`
+Bei Bugs / Wuenschen: GitHub-Issue auf `ahornhotels/XRechnung_Slim`
 oder direkt an die IT-Verantwortlichen.

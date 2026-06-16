@@ -93,7 +93,7 @@ def test_wuss_standard_reports_missing(client):
     fake_conn = MagicMock()
     fake_cur = MagicMock()
     # 4 vorhanden, 8 fehlen (None oder leer)
-    responses = [("HHB",), ("Ahorn",), ("Strasse 1",), ("Braunlage",),
+    responses = [("TST",), ("Testhotel",), ("Teststrasse 1",), ("Teststadt",),
                  (None,), (None,), (None,), (None,),
                  (None,), (None,), (None,), (None,)]
     fake_cur.fetchone.side_effect = responses
@@ -212,8 +212,8 @@ def test_hotel_save_persists_and_keeps_pattern(client):
         "suite8_recognize_subject_pattern": r"X(?P<zinv_number>\d+)",
     }), encoding="utf-8")
     r = c.post("/api/setup/hotel", json={
-        "hotel_code": "HHB",
-        "hotel_long_name": "AHORN",
+        "hotel_code": "TST",
+        "hotel_long_name": "Testhotel",
         "absender_email": "x@y.z",
         "default_payment_terms_days": 14,
         "currency": "EUR",
@@ -221,7 +221,7 @@ def test_hotel_save_persists_and_keeps_pattern(client):
     })
     assert r.status_code == 200
     saved = json.loads((cfg / "hotel.json").read_text(encoding="utf-8"))
-    assert saved["hotel_code"] == "HHB"
+    assert saved["hotel_code"] == "TST"
     # Pattern blieb erhalten
     assert "zinv_number" in saved["suite8_recognize_subject_pattern"]
 

@@ -16,10 +16,9 @@ der Rechner in Standby/Hibernate geht, pausiert auch der Dienst. Vor
 Dauereinsatz im Energie-Plan unter *Energieoptionen* die Standby-Zeit
 auf "Nie" stellen.
 
-**Hinweis Big-App:** Wenn die Vollversion bereits unter
-`C:\FIDELIO\Suite8XRechnung` installiert ist, kann die Slim deren
-Python/JRE/NSSM mitbenutzen. Ist sie nicht installiert, bringt das
-mitgelieferte ZIP alles selbst mit.
+**Hinweis:** Die Slim-Variante ist eigenständig — das mitgelieferte
+Paket bringt Python, JRE, Oracle Instant Client und NSSM selbst mit.
+Eine separate Big-App-Installation ist nicht erforderlich.
 
 ## Schritt 1 - Setup-Assistent starten
 

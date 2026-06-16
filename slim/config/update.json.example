@@ -4,7 +4,7 @@
 
   "enabled": true,
   "owner": "ahornhotels",
-  "repo": "Suite8XRechnung",
+  "repo": "XRechnung_Slim",
 
   "_pat_token_hinweis": "Klartext-PAT hier eintragen - der Wizard verschluesselt ihn beim ersten Lauf in Fernet-Format und ersetzt diesen Eintrag.",
   "pat_token": ""

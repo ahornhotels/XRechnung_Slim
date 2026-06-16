@@ -54,8 +54,8 @@ editierbar** (Sektion "Pattern-Konfiguration"). Default: Subject mit
 DB-Primaerschluessel), NICHT die ``ZINV_NUMBER`` (die externe
 Rechnungs-Folio-Nummer). Wer den Filename als Quelle nutzt, muss
 sicherstellen, dass die extrahierte Zahl wirklich die ZINV_NUMBER
-ist — bei AHORN-Konfigurationen ist das nicht der Fall, daher hier
-Default-Pattern auf den Subject gestellt.
+ist — bei manchen Suite8-Konfigurationen ist das nicht der Fall, daher
+hier das Default-Pattern auf den Subject gestellt.
 
 UI-Workflow:
 1. Subject-Pattern eintragen mit Named-Group ``(?P<zinv_number>\d+)``
