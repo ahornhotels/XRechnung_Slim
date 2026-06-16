@@ -55,13 +55,33 @@ try {
 
   # ── 1) Quellcode ───────────────────────────────────────────────
   Info "[1/6] Quellcode laden..."
-  if (-not $Ref) {
-    $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ "User-Agent"="xrslim-installer" }
-    $Ref = $rel.tag_name
-    Ok "Neuester Release-Tag: $Ref"
+  $hdr = @{ "User-Agent" = "xrslim-installer" }
+  $archiveUrls = @()
+  if ($Ref) {
+    # explizit angegeben: erst als Tag, dann als Branch versuchen
+    $archiveUrls += "https://github.com/$Repo/archive/refs/tags/$Ref.zip"
+    $archiveUrls += "https://github.com/$Repo/archive/refs/heads/$Ref.zip"
+  } else {
+    try {
+      $rel = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest" -Headers $hdr
+      $Ref = $rel.tag_name
+      Ok "Neuestes Release: $Ref"
+      $archiveUrls += "https://github.com/$Repo/archive/refs/tags/$Ref.zip"
+    } catch {
+      # Noch kein Release veroeffentlicht -> Default-Branch verwenden
+      $info = Invoke-RestMethod "https://api.github.com/repos/$Repo" -Headers $hdr
+      $Ref = $info.default_branch
+      Warn "Kein Release gefunden - nutze Branch '$Ref'."
+      $archiveUrls += "https://github.com/$Repo/archive/refs/heads/$Ref.zip"
+    }
   }
   $srcZip = Join-Path $tmp "src.zip"
-  Get-File "https://github.com/$Repo/archive/refs/tags/$Ref.zip" $srcZip
+  $downloaded = $false
+  foreach ($u in $archiveUrls) {
+    try { Get-File $u $srcZip; $downloaded = $true; break }
+    catch { Warn "nicht verfuegbar: $u" }
+  }
+  if (-not $downloaded) { throw "Quellcode-Download fehlgeschlagen fuer Ref '$Ref'." }
   $srcEx = Join-Path $tmp "src"
   Expand-Archive -Path $srcZip -DestinationPath $srcEx -Force
   $srcRoot = (Get-ChildItem $srcEx -Directory | Select-Object -First 1).FullName
