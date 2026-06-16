@@ -1,23 +1,52 @@
 # XRechnung_Slim
 
-Eigenständige Slim-Variante der Suite8-XRechnung-MiniApp: liest aus der Suite8
-Oracle-DB die für eine Rechnung benötigten Daten (über vorgefertigte Views),
-erzeugt die XRechnung-XML, hängt sie an die WMAI-Mail an und gibt den Versand
-frei. Browser-UI auf `127.0.0.1`, Betrieb als Windows-Dienst via NSSM.
+Schlanke, eigenständige App, die für Oracle **Suite8** XRechnung-XML erzeugt und
+automatisiert an die ausgehenden Folio-Rechnungsmails anhängt.
 
-Dieses Repo wurde am 2026-06-15 aus `Suite8XRechnung/slim/` ausgegliedert
-(Stand VERSION 1.9.0). Der zuvor geteilte Code (`core/`, `modules/`) ist hier
-vendored (eigene Kopie) und entwickelt sich unabhängig von der Big-App weiter.
+Sie läuft als Windows-Dienst (NSSM) und pollt die Suite8-DB: für jede zum Versand
+markierte Mail (WMAI mit `BLOCKSEND=1`) liest sie die Rechnungsdaten über
+vorgefertigte Oracle-Views, baut die XRechnung-XML (EN16931 / XRechnung 3.0),
+validiert sie gegen den KoSIT-Validator, hängt sie an die Mail und gibt den
+Versand frei. Konfiguration und Status über eine Browser-Oberfläche auf
+`127.0.0.1`.
+
+**Eigenschaften**
+- Kein eigener Mailversand — nutzt den Suite8-Mailservice (XML wird nur angehängt).
+- Datums-robuste Rechnungsnummer-Erkennung (mehrsprachige Betreffe, „Nummer eintippen").
+- DB-Trigger mit Idempotenz-Guard (kein Doppel-Anhängen).
+- Eingebauter **inkrementeller Auto-Updater** (lädt nur geänderte Dateien aus GitHub).
+- Nutzt den auf dem Suite8-Server vorhandenen Oracle-Client.
+
+## Installation (Schnellstart)
+
+Auf dem Suite8-Server als **Administrator** in PowerShell — lädt alle Bausteine
+selbst (öffentliches Repo, kein Token nötig):
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/ahornhotels/XRechnung_Slim/master/install_online.ps1 -OutFile $env:TEMP\install_online.ps1; & $env:TEMP\install_online.ps1"
+```
+
+Danach `slim\setup_slim.cmd` als Administrator → Wizard auf
+`http://127.0.0.1:8022/`. Voraussetzungen, Offline-Bundle-Variante und der
+DBA-Trigger-Schritt: siehe **[INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md)**.
+
+## Updates
+
+Im UI **„Update prüfen / anwenden"** — der inkrementelle Updater holt aus diesem
+Repo nur die seit der laufenden Version geänderten Dateien und startet den Dienst
+neu. Konfiguration und Daten bleiben erhalten. Versionspflege:
+**[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)**.
 
 ## Struktur
 
 - `slim/` — die App (FastAPI-API, Poller, Frontend, Setup-Wizard, Install-Skripte)
-- `core/` — geteilte Basis (Config, Crypto, Oracle-Verbindung, Logging)
-- `modules/` — Pattern-Erkennung, KoSIT-Validator, WMAI-Mailer
+- `core/` — Basis (Config, Crypto, Oracle-Verbindung, Logging) — vendored
+- `modules/` — Pattern-Erkennung, KoSIT-Validator, WMAI-Mailer, XML-Builder
 - `validation/` — KoSIT-XRechnung-Validierungsartefakte (Jar git-ignoriert)
-- `install/` — Deployment-Bundle (Instant Client, JRE, portable Python, NSSM;
-  Binärinhalte git-ignoriert)
+- `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM (git-ignoriert).
+  Der Oracle-Client wird vom Suite8-Server genutzt, nicht mitgeliefert.
 - `tests_slim/` — Testsuite
+- `install_online.ps1` / `build_release.ps1` — Online-Installer / Offline-Bundle-Build
 
 ## Entwicklung
 
