@@ -22,13 +22,13 @@ import logging
 import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import httpx
 
 from core.config_loader import load_json, CONFIG_DIR
+from slim.core_slim.clock import now_local
 from core.crypto import load_key, decrypt
 
 logger = logging.getLogger(__name__)
@@ -487,7 +487,7 @@ def perform_full_update(cfg: Optional[dict] = None) -> dict:
         "last_version": check["latest_version"],
         "last_tag": check["latest_tag"],
         "release_url": check["release_url"],
-        "applied_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "applied_at": now_local().isoformat(),
     })
 
     restart_service_detached()

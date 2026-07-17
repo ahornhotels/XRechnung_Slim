@@ -17,9 +17,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from slim.core_slim.clock import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ _NAME_MAX_LEN = 64
 
 
 def _bucket(data_dir: Path, now: Optional[datetime] = None) -> Path:
-    n = now or datetime.now(timezone.utc)
+    n = now or now_local()
     return Path(data_dir) / "xml" / f"{n.year:04d}" / f"{n.month:02d}"
 
 
@@ -92,7 +94,7 @@ def save_xml(
 
     renamed: Optional[str] = None
     if xml_path.exists():
-        ts = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%S")
+        ts = (now or now_local()).strftime("%Y%m%dT%H%M%S")
         rename_to = bucket / f"{safe}.{ts}.xml"
         try:
             xml_path.rename(rename_to)
@@ -111,7 +113,7 @@ def save_xml(
         # KoSIT-Report ggf. bestehender Datei überlassen → bei Konflikt
         # ebenfalls versionieren (Reports gehoeren zu ihren XML-Datei).
         if kosit_path.exists():
-            ts = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%S")
+            ts = (now or now_local()).strftime("%Y%m%dT%H%M%S")
             try:
                 kosit_path.rename(bucket / f"{safe}.{ts}.kosit-report.xml")
             except OSError:

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +31,7 @@ from modules.suite8_pattern import (
 
 from slim.api_slim.status import get_state
 from slim.core_slim import overrides
+from slim.core_slim.clock import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def run_now(state: dict = Depends(get_state)):
     data_dir = Path(state.get("data_dir") or ".")
 
     result = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": now_local().isoformat(),
         "config": {},
         "wmais": [],
         "summary": {"total": 0, "match": 0, "no_match": 0,

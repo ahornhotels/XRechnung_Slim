@@ -48,10 +48,9 @@ from slim.api_slim import trigger_sql as trigger_sql_module
 from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
-from datetime import datetime, timezone
-
 from slim.core_slim import access
 from slim.core_slim import audit_jsonl
+from slim.core_slim.clock import now_local
 from slim.jobs_slim import poller
 
 DATA_DIR = _SLIM_DIR / "data"
@@ -133,7 +132,7 @@ def _run_poller_safely():
             DATA_DIR, "poller_crash", details={"error": str(e)[:400]},
         )
         summary = {"crash": True, "error": str(e)[:400]}
-    state["last_run"] = datetime.now(timezone.utc).isoformat()
+    state["last_run"] = now_local().isoformat()
     state["last_run_summary"] = summary
 
 

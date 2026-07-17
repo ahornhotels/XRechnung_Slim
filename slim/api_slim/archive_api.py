@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -82,8 +82,8 @@ def list_archive(
             "bucket": rel.parent.as_posix(),
             "size": stat.st_size,
             "mtime": datetime.fromtimestamp(
-                stat.st_mtime, tz=timezone.utc
-            ).isoformat(),
+                stat.st_mtime
+            ).astimezone().isoformat(),
             "has_sha256": p.with_suffix(".sha256").exists(),
             "has_kosit_report": p.with_name(
                 f"{p.stem}.kosit-report.xml"

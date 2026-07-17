@@ -18,9 +18,11 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+from slim.core_slim.clock import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +31,12 @@ _DETAILS_MAX = 4000  # Bytes nach json.dumps — schuetzt vor unbounded Audit-Ei
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + \
-        f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
+    # PC-Zeit mit Millisekunden und UTC-Offset: 2026-07-17T11:54:48.123+02:00
+    return now_local().isoformat(timespec="milliseconds")
 
 
 def _audit_path(data_dir: Path, now: Optional[datetime] = None) -> Path:
-    n = now or datetime.now(timezone.utc)
+    n = now or now_local()
     return Path(data_dir) / f"audit-{n.year:04d}-{n.month:02d}.jsonl"
 
 
@@ -120,7 +122,7 @@ def tail(data_dir: Path, n: int = 100, now: Optional[datetime] = None) -> list[d
     Einträge, die nicht als JSON parsebar sind, werden übersprungen.
     """
     n = max(1, int(n))
-    cur = now or datetime.now(timezone.utc)
+    cur = now or now_local()
     # Vormonat berechnen (auch ohne dateutil)
     prev_month = 12 if cur.month == 1 else cur.month - 1
     prev_year = cur.year - 1 if cur.month == 1 else cur.year

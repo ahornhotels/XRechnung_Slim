@@ -24,7 +24,12 @@ def test_record_writes_single_line(tmp_path):
     assert e["wmai_id"] == 42
     assert e["zinv_number"] == "144853"
     assert e["details"] == {"sha256": "abc"}
-    assert e["ts"].endswith("Z")
+    # PC-Zeit mit UTC-Offset statt "Z": 2026-07-17T11:54:48.123+02:00
+    import re
+    assert re.search(r"\.\d{3}[+-]\d{2}:\d{2}$", e["ts"]), e["ts"]
+    # ts muss der lokalen Serverzeit entsprechen (nicht UTC verschoben)
+    ts = datetime.fromisoformat(e["ts"])
+    assert ts.utcoffset() == datetime.now().astimezone().utcoffset()
 
 
 def test_record_appends_multiple(tmp_path):

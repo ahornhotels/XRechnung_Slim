@@ -7,7 +7,6 @@ Kein Auth - bind nur auf 127.0.0.1.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +17,7 @@ from core.db_connector import get_connection
 from modules.suite8_mailer import find_pending_wmai, get_wmai_error
 
 from slim.core_slim import audit_jsonl
+from slim.core_slim.clock import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def status(state: dict = Depends(get_state)):
         "interval_seconds": state.get("interval_seconds"),
         "last_run": state.get("last_run"),
         "last_run_summary": last_summary or None,
-        "now": datetime.now(timezone.utc).isoformat(),
+        "now": now_local().isoformat(),
     }
 
 
