@@ -1,6 +1,9 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-06-16 · Version: 1.9.0 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-17 · Version: 1.9.0 (+ unreleased Änderungen auf master) · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+
+> Seit Release `v1.9.0` (16.06.2026): Betriebs-Härtungs-Batch (17.07.) auf
+> master — noch kein neues Release/Tag.
 
 ## Kurzfassung
 
@@ -29,6 +32,28 @@ einen **inkrementellen Auto-Updater**. Big-App bleibt parallel im alten Repo.
   und KoSIT-Validator selbst; nutzt den vorhandenen Oracle-Client des Servers.
 - **Dokumentation:** `README.md`, `INSTALL_FROM_GITHUB.md`, `RELEASE_CHECKLIST.md`.
 
+## Neu seit v1.9.0 (Betriebs-Härtung, 2026-07-17)
+
+Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
+
+- **BillingReference-Fallback (BG-3):** Gutschrift (381) ohne
+  `ZINV_VOID_ZINV_ID` holt die Original-Rechnungsnummer aus dem
+  Zahlungs-Kommentar (`ZPOS_COMMENT`, neue Header-Spalte `PaymentRefComment`),
+  validiert sie gegen ZINV; kein Treffer → weiterhin Validator-Fehler
+  (kein Fake-Bezug). `modules/invoice_fetcher.py`, `sql/invoice_header.sql`.
+- **IP-Allowlist für LAN-Zugriff:** `allowed_ips` (IPs/CIDR) in
+  `app_settings.json` + `"host": "0.0.0.0"`; localhost immer erlaubt, leere
+  Liste = nur localhost. `slim/core_slim/access.py` + Middleware.
+- **Zeitstempel auf PC-Zeit:** Audit/Archiv/Status/Updater zeigen lokale
+  Serverzeit mit Offset (`…+02:00`) statt UTC. `slim/core_slim/clock.py`.
+- **SQL-Fixes vom 03.07. (FW) übernommen** (aus `docs/*_20260703.txt`):
+  Kundenadresse-Fallback auf Primäradresse; TaxAmount/InvoiceNet/
+  InvoiceTaxTotal aus der Zeilen-Logik (0,5-Cent-Steuerüberschuss bzw.
+  Netto+Steuer≠Brutto behoben).
+- **Setup-Portkonflikt behoben:** Wizard-Server beendet sich nach „Fertig"
+  selbst, `setup_slim.cmd` startet den Dienst danach best-effort neu — der
+  vermeintliche „PC-Neustart nach Installation" entfällt.
+
 ## Live / Betrieb
 
 - **Installation (Hotel-Server, als Admin):** der PowerShell-Einzeiler aus dem
@@ -42,10 +67,14 @@ einen **inkrementellen Auto-Updater**. Big-App bleibt parallel im alten Repo.
 
 ## Tests
 
-- `python -m pytest tests_slim/` → 198 passed, 1 skipped (Live-DB-Integration).
+- `python -m pytest tests_slim/` → 229 passed, 1 skipped (Live-DB-Integration).
 
 ## Offene Punkte / nächste Schritte
 
+- [ ] **Release taggen** (v1.10.0) sobald die Härtungs-Änderungen im Hotel
+      verifiziert sind — erst dann verteilt der Auto-Updater sie.
+- [ ] **SQL-Fixes gegen V8LIVE gegenprüfen:** eine Rechnung, die vorher den
+      0,5-Cent-Fehler warf, durch den Poller/„run-now" schicken.
 - [ ] **Erster echter End-to-End-Test** des Online-Installers auf einer frischen
       Test-Maschine/VM (in dieser Umgebung nicht möglich — Repo musste erst live
       sein). Verifiziert wurden bisher: Syntax, alle Download-URLs, Logik.
@@ -67,4 +96,5 @@ einen **inkrementellen Auto-Updater**. Big-App bleibt parallel im alten Repo.
 
 ## Git-Stand
 
-- Branch `master` @ `1b419bf`, Tag/Release `v1.9.0` (identischer Commit), public.
+- Branch `master`, letztes Release/Tag `v1.9.0` @ `1b419bf`; danach Doku- und
+  Härtungs-Commits (17.07.), noch ohne neues Tag.
