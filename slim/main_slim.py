@@ -30,7 +30,6 @@ _SLIM_DIR = Path(__file__).resolve().parent
 os.environ["SUITE8_CONFIG_DIR"] = str(_SLIM_DIR / "config")
 
 import logging
-from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
@@ -49,6 +48,9 @@ from slim.api_slim import trigger_sql as trigger_sql_module
 from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
+from datetime import datetime, timezone
+
+from slim.core_slim import access
 from slim.core_slim import audit_jsonl
 from slim.jobs_slim import poller
 
@@ -68,6 +70,17 @@ app = FastAPI(
     description="Standalone Suite8-Anhang-Poller. Kein Login, kein DB.",
     version=app_version,
 )
+
+# IP-Allowlist: wird beim Start gelesen (Konfig-Aenderung => Dienst-Neustart,
+# konsistent mit host/port). localhost ist immer erlaubt; leere Liste =>
+# effektiv nur localhost, auch wenn host=0.0.0.0 gebunden ist.
+_ALLOWED_IPS = load_app_settings().get("allowed_ips") or []
+
+
+@app.middleware("http")
+async def _ip_allowlist(request, call_next):
+    return await access.dispatch(request, call_next, _ALLOWED_IPS)
+
 
 app.include_router(status_api.router)
 app.include_router(retry_api.router)

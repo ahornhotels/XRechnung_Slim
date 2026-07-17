@@ -20,7 +20,12 @@ Bei Fehlern wird `WMAI_ERROR` auf die Fehlermeldung gesetzt (sichtbar in der Sui
 ## Was es NICHT macht
 
 - **Kein Versand**: der Suite8-Mailservice sendet die Mail. Diese App attached nur.
-- **Kein Auth**: bind nur `127.0.0.1`. Wer auf den Server kommt, sieht das UI.
+- **Kein Auth**: Default-Bind `127.0.0.1`. Wer auf den Server kommt, sieht das UI.
+  Fuer LAN-Zugriff `"host": "0.0.0.0"` setzen **und** die erlaubten Adressen in
+  `"allowed_ips"` eintragen (exakte IPs oder CIDR wie `"192.168.10.0/24"`,
+  in `app_settings.json`, danach Dienst-Neustart). localhost ist immer erlaubt;
+  eine leere Liste blockt alle anderen. Achtung: die Allowlist ersetzt kein
+  Login — nur vertrauenswuerdige IPs freigeben.
 - **Keine DB-Persistenz**: alles im Filesystem.
 - **Kein Auto-Update**: per `git pull` + Service-Restart aktualisieren.
 

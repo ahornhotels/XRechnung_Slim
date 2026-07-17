@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8022,
+  "allowed_ips": [],
   "log_level": "INFO",
   "kosit_validation": true,
   "xrechnung_version": "3.0.2",

@@ -70,6 +70,22 @@ zeigt Polling-Statistik, wartende Suite8-Mails und das Audit-Log.
 Die App laeuft jetzt als Windows-Dienst und startet bei jedem Server-Neustart
 automatisch. Sie ist unter `http://127.0.0.1:8022/` erreichbar.
 
+### Optional: Zugriff aus dem Netzwerk (andere PCs)
+
+Standardmaessig ist die App nur auf dem Server selbst erreichbar. Fuer den
+Zugriff von anderen PCs im Hotel-Netz in `slim\config\app_settings.json`:
+
+```json
+"host": "0.0.0.0",
+"allowed_ips": ["192.168.10.0/24"]
+```
+
+`allowed_ips` nimmt exakte IPs oder CIDR-Ranges; localhost ist immer erlaubt,
+eine leere Liste blockt alle anderen PCs. Danach den Dienst neu starten
+(`nssm restart Suite8XRechnungSlim`). Hinweis: die App hat kein Login — nur
+vertrauenswuerdige Adressen freigeben. Ggf. Port 8022 in der Windows-Firewall
+freigeben.
+
 ---
 
 ## Wenn etwas schief geht
