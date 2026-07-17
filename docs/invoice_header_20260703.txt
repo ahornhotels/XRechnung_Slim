@@ -86,7 +86,6 @@ nvl((select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID a
 nvl((SELECT XCOM.XCOM_VALUE FROM XCOM, xcmt WHERE XCOM.XCOM_PRIMARY = 1 AND xcom_xcmt_id = xcmt_id and xcmt_type=1 AND xcom_xcms_id = zinv_xcms_id and rownum=1),(select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='Hotelemail'))  CustomerEndpointID,
 decode(zwin_zfac_id,null,(select name6 from v8_rep_name,yres where xcms_id=yres_xcms_id and yres_id=zwin_yres_id),(select name6 from v8_rep_name,zfac where xcms_id=zfac_xcms_id and zfac_id=zwin_zfac_id)) CustomerRegistrationName,
 (select zdco_shortdesc from zdco, zpos Z1 where zdco_id=Z1.zpos_zdco_id and Z1.zpos_id=( select max(Z2.zpos_id) from zpos Z2,zpil I2 where Z2.zpos_id=I2.zpil_zpos_id and Z2.zpos_cdt=5 and I2.zpil_zinv_id=zinv_id)) PaymentMeansCode,
-(select Z1.zpos_comment from zpos Z1 where Z1.zpos_id=( select max(Z2.zpos_id) from zpos Z2,zpil I2 where Z2.zpos_id=I2.zpil_zpos_id and Z2.zpos_cdt=5 and I2.zpil_zinv_id=zinv_id)) PaymentRefComment,
 (select TRIM(replace(wuss_value, ' ', '')) from wuss where wuss_name='HotelbankIBAN') PayeeFinancialAccountID,
 nvl((select wuss_value from wuss where upper(wuss_name)='UDEF_XRECHNUNG_FIRMIERUNG'),(select wuss_value from wuss where wuss_name='Hotelid')) PayeeFinancialAccountName,
 (select wuss_value from wuss where wuss_name='HotelbankBIC') PayeeFinancialAccountBIC,

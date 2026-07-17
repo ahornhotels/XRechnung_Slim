@@ -1,13 +1,5 @@
--- invoice_totals.sql
--- Extrahiert aus View TBH_EEI_FOLIO_TOT (VIEWS_Customized_final.txt, Zeilen 7-68)
--- Bindvariable: :zinv_id
--- Liefert: InvoiceGross, InvoiceNet, InvoiceTaxTotal, SPAY_CL fuer eine Rechnung
--- InvoiceNet/InvoiceTaxTotal kommen seit 20260703 (FW) aus derselben
--- Zeilen-Logik wie invoice_lines.sql (CTE TBH_LR_DE_PEPPOL_XML_SINGLE),
--- damit Netto+Steuer=Brutto konsistent zu den Line-/Tax-Werten aufgeht.
-
 /*Change: Validierungsfehler Netto+Steuer<>Brutto (fw 20260703)*/
-WITH TBH_LR_DE_PEPPOL_XML_SINGLE AS
+WITH TBH_LR_DE_PEPPOL_XML_SINGLE AS 
 (
 select
 ZINV_ID ZINV_ID,
@@ -49,6 +41,10 @@ and nvl(round(z.zpos_grossunitprice*z.zpos_quantity,2),0)<>0
 )
 )
 /*HauptAbfrage*/
+-- invoice_totals.sql
+-- Extrahiert aus View TBH_EEI_FOLIO_TOT (VIEWS_Customized_final.txt, Zeilen 7-68)
+-- Bindvariable: :zinv_id
+-- Liefert: InvoiceGross, InvoiceNet, InvoiceTaxTotal, SPAY_CL fuer eine Rechnung
 select
 ZPIL_ZINV_ID_S ZINV_ID,
 nvl(InvoiceGross,0) InvoiceGross,

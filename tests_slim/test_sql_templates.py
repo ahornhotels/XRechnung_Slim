@@ -1,0 +1,40 @@
+"""Guard-Tests fuer die uebernommenen SQL-Fixes vom 2026-07-03 (FW).
+
+Quellen: docs/invoice_header_20260703.txt, docs/invoice_tax_20260703.txt,
+docs/invoice_totals_20260703.txt. Die Tests sichern die Marker der Fixes,
+damit ein Refresh der Templates sie nicht stillschweigend zuruecksetzt.
+"""
+from pathlib import Path
+
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+
+
+def _read(name):
+    return (SQL_DIR / name).read_text(encoding="utf-8")
+
+
+def test_header_hat_adress_fallback_auf_primaeradresse():
+    """Kundenadresse faellt auf die Primaeradresse (xadr_primary=1) zurueck,
+    wenn die Rechnung ohne Adresse angelegt wurde."""
+    sql = _read("invoice_header.sql")
+    assert sql.lower().count("xadr_primary=1") >= 4  # Strasse/Ort/PLZ/Land
+    assert "CustomerStreetName" in sql
+    # PaymentRefComment (BG-3-Fallback) muss den Merge ueberlebt haben
+    assert "PaymentRefComment" in sql
+
+
+def test_tax_taxamount_aus_zeilen_mwst_summiert():
+    """TaxAmount je Steuersatz kommt aus den gerundeten Zeilen-MwSt-Betraegen
+    (0,5-Cent-Steuerueberschuss-Fix), nicht mehr aus TAX_AMOUNT_S."""
+    sql = _read("invoice_tax.sql")
+    assert "TBH_LR_DE_PEPPOL_XML_SINGLE" in sql
+    assert "LineExtensionAmountVat from TBH_LR_DE_PEPPOL_XML_SINGLE" in sql
+
+
+def test_totals_netto_und_steuer_aus_zeilenlogik():
+    """InvoiceNet/InvoiceTaxTotal kommen aus derselben Zeilen-Logik wie
+    invoice_lines.sql (Netto+Steuer=Brutto-Fix)."""
+    sql = _read("invoice_totals.sql")
+    assert "TBH_LR_DE_PEPPOL_XML_SINGLE" in sql
+    assert "sum(LineExtensionAmountNet_number)" in sql
+    assert "sum(LineExtensionAmountVat_number)" in sql
