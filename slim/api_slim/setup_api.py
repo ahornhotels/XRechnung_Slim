@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -384,6 +386,24 @@ async def hotel_save(payload: HotelSavePayload):
 
 # ───────────────────────── Finish / Service ─────────────────────────
 
+def _schedule_self_shutdown(delay: float = 3.0) -> threading.Timer:
+    """Beendet den Wizard-Server verzoegert (nachdem die Finish-Response
+    beim Browser angekommen ist).
+
+    Grund: setup_slim.cmd haelt den Wizard-uvicorn auf Port 8022, der frisch
+    installierte NSSM-Service braucht denselben Port. Solange der Wizard
+    laeuft, kann der Service nicht binden — das wirkte im Feld wie
+    "PC-Neustart noetig". os._exit ist hier ok: der Setup-Marker ist
+    geschrieben, es gibt nichts zu persistieren.
+    """
+    timer = threading.Timer(delay, os._exit, args=(0,))
+    timer.daemon = True
+    timer.start()
+    logger.info("Setup abgeschlossen — Wizard-Server beendet sich in %.0fs, "
+                "damit der Dienst Port binden kann.", delay)
+    return timer
+
+
 @router.post("/finish")
 async def setup_finish():
     """Markiert Setup als abgeschlossen und (best-effort) installiert
@@ -424,5 +444,7 @@ async def setup_finish():
             service_status["output"] = f"{e}"
 
     SETUP_DONE_MARKER.write_text("done", encoding="utf-8")
+    _schedule_self_shutdown()
     return {"ok": True, "service": service_status,
-            "message": "Setup abgeschlossen. Wechsel zur Status-Seite."}
+            "message": ("Setup abgeschlossen. Der Assistent beendet sich, "
+                        "der Dienst uebernimmt — Status-Seite laedt gleich neu.")}

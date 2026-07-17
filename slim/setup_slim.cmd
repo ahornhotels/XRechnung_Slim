@@ -161,7 +161,14 @@ echo.
 
 "%PY%" -m uvicorn slim.main_slim:app --host 127.0.0.1 --port 8022 --log-level info
 
-REM ─── 3) Falls uvicorn unerwartet endet ───────────────────
+REM ─── 3) Wizard-Server ist beendet ────────────────────────
+REM Der Wizard hat bis eben Port 8022 gehalten. Falls der Dienst schon
+REM installiert wurde, jetzt sicherheitshalber (neu) starten, damit die
+REM Port-Uebergabe sofort klappt (kein PC-Neustart noetig).
+IF EXIST "%BASE%\install\nssm.exe" (
+  "%BASE%\install\nssm.exe" restart Suite8XRechnungSlim >NUL 2>&1
+)
+
 echo.
 echo  =====================================================================
 echo   Wizard-Server wurde beendet.

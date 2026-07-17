@@ -257,9 +257,35 @@ def test_finish_writes_marker_and_attempts_service(client):
     }), encoding="utf-8")
 
     fake_proc = MagicMock(returncode=0, stdout="ok", stderr="")
-    with patch.object(setup_api.subprocess, "run", return_value=fake_proc):
+    with patch.object(setup_api.subprocess, "run", return_value=fake_proc), \
+         patch.object(setup_api, "_schedule_self_shutdown") as shutdown:
         r = c.post("/api/setup/finish")
     assert r.status_code == 200
     j = r.json()
     assert j["ok"] is True
     assert (cfg / ".setup_done").exists()
+    # Wizard-Server beendet sich selbst, damit der NSSM-Service Port 8022
+    # binden kann (sonst scheinbarer "Neustart noetig"-Effekt).
+    shutdown.assert_called_once()
+
+
+def test_finish_blocked_schedules_no_shutdown(client):
+    c, cfg, setup_api = client
+    (cfg / "hotel.json").write_text(json.dumps({"hotel_code": "X"}), encoding="utf-8")
+    (cfg / "connection.json").write_text("{}", encoding="utf-8")
+    with patch.object(setup_api, "_schedule_self_shutdown") as shutdown:
+        r = c.post("/api/setup/finish")
+    assert r.status_code == 400
+    shutdown.assert_not_called()
+
+
+def test_schedule_self_shutdown_beendet_prozess(client):
+    """_schedule_self_shutdown ruft (verzoegert) os._exit(0) auf."""
+    import threading
+    _, _, setup_api = client
+    fired = threading.Event()
+    with patch.object(setup_api.os, "_exit",
+                      side_effect=lambda code: fired.set()) as ex:
+        setup_api._schedule_self_shutdown(delay=0.01)
+        assert fired.wait(timeout=2.0), "os._exit wurde nicht aufgerufen"
+    ex.assert_called_once_with(0)

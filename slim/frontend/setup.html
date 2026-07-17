@@ -750,9 +750,16 @@ async function doFinish() {
       <a href="/" style="padding:12px 24px;background:var(--accent);color:#fff;
          text-decoration:none;border-radius:4px;font-weight:600;display:inline-block">
          &rarr; Zur Status-Seite
-      </a></p>`;
+      </a></p>
+      <p style="text-align:center;color:var(--muted);font-size:13px">
+        Der Setup-Assistent beendet sich jetzt, der Windows-Dienst uebernimmt
+        &mdash; diese Seite laedt in ca. 10 Sekunden automatisch neu.
+      </p>`;
     $("#finish_result").innerHTML = html;
     btn.style.display = "none";
+    // Wizard-Server beendet sich ~3s nach der Antwort selbst (Port-Uebergabe
+    // an den NSSM-Service). Danach zur Status-Seite des Dienstes wechseln.
+    setTimeout(() => { window.location.href = "/"; }, 10000);
   } catch (e) {
     $("#finish_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
     btn.disabled = false; btn.textContent = "Service installieren und starten";
