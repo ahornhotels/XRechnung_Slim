@@ -14,6 +14,7 @@ Datenstruktur:
 }
 """
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -151,6 +152,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         if is_credit_note(_provisional):
             header["invoicetypecode"] = "381"
 
+        _resolve_billing_reference_from_payment(cur, header)
+
         return {
             "zinv_id": zinv_id,
             "header": header,
@@ -187,6 +190,44 @@ def find_zinv_id_by_number(zinv_number: str) -> Optional[int]:
         )
         row = cur.fetchone()
         return int(row[0]) if row and row[0] is not None else None
+
+
+def _extract_number_candidates(comment) -> list[str]:
+    """Alle zusammenhaengenden Ziffernfolgen aus einem Freitext, laengste zuerst
+    (Tie-Break gegen Streuzahlen wie Jahreszahlen); bei gleicher Laenge bleibt
+    die Originalreihenfolge erhalten."""
+    if not comment or not str(comment).strip():
+        return []
+    return sorted(re.findall(r"\d+", str(comment)), key=len, reverse=True)
+
+
+def _resolve_billing_reference_from_payment(cur, header: dict) -> None:
+    """BG-3-Fallback fuer Gutschriften (InvoiceTypeCode 381) ohne
+    ZINV_VOID_ZINV_ID-Bezug: In der Hotel-Praxis traegt der Operator die
+    Original-Rechnungsnummer als Freitext in den Kommentar der Zahlungszeile
+    ein (Header-Feld ``paymentrefcomment`` aus invoice_header.sql).
+
+    Jeder Ziffern-Kandidat wird gegen ZINV validiert; der erste Treffer setzt
+    ``billingreferenceid`` und ``billingreferenceissuedate``. Kein Treffer ->
+    Feld bleibt leer, der Validator meldet weiterhin BG-3 (kein Fake-Bezug).
+    """
+    if (header.get("invoicetypecode") or "") != "381":
+        return
+    if (str(header.get("billingreferenceid") or "")).strip():
+        return
+    for nr in _extract_number_candidates(header.get("paymentrefcomment")):
+        cur.execute(
+            "SELECT zinv_number, TO_CHAR(zinv_date, 'YYYY-MM-DD') "
+            "FROM zinv WHERE zinv_number = :nr",
+            {"nr": nr},
+        )
+        row = cur.fetchone()
+        if row:
+            header["billingreferenceid"] = row[0]
+            header["billingreferenceissuedate"] = row[1]
+            logger.info(
+                "BillingReference aus Zahlungs-Kommentar aufgeloest: %s", row[0])
+            return
 
 
 def is_credit_note(invoice: dict) -> bool:
