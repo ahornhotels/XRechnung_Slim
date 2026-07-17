@@ -1,9 +1,8 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-17 · Version: 1.9.0 (+ unreleased Änderungen auf master) · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-17 · Version: 1.10.0 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
-> Seit Release `v1.9.0` (16.06.2026): Betriebs-Härtungs-Batch (17.07.) auf
-> master — noch kein neues Release/Tag.
+> `v1.10.0` (17.07.2026): Betriebs-Härtungs-Batch — Details unten.
 
 ## Kurzfassung
 
@@ -71,8 +70,6 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Offene Punkte / nächste Schritte
 
-- [ ] **Release taggen** (v1.10.0) sobald die Härtungs-Änderungen im Hotel
-      verifiziert sind — erst dann verteilt der Auto-Updater sie.
 - [ ] **SQL-Fixes gegen V8LIVE gegenprüfen:** eine Rechnung, die vorher den
       0,5-Cent-Fehler warf, durch den Poller/„run-now" schicken.
 - [ ] **Erster echter End-to-End-Test** des Online-Installers auf einer frischen
@@ -96,5 +93,5 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Git-Stand
 
-- Branch `master`, letztes Release/Tag `v1.9.0` @ `1b419bf`; danach Doku- und
-  Härtungs-Commits (17.07.), noch ohne neues Tag.
+- Branch `master`, aktuelles Release/Tag `v1.10.0` (17.07.2026,
+  Betriebs-Härtung); Vorgänger `v1.9.0` @ `1b419bf`.
