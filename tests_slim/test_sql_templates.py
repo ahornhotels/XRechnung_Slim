@@ -48,6 +48,26 @@ def test_tax_taxamount_korreliert_ueber_ztcd_nicht_prozentsatz():
     assert "NVL((selectLineExtensionAmountVatfromTBH_LR_DE_PEPPOL_XML_SINGLE" in flat
 
 
+def test_zeilenlogik_synchron_ueber_drei_sql():
+    """Finding 11: Die Zeilen-Berechnungslogik ist (noch) dreifach kopiert
+    (invoice_lines.sql + CTEs in invoice_tax.sql/invoice_totals.sql). Bis zu
+    einer echten Konsolidierung sichert dieser Guard, dass eine Aenderung nicht
+    in nur einer Kopie landet — stille Divergenz fuehrt zu Netto+Steuer<>Brutto
+    (BR-CO-*), genau der Fehlerklasse, die der 03.07.-Fix beseitigt hat."""
+    fragments = (
+        "round(z.zpos_grossunitprice*z.zpos_quantity,2)",
+        ("(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) "
+         "from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and "
+         "Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)"),
+    )
+    sqls = {name: _read(f"invoice_{name}.sql").replace(" ", "").replace("\n", "")
+            for name in ("lines", "tax", "totals")}
+    for frag in fragments:
+        norm = frag.replace(" ", "").replace("\n", "")
+        for name, sql in sqls.items():
+            assert norm in sql, f"invoice_{name}.sql: Zeilenlogik divergiert bei {frag[:40]!r}"
+
+
 def test_totals_netto_und_steuer_aus_zeilenlogik():
     """InvoiceNet/InvoiceTaxTotal kommen aus derselben Zeilen-Logik wie
     invoice_lines.sql (Netto+Steuer=Brutto-Fix)."""
