@@ -73,7 +73,15 @@ app = FastAPI(
 # IP-Allowlist: wird beim Start gelesen (Konfig-Aenderung => Dienst-Neustart,
 # konsistent mit host/port). localhost ist immer erlaubt; leere Liste =>
 # effektiv nur localhost, auch wenn host=0.0.0.0 gebunden ist.
-_ALLOWED_IPS = load_app_settings().get("allowed_ips") or []
+_app_settings = load_app_settings()
+_ALLOWED_IPS = _app_settings.get("allowed_ips") or []
+
+# Fehlkonfiguration sichtbar machen: LAN-Bind ohne Allowlist sperrt still alle
+# Netzwerk-Clients aus (fail-safe) — beim Start einmal warnen.
+_lan_warn = access.lan_exposure_warning(
+    _app_settings.get("host", "127.0.0.1"), _ALLOWED_IPS)
+if _lan_warn:
+    logger.warning(_lan_warn)
 
 
 @app.middleware("http")

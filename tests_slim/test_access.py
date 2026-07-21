@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from slim.core_slim.access import dispatch, is_ip_allowed
+from slim.core_slim.access import dispatch, is_ip_allowed, lan_exposure_warning
 
 
 # ─────────────── is_ip_allowed (reine Funktion) ───────────────
@@ -50,11 +50,28 @@ def test_ipv6_mapped_ipv4_wird_normalisiert():
     assert is_ip_allowed("::ffff:127.0.0.1", []) is True
 
 
+def test_allowlist_eintrag_ipv6_mapped_matcht_ipv4_client():
+    # Ein Allowlist-Eintrag in IPv6-mapped-Form muss den (normalisierten)
+    # IPv4-Client treffen — sonst blockt ein aus einem Log kopierter Eintrag.
+    assert is_ip_allowed("192.168.10.5", ["::ffff:192.168.10.5"]) is True
+    assert is_ip_allowed("192.168.10.6", ["::ffff:192.168.10.5"]) is False
+
+
+def test_lan_exposure_warning():
+    # Bind ans Netz ohne Allowlist -> Warnung; sonst None.
+    assert lan_exposure_warning("0.0.0.0", []) is not None
+    assert lan_exposure_warning("192.168.1.10", []) is not None
+    assert lan_exposure_warning("0.0.0.0", ["192.168.1.0/24"]) is None
+    assert lan_exposure_warning("127.0.0.1", []) is None
+    assert lan_exposure_warning("::1", []) is None
+    assert lan_exposure_warning("localhost", []) is None
+
+
 # ─────────────── dispatch (HTTP-Middleware) ───────────────
 
-def _request(host):
+def _request(host, path="/api/status"):
     client = SimpleNamespace(host=host) if host is not None else None
-    return SimpleNamespace(client=client)
+    return SimpleNamespace(client=client, url=SimpleNamespace(path=path))
 
 
 async def _call_next(request):
@@ -84,4 +101,11 @@ async def test_dispatch_ohne_client_403():
 async def test_dispatch_allowlist_ip_erlaubt():
     resp = await dispatch(_request("192.168.10.5"), _call_next,
                           ["192.168.10.0/24"])
+    assert resp == "OK-RESPONSE"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_healthz_immer_erlaubt():
+    # Monitoring-Endpoint bleibt auch fuer geblockte IPs erreichbar.
+    resp = await dispatch(_request("10.0.0.5", path="/healthz"), _call_next, [])
     assert resp == "OK-RESPONSE"
