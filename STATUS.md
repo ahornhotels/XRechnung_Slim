@@ -1,7 +1,11 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-21 · Version: 1.10.1 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-21 · Version: 1.10.2 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
+> `v1.10.2` (21.07.2026): Fix — TaxAmount je Steuercode statt Prozentsatz
+> korreliert (BR-CO-14-Doppelzählung bei zwei ZTCDs mit gleichem Satz;
+> NVL-Fallback gegen stilles 0.00). **SQL nicht gegen V8LIVE gegengeprüft —
+> Gegenprüfung mit einer Zwei-Codes-Rechnung nachholen.**
 > `v1.10.1` (21.07.2026): Hotfix — `cbc:DueDate` aus dem CreditNote-Template
 > entfernt (XSD-Blocker `cvc-complex-type.2.4.a` bei Gutschriften mit
 > Fälligkeitsdatum). Bestand seit v1.9.0.
@@ -96,6 +100,6 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Git-Stand
 
-- Branch `master`, aktuelles Release/Tag `v1.10.1` (21.07.2026, CreditNote-
-  DueDate-Hotfix); Vorgänger `v1.10.0` (17.07.2026, Betriebs-Härtung),
-  `v1.9.0` @ `1b419bf`.
+- Branch `master`, aktuelles Release/Tag `v1.10.2` (21.07.2026, TaxAmount-
+  ZTCD-Korrelation); Vorgänger `v1.10.1` (CreditNote-DueDate-Hotfix),
+  `v1.10.0` (Betriebs-Härtung), `v1.9.0` @ `1b419bf`.
