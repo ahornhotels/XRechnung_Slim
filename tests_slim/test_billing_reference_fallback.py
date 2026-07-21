@@ -60,8 +60,9 @@ class FakeCursor:
         return self._last
 
 
-def _header(comment, typecode="381", refid=None):
+def _header(comment, typecode="381", refid=None, own="GS-9999"):
     return {
+        "id": own,
         "invoicetypecode": typecode,
         "billingreferenceid": refid,
         "paymentrefcomment": comment,
@@ -117,6 +118,23 @@ def test_resolve_nur_bei_gutschrift_381():
     _resolve_billing_reference_from_payment(cur, header)
     assert not header.get("billingreferenceid")
     assert cur.queries == []
+
+
+def test_resolve_eigene_nummer_wird_uebersprungen():
+    # Kommentar nennt die eigene Gutschrift-Nummer UND die echte Original.
+    # Die eigene darf nicht als Selbstreferenz gewinnen.
+    cur = FakeCursor({"77777": ("77777", "2026-06-01")})
+    header = _header("Storno 12345 zu RG 77777", own="12345")
+    _resolve_billing_reference_from_payment(cur, header)
+    assert header["billingreferenceid"] == "77777"
+    assert all((q[1] or {}).get("nr") != "12345" for q in cur.queries)
+
+
+def test_resolve_nur_eigene_nummer_kein_bezug():
+    cur = FakeCursor({"12345": ("12345", "2026-06-01")})
+    header = _header("Gutschrift 12345", own="12345")
+    _resolve_billing_reference_from_payment(cur, header)
+    assert not header.get("billingreferenceid")
 
 
 # ─────────────── SQL-Template ───────────────

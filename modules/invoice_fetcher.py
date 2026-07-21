@@ -215,10 +215,17 @@ def _resolve_billing_reference_from_payment(cur, header: dict) -> None:
         return
     if (str(header.get("billingreferenceid") or "")).strip():
         return
+    # Die eigene Rechnungsnummer der Gutschrift darf nie als (Selbst-)Bezug
+    # gewinnen — sie existiert per Definition in ZINV.
+    own = (str(header.get("id") or "")).strip()
     for nr in _extract_number_candidates(header.get("paymentrefcomment")):
+        if nr == own:
+            continue
+        # Bei doppelten Nummern die neueste Rechnung (hoechste zinv_id) nehmen —
+        # konsistent zu find_zinv_id_by_number.
         cur.execute(
-            "SELECT zinv_number, TO_CHAR(zinv_date, 'YYYY-MM-DD') "
-            "FROM zinv WHERE zinv_number = :nr",
+            "SELECT zinv_number, TO_CHAR(zinv_date, 'YYYY-MM-DD') FROM zinv "
+            "WHERE zinv_id = (SELECT MAX(zinv_id) FROM zinv WHERE zinv_number = :nr)",
             {"nr": nr},
         )
         row = cur.fetchone()

@@ -134,6 +134,12 @@ def apply_to_invoice(data_dir: Path, wmai_id: int, invoice: dict) -> dict:
     for k, v in overrides.items():
         if k in ALLOWED_KEYS:
             out["header"][k] = v
+    # Korrigiert der Operator per Override nur die billingreferenceid (weil der
+    # Auto-Fallback aus dem Zahlungs-Kommentar die falsche Original-Rechnung
+    # traf), das mit aufgeloeste issuedate der FALSCHEN Rechnung nicht
+    # dranlassen — sonst gemischtes BG-3-Paar. BT-26 ist optional.
+    if "billingreferenceid" in overrides and "billingreferenceissuedate" not in overrides:
+        out["header"]["billingreferenceissuedate"] = None
     logger.info(
         "Override für WMAI %s angewandt (%d Feld(er): %s)",
         wmai_id, len(overrides), ", ".join(overrides.keys()),

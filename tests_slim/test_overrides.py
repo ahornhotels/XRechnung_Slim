@@ -28,6 +28,28 @@ def test_save_filters_unknown_keys(tmp_path):
     assert overrides.load(tmp_path, 1) == {"customername": "Max"}
 
 
+def test_billingref_id_override_leert_verwaistes_issuedate(tmp_path):
+    """Korrigiert der Operator per Override nur die billingreferenceid (weil
+    der Auto-Fallback die falsche Rechnung traf), darf das vom Fallback
+    gesetzte issuedate der FALSCHEN Rechnung nicht dranbleiben."""
+    overrides.save(tmp_path, 42, {"billingreferenceid": "12345"})
+    inv = {"header": {"billingreferenceid": "98765",
+                      "billingreferenceissuedate": "2026-06-30"}}
+    out = overrides.apply_to_invoice(tmp_path, 42, inv)
+    assert out["header"]["billingreferenceid"] == "12345"
+    assert not out["header"].get("billingreferenceissuedate")
+
+
+def test_billingref_id_und_date_override_bleibt(tmp_path):
+    """Setzt der Override id UND date, bleibt das date erhalten."""
+    overrides.save(tmp_path, 42, {"billingreferenceid": "12345",
+                                  "billingreferenceissuedate": "2026-05-01"})
+    inv = {"header": {"billingreferenceid": "98765",
+                      "billingreferenceissuedate": "2026-06-30"}}
+    out = overrides.apply_to_invoice(tmp_path, 42, inv)
+    assert out["header"]["billingreferenceissuedate"] == "2026-05-01"
+
+
 def test_save_drops_empty_values(tmp_path):
     saved = overrides.save(tmp_path, 1, {
         "customername": "Max",
