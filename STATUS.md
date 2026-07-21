@@ -1,7 +1,11 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-21 · Version: 1.10.3 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-21 · Version: 1.10.4 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
+> `v1.10.4` (21.07.2026): Fix — Adress-Fallback (invoice_header.sql) zieht alle
+> vier Kundenadress-Felder deterministisch aus derselben Primäradresse
+> (min(xadr_id)) statt je Feld aus nicht-deterministischem rownum=1
+> (Finding 8). Normalfall unverändert. **SQL nicht gegen V8LIVE gegengeprüft.**
 > `v1.10.3` (21.07.2026): Review-Nachlauf (Findings #7–#17) — BG-3-Fallback
 > gehärtet (Selbstreferenz/Dublette/Override), IP-Allowlist normalisiert +
 > /healthz frei + LAN-Warnung, Setup-Self-Shutdown/nssm-restart nur bei
@@ -108,7 +112,7 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Git-Stand
 
-- Branch `master`, aktuelles Release/Tag `v1.10.3` (21.07.2026, Review-Nachlauf
-  Findings #7–#17); Vorgänger `v1.10.2` (TaxAmount-ZTCD-Korrelation),
-  `v1.10.1` (CreditNote-DueDate-Hotfix), `v1.10.0` (Betriebs-Härtung),
-  `v1.9.0` @ `1b419bf`.
+- Branch `master`, aktuelles Release/Tag `v1.10.4` (21.07.2026, Adress-Fallback-
+  Determinismus); Vorgänger `v1.10.3` (Review-Nachlauf #7–#17), `v1.10.2`
+  (TaxAmount-ZTCD-Korrelation), `v1.10.1` (CreditNote-DueDate-Hotfix),
+  `v1.10.0` (Betriebs-Härtung), `v1.9.0` @ `1b419bf`.
