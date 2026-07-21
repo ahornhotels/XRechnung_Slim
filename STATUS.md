@@ -1,7 +1,15 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-21 · Version: 1.10.2 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-21 · Version: 1.10.3 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
+> `v1.10.3` (21.07.2026): Review-Nachlauf (Findings #7–#17) — BG-3-Fallback
+> gehärtet (Selbstreferenz/Dublette/Override), IP-Allowlist normalisiert +
+> /healthz frei + LAN-Warnung, Setup-Self-Shutdown/nssm-restart nur bei
+> Wizard-Kontext & Install-Erfolg (Frontend pollt /healthz), Archiv-Sortierung
+> nach Epoch, veraltete SQL-Overrides werden geloggt, Divergenz-Guard für die
+> dreifach kopierte Zeilenlogik. **Offen: Finding 8 (Adress-Fallback, SQL,
+> V8LIVE-Gegenprüfung nötig) und die eigentliche SQL-Konsolidierung (#11).**
+> Hinweis: Setup-UI/-Ablauf noch nicht an einer echten Instanz durchgeklickt.
 > `v1.10.2` (21.07.2026): Fix — TaxAmount je Steuercode statt Prozentsatz
 > korreliert (BR-CO-14-Doppelzählung bei zwei ZTCDs mit gleichem Satz;
 > NVL-Fallback gegen stilles 0.00). **SQL nicht gegen V8LIVE gegengeprüft —
@@ -100,6 +108,7 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Git-Stand
 
-- Branch `master`, aktuelles Release/Tag `v1.10.2` (21.07.2026, TaxAmount-
-  ZTCD-Korrelation); Vorgänger `v1.10.1` (CreditNote-DueDate-Hotfix),
-  `v1.10.0` (Betriebs-Härtung), `v1.9.0` @ `1b419bf`.
+- Branch `master`, aktuelles Release/Tag `v1.10.3` (21.07.2026, Review-Nachlauf
+  Findings #7–#17); Vorgänger `v1.10.2` (TaxAmount-ZTCD-Korrelation),
+  `v1.10.1` (CreditNote-DueDate-Hotfix), `v1.10.0` (Betriebs-Härtung),
+  `v1.9.0` @ `1b419bf`.
