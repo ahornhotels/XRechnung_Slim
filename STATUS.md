@@ -1,7 +1,10 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-17 · Version: 1.10.0 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-07-21 · Version: 1.10.1 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
+> `v1.10.1` (21.07.2026): Hotfix — `cbc:DueDate` aus dem CreditNote-Template
+> entfernt (XSD-Blocker `cvc-complex-type.2.4.a` bei Gutschriften mit
+> Fälligkeitsdatum). Bestand seit v1.9.0.
 > `v1.10.0` (17.07.2026): Betriebs-Härtungs-Batch — Details unten.
 
 ## Kurzfassung
@@ -93,5 +96,6 @@ Design-Spec: `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md`.
 
 ## Git-Stand
 
-- Branch `master`, aktuelles Release/Tag `v1.10.0` (17.07.2026,
-  Betriebs-Härtung); Vorgänger `v1.9.0` @ `1b419bf`.
+- Branch `master`, aktuelles Release/Tag `v1.10.1` (21.07.2026, CreditNote-
+  DueDate-Hotfix); Vorgänger `v1.10.0` (17.07.2026, Betriebs-Härtung),
+  `v1.9.0` @ `1b419bf`.
