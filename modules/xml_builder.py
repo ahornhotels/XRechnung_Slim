@@ -231,14 +231,21 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
     return out
 
 
-def _ensure_duedate(invoice: dict) -> dict:
+def _ensure_duedate(invoice: dict, is_credit_note: bool = False) -> dict:
     """BR-CO-25: PayableAmount > 0 verlangt DueDate (BT-9) oder PaymentTerms
     (BT-20). Suite8-Header liefert ``duedate`` nicht immer mit. Fallback:
     duedate = issuedate + 14 Tage (uebliche Hotel-Zahlungs-Frist). Wenn
     auch issuedate fehlt, lassen wir das Feld leer — der Pflichtfeld-
     Validator schiesst die Rechnung dann ohnehin schon weg.
+
+    Bei CreditNotes wird KEIN duedate gesetzt: das UBL-CreditNote-Schema
+    kennt cbc:DueDate nicht (waere cvc-complex-type.2.4.a). ``is_credit_note``
+    muss vom Aufrufer kommen, da hier bereits abs()'d wurde und eine reine
+    Sum<0-Erkennung nicht mehr greift.
     """
     from datetime import date, timedelta
+    if is_credit_note:
+        return invoice
     header = invoice.get("header") or {}
     try:
         payable = float(header.get("payableamount") or 0)
@@ -384,7 +391,7 @@ def render(invoice: dict, version: str = "3.0") -> bytes:
     else:
         prepared = _split_negative_lines_to_allowances(invoice)
         tmpl_name = f"xrechnung_{version}.xml.j2"
-    prepared = _ensure_duedate(prepared)
+    prepared = _ensure_duedate(prepared, is_credit_note=is_cn)
     template = _env.get_template(tmpl_name)
     return template.render(**prepared).encode("utf-8")
 

@@ -7,8 +7,11 @@
   <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
   <cbc:ID>{{ header.id }}</cbc:ID>
   <cbc:IssueDate>{{ header.issuedate }}</cbc:IssueDate>
-{% if header.duedate %}  <cbc:DueDate>{{ header.duedate }}</cbc:DueDate>
-{% endif %}  <cbc:CreditNoteTypeCode>{{ header.invoicetypecode }}</cbc:CreditNoteTypeCode>
+  {# UBL-CreditNote kennt KEIN cbc:DueDate (nur Invoice, BT-9). Ein Faelligkeits-
+     datum bei einer Gutschrift waere schemawidrig (cvc-complex-type.2.4.a) und
+     fachlich sinnlos. BR-CO-25 (payable>0) waere hier ggf. ueber PaymentTerms
+     abzubilden. #}
+  <cbc:CreditNoteTypeCode>{{ header.invoicetypecode }}</cbc:CreditNoteTypeCode>
 {% if header.note %}  <cbc:Note>{{ header.note|e }}</cbc:Note>
 {% endif %}  <cbc:DocumentCurrencyCode>{{ header.documentcurrencycode }}</cbc:DocumentCurrencyCode>
   <cbc:BuyerReference>{{ header.buyerreference|e }}</cbc:BuyerReference>
