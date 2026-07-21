@@ -133,6 +133,9 @@ REM connection.json wird absichtlich NICHT vorab angelegt -
 REM der Wizard speichert sie erst nach erfolgreichem Verbindungstest.
 
 SET SUITE8_CONFIG_DIR=%SLIMDIR%\config
+REM Kontext-Flag: nur DIESER (Wizard-)Prozess darf sich nach /finish selbst
+REM beenden. Der NSSM-Dienst setzt das Flag nicht und ueberlebt ein Re-Setup.
+SET SUITE8_SETUP_WIZARD=1
 
 echo.
 echo  [4/5] Browser-Start vorbereiten...
@@ -162,11 +165,16 @@ echo.
 "%PY%" -m uvicorn slim.main_slim:app --host 127.0.0.1 --port 8022 --log-level info
 
 REM ─── 3) Wizard-Server ist beendet ────────────────────────
-REM Der Wizard hat bis eben Port 8022 gehalten. Falls der Dienst schon
-REM installiert wurde, jetzt sicherheitshalber (neu) starten, damit die
-REM Port-Uebergabe sofort klappt (kein PC-Neustart noetig).
-IF EXIST "%BASE%\install\nssm.exe" (
-  "%BASE%\install\nssm.exe" restart Suite8XRechnungSlim >NUL 2>&1
+REM Nur wenn der Wizard in DIESEM Lauf ein Setup abgeschlossen hat, hinterlaesst
+REM /api/setup/finish die Signal-Datei .restart_after_setup. Dann den frisch
+REM installierten Dienst anstossen (Port-Uebergabe). Bei Abbruch, Bind-Fehler
+REM oder Wizard-Aufruf auf einer bereits fertigen Installation existiert die
+REM Datei nicht -> der laufende/gestoppte Dienst wird NICHT ungewollt gebounct.
+IF EXIST "%SLIMDIR%\config\.restart_after_setup" (
+  DEL "%SLIMDIR%\config\.restart_after_setup" >NUL 2>&1
+  IF EXIST "%BASE%\install\nssm.exe" (
+    "%BASE%\install\nssm.exe" restart Suite8XRechnungSlim >NUL 2>&1
+  )
 )
 
 echo.

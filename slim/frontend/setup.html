@@ -750,19 +750,46 @@ async function doFinish() {
       <a href="/" style="padding:12px 24px;background:var(--accent);color:#fff;
          text-decoration:none;border-radius:4px;font-weight:600;display:inline-block">
          &rarr; Zur Status-Seite
-      </a></p>
-      <p style="text-align:center;color:var(--muted);font-size:13px">
-        Der Setup-Assistent beendet sich jetzt, der Windows-Dienst uebernimmt
-        &mdash; diese Seite laedt in ca. 10 Sekunden automatisch neu.
+      </a></p>`;
+
+    if (svc.installed) {
+      // Wizard beendet sich in r.shutdown_in Sekunden selbst; danach uebernimmt
+      // der Dienst. Erst NACH dieser Zeit /healthz pollen (sonst antwortet noch
+      // der Wizard) und erst bei Erreichbarkeit navigieren — kein blindes
+      // Redirect gegen einen ggf. noch nicht gebundenen Port.
+      html += `<p style="text-align:center;color:var(--muted);font-size:13px">
+        Der Assistent beendet sich, der Windows-Dienst uebernimmt &mdash;
+        die Seite laedt automatisch, sobald der Dienst erreichbar ist.
       </p>`;
-    $("#finish_result").innerHTML = html;
-    btn.style.display = "none";
-    // Wizard-Server beendet sich ~3s nach der Antwort selbst (Port-Uebergabe
-    // an den NSSM-Service). Danach zur Status-Seite des Dienstes wechseln.
-    setTimeout(() => { window.location.href = "/"; }, 10000);
+      $("#finish_result").innerHTML = html;
+      btn.style.display = "none";
+      const waitMs = (((r.shutdown_in || 3) + 2)) * 1000;
+      setTimeout(() => pollHealthzThenRedirect(40), waitMs);
+    } else {
+      // Installation kam nicht durch: Warnbox + Anleitung stehen lassen, NICHT
+      // navigieren (Wizard bleibt erreichbar), Button zum erneuten Versuch.
+      $("#finish_result").innerHTML = html;
+      btn.disabled = false; btn.textContent = "Erneut versuchen";
+    }
   } catch (e) {
     $("#finish_result").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
     btn.disabled = false; btn.textContent = "Service installieren und starten";
+  }
+}
+
+async function pollHealthzThenRedirect(triesLeft) {
+  try {
+    const r = await fetch("/healthz", {cache: "no-store"});
+    if (r.ok) { window.location.href = "/"; return; }
+  } catch (e) { /* Dienst noch nicht erreichbar */ }
+  if (triesLeft > 0) {
+    setTimeout(() => pollHealthzThenRedirect(triesLeft - 1), 1500);
+  } else {
+    // Nach ~60s aufgeben: manueller Link bleibt.
+    $("#finish_result").insertAdjacentHTML("beforeend",
+      `<p style="text-align:center;color:var(--muted);font-size:13px">
+         Dienst noch nicht erreichbar &mdash; bitte oben auf &bdquo;Zur
+         Status-Seite&ldquo; klicken.</p>`);
   }
 }
 

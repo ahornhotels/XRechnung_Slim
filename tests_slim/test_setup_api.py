@@ -246,8 +246,7 @@ def test_finish_blocked_without_pattern(client):
     assert "Pattern" in r.json()["detail"]
 
 
-def test_finish_writes_marker_and_attempts_service(client):
-    c, cfg, setup_api = client
+def _write_valid_setup(cfg):
     (cfg / "hotel.json").write_text(json.dumps({
         "hotel_code": "X",
         "suite8_recognize_subject_pattern": r"Y(?P<zinv_number>\d+)",
@@ -255,6 +254,18 @@ def test_finish_writes_marker_and_attempts_service(client):
     (cfg / "connection.json").write_text(json.dumps({
         "password": "gAAAA..."
     }), encoding="utf-8")
+    # install_slim.cmd muss existieren, damit /finish die (gemockte)
+    # Service-Installation ueberhaupt versucht und 'installed' setzen kann.
+    install_dir = cfg.parent / "install"
+    install_dir.mkdir(parents=True, exist_ok=True)
+    (install_dir / "install_slim.cmd").write_text("@echo off\n", encoding="utf-8")
+
+
+def test_finish_writes_marker_and_attempts_service(client, monkeypatch):
+    c, cfg, setup_api = client
+    _write_valid_setup(cfg)
+    # Wizard-Kontext simulieren: nur dann darf sich der Prozess beenden.
+    monkeypatch.setenv("SUITE8_SETUP_WIZARD", "1")
 
     fake_proc = MagicMock(returncode=0, stdout="ok", stderr="")
     with patch.object(setup_api.subprocess, "run", return_value=fake_proc), \
@@ -264,9 +275,49 @@ def test_finish_writes_marker_and_attempts_service(client):
     j = r.json()
     assert j["ok"] is True
     assert (cfg / ".setup_done").exists()
-    # Wizard-Server beendet sich selbst, damit der NSSM-Service Port 8022
-    # binden kann (sonst scheinbarer "Neustart noetig"-Effekt).
+    # Wizard-Server beendet sich selbst (Wizard-Kontext + Install erfolgreich).
     shutdown.assert_called_once()
+    # Signal fuer setup_slim.cmd, den Dienst danach anzustossen.
+    assert (cfg / ".restart_after_setup").exists()
+
+
+def test_finish_kein_shutdown_ohne_wizard_kontext(client, monkeypatch):
+    """Im laufenden NSSM-Dienst (kein SUITE8_SETUP_WIZARD) darf /finish den
+    Prozess NICHT per os._exit killen — sonst stirbt der Produktionsdienst."""
+    c, cfg, setup_api = client
+    _write_valid_setup(cfg)
+    monkeypatch.delenv("SUITE8_SETUP_WIZARD", raising=False)
+    fake_proc = MagicMock(returncode=0, stdout="ok", stderr="")
+    with patch.object(setup_api.subprocess, "run", return_value=fake_proc), \
+         patch.object(setup_api, "_schedule_self_shutdown") as shutdown:
+        r = c.post("/api/setup/finish")
+    assert r.status_code == 200
+    shutdown.assert_not_called()
+    assert not (cfg / ".restart_after_setup").exists()
+
+
+def test_finish_kein_shutdown_bei_install_fehler(client, monkeypatch):
+    """Schlaegt die Service-Installation fehl, bleibt der Wizard erreichbar
+    (kein Self-Shutdown), damit die Fehler-Anleitung sichtbar bleibt."""
+    c, cfg, setup_api = client
+    _write_valid_setup(cfg)
+    monkeypatch.setenv("SUITE8_SETUP_WIZARD", "1")
+    fake_proc = MagicMock(returncode=1, stdout="", stderr="kein Admin")
+    with patch.object(setup_api.subprocess, "run", return_value=fake_proc), \
+         patch.object(setup_api, "_schedule_self_shutdown") as shutdown:
+        r = c.post("/api/setup/finish")
+    assert r.status_code == 200
+    assert r.json()["service"]["installed"] is False
+    shutdown.assert_not_called()
+
+
+def test_should_self_shutdown_logik(client, monkeypatch):
+    _, _, setup_api = client
+    monkeypatch.setenv("SUITE8_SETUP_WIZARD", "1")
+    assert setup_api._should_self_shutdown({"installed": True}) is True
+    assert setup_api._should_self_shutdown({"installed": False}) is False
+    monkeypatch.delenv("SUITE8_SETUP_WIZARD", raising=False)
+    assert setup_api._should_self_shutdown({"installed": True}) is False
 
 
 def test_finish_blocked_schedules_no_shutdown(client):

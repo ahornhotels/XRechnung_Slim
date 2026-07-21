@@ -45,6 +45,10 @@ router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 SETUP_DONE_MARKER = CONFIG_DIR / ".setup_done"
 KEY_PATH = CONFIG_DIR / "connection.key"
+# Signal an setup_slim.cmd: nach dem Selbst-Ende des Wizards den frisch
+# installierten Dienst anstossen (nur wenn hier gesetzt).
+RESTART_SIGNAL = CONFIG_DIR / ".restart_after_setup"
+_SHUTDOWN_DELAY = 3.0
 
 
 def _require_setup_mode():
@@ -404,6 +408,20 @@ def _schedule_self_shutdown(delay: float = 3.0) -> threading.Timer:
     return timer
 
 
+def _should_self_shutdown(service_status: dict) -> bool:
+    """Der Wizard beendet sich nur selbst, wenn er wirklich der (per
+    setup_slim.cmd gestartete) Wizard-Prozess ist — erkennbar am Env-Flag
+    ``SUITE8_SETUP_WIZARD`` — UND die Service-Installation glueckte.
+
+    Ohne diese Bedingungen wuerde ``os._exit`` den laufenden NSSM-Dienst
+    killen (Re-Setup im Betrieb) bzw. bei fehlgeschlagener Installation die
+    Fehler-Anleitung im UI unerreichbar machen (toter Port nach Redirect).
+    """
+    if os.environ.get("SUITE8_SETUP_WIZARD") != "1":
+        return False
+    return bool(service_status.get("installed"))
+
+
 @router.post("/finish")
 async def setup_finish():
     """Markiert Setup als abgeschlossen und (best-effort) installiert
@@ -444,7 +462,22 @@ async def setup_finish():
             service_status["output"] = f"{e}"
 
     SETUP_DONE_MARKER.write_text("done", encoding="utf-8")
-    _schedule_self_shutdown()
+
+    shutdown_in = 0.0
+    if _should_self_shutdown(service_status):
+        try:
+            RESTART_SIGNAL.write_text("1", encoding="utf-8")
+        except OSError:
+            logger.exception("Restart-Signal nicht schreibbar: %s", RESTART_SIGNAL)
+        _schedule_self_shutdown(_SHUTDOWN_DELAY)
+        shutdown_in = _SHUTDOWN_DELAY
+        message = ("Setup abgeschlossen. Der Assistent beendet sich, der Dienst "
+                   "uebernimmt — die Status-Seite laedt, sobald er erreichbar ist.")
+    elif service_status.get("attempted") and not service_status.get("installed"):
+        message = ("Setup abgeschlossen, aber die Dienst-Installation kam nicht "
+                   "durch. Bitte der Anleitung folgen — der Assistent bleibt "
+                   "erreichbar.")
+    else:
+        message = "Setup abgeschlossen."
     return {"ok": True, "service": service_status,
-            "message": ("Setup abgeschlossen. Der Assistent beendet sich, "
-                        "der Dienst uebernimmt — Status-Seite laedt gleich neu.")}
+            "shutdown_in": shutdown_in, "message": message}
