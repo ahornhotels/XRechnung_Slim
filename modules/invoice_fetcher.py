@@ -44,6 +44,23 @@ def _seller_contact_defaults() -> dict:
     }
 
 
+# Marker, die im aktuellen Repo-Template vorkommen. Fehlen sie in einem
+# Operator-Override, ist der Override vor den zugehoerigen Fixes gespeichert
+# worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
+_EXPECTED_OVERRIDE_MARKERS = {
+    "invoice_header.sql": ("PaymentRefComment", "xadr_primary"),
+    "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId",),
+    "invoice_totals.sql": ("LineExtensionAmountVat_number",),
+}
+_warned_stale_overrides: set[str] = set()
+
+
+def _stale_override_markers(name: str, sql_text: str) -> list[str]:
+    """Erwartete Marker, die im Override-SQL fehlen (Hinweis auf einen
+    veralteten Override, der neuere Repo-Fixes ueberschattet)."""
+    return [m for m in _EXPECTED_OVERRIDE_MARKERS.get(name, ()) if m not in sql_text]
+
+
 def _read_sql(name: str) -> str:
     """Liest ein SQL-Template. Bevorzugt einen Operator-Override unter
     ``<data_dir>/sql_overrides/<name>`` — wenn vorhanden, sonst die Repo-
@@ -58,6 +75,13 @@ def _read_sql(name: str) -> str:
         try:
             content = override.read_text(encoding="utf-8")
             if content.strip():
+                missing = _stale_override_markers(name, content)
+                if missing and name not in _warned_stale_overrides:
+                    _warned_stale_overrides.add(name)
+                    logger.warning(
+                        "SQL-Override %s wirkt veraltet — fehlende Marker: %s. Er "
+                        "ueberschattet neuere Repo-Fixes; im SQL-Editor neu "
+                        "speichern oder loeschen.", name, ", ".join(missing))
                 return content
         except OSError:
             logger.exception("SQL-Override nicht lesbar: %s — fallback auf Repo", override)

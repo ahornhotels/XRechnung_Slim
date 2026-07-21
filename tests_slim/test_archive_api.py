@@ -43,6 +43,18 @@ def test_list_empty_when_no_archive_dir(client):
     assert r.json() == {"items": [], "count": 0}
 
 
+def test_sort_items_nach_zeitpunkt_nicht_string():
+    """Neueste zuerst nach Epoch — nicht nach dem mtime-Anzeigestring, dessen
+    lexikografische Ordnung ueber einen DST-Wechsel (+01:00/+02:00) falsch ist.
+    'b' hat den groesseren mtime-String, aber den aelteren Zeitpunkt."""
+    items = [
+        {"name": "a_neu", "_ts": 200.0, "mtime": "2026-10-25T02:30:00+01:00"},
+        {"name": "b_alt", "_ts": 100.0, "mtime": "2026-10-25T02:45:00+02:00"},
+    ]
+    out = archive_api._sort_items(list(items))
+    assert [i["name"] for i in out] == ["a_neu", "b_alt"]
+
+
 def test_list_returns_entries_with_fields(client):
     c, tmp_path = client
     _archive(tmp_path, "144853", b"<a/>",

@@ -173,6 +173,24 @@ def test_invoice_fetcher_uses_override_when_present(tmp_path, monkeypatch):
     assert "OVERRIDE-MARKER 42" in out
 
 
+def test_stale_override_marker_erkennung():
+    """Ein Override, dem die Marker der aktuellen Repo-Fixes fehlen, wird als
+    veraltet erkannt (Finding 6: sonst ueberschattet er die Fixes still)."""
+    from pathlib import Path
+    from modules.invoice_fetcher import _stale_override_markers, SQL_DIR
+
+    current = (SQL_DIR / "invoice_header.sql").read_text(encoding="utf-8")
+    assert _stale_override_markers("invoice_header.sql", current) == []
+
+    old = "select zinv_number id from zinv where zinv_id = :zinv_id"
+    assert set(_stale_override_markers("invoice_header.sql", old)) == {
+        "PaymentRefComment", "xadr_primary",
+    }
+
+    # Unbekanntes Template -> keine Marker-Erwartung
+    assert _stale_override_markers("irgendwas.sql", "x") == []
+
+
 def test_invoice_fetcher_falls_back_to_repo_when_no_override(tmp_path, monkeypatch):
     """Ohne Override -> Repo-File aus sql/. Smoke: gibt's was und enthaelt
     den Bindvar."""

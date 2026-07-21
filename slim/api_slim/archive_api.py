@@ -84,15 +84,25 @@ def list_archive(
             "mtime": datetime.fromtimestamp(
                 stat.st_mtime
             ).astimezone().isoformat(),
+            "_ts": stat.st_mtime,
             "has_sha256": p.with_suffix(".sha256").exists(),
             "has_kosit_report": p.with_name(
                 f"{p.stem}.kosit-report.xml"
             ).exists(),
         })
 
-    items.sort(key=lambda i: (i["mtime"], i["name"]), reverse=True)
-    items = items[:limit]
+    items = _sort_items(items)[:limit]
+    for i in items:
+        i.pop("_ts", None)
     return {"items": items, "count": len(items)}
+
+
+def _sort_items(items: list) -> list:
+    """Neueste zuerst nach Datei-Zeitpunkt (Epoch ``_ts``) — NICHT nach dem
+    ``mtime``-Anzeigestring: der traegt lokale Offsets (+01:00/+02:00), deren
+    lexikografische Ordnung ueber einen DST-Wechsel nicht chronologisch ist."""
+    items.sort(key=lambda i: (i["_ts"], i["name"]), reverse=True)
+    return items
 
 
 @router.get("/file")
