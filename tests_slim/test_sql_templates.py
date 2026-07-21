@@ -23,6 +23,14 @@ def test_header_hat_adress_fallback_auf_primaeradresse():
     assert "PaymentRefComment" in sql
 
 
+def test_header_adress_fallback_deterministisch():
+    """Finding 8: Alle vier Fallback-Felder ziehen aus DERSELBEN Primaeradresse
+    (min(xadr_id)) — nicht mehr je Feld aus einem nicht-deterministischen
+    rownum=1, das verschiedene Zeilen treffen kann."""
+    sql = _read("invoice_header.sql").lower().replace(" ", "").replace("\n", "")
+    assert sql.count("min(xa2.xadr_id)") >= 4
+
+
 def test_tax_taxamount_aus_zeilen_mwst_summiert():
     """TaxAmount je Steuersatz kommt aus den gerundeten Zeilen-MwSt-Betraegen
     (0,5-Cent-Steuerueberschuss-Fix), nicht mehr aus TAX_AMOUNT_S."""

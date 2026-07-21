@@ -79,10 +79,14 @@ SupplierRegistrationName,
 --(select xadr_city from xadr where xadr_id=zinv_xadr_id)  CustomerCityName,
 --(select xadr_zip from xadr where xadr_id=zinv_xadr_id)  CustomerPostalZone,
 --(select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID and  xadr_id=zinv_xadr_id) CustomerIdentificationCode,
-nvl((select xadr_street1 from xadr where xadr_id=zinv_xadr_id),(select xadr_street1 from xadr where zinv_xcms_id=xadr_xcms_id and xadr_primary=1 and rownum=1))  CustomerStreetName,
-nvl((select xadr_city from xadr where xadr_id=zinv_xadr_id),(select xadr_city from xadr where zinv_xcms_id=xadr_xcms_id and xadr_primary=1 and rownum=1))  CustomerCityName,
-nvl((select xadr_zip from xadr where xadr_id=zinv_xadr_id),(select xadr_zip from xadr where zinv_xcms_id=xadr_xcms_id and xadr_primary=1 and rownum=1))  CustomerPostalZone,
-nvl((select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID and  xadr_id=zinv_xadr_id),(select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID and  zinv_xcms_id=xadr_xcms_id and xadr_primary=1 and rownum=1)) CustomerIdentificationCode,
+/* Change: Adress-Fallback deterministisch aus DERSELBEN Primaeradresse
+   (min(xadr_id)) statt je Feld nicht-deterministisch rownum=1 — sonst koennen
+   Strasse/Ort/PLZ/Land bei mehreren Primaeradressen aus verschiedenen Zeilen
+   stammen. Normalfall (eine Primaeradresse) unveraendert. Finding 8. */
+nvl((select xadr_street1 from xadr where xadr_id=zinv_xadr_id),(select xa1.xadr_street1 from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)))  CustomerStreetName,
+nvl((select xadr_city from xadr where xadr_id=zinv_xadr_id),(select xa1.xadr_city from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)))  CustomerCityName,
+nvl((select xadr_zip from xadr where xadr_id=zinv_xadr_id),(select xa1.xadr_zip from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)))  CustomerPostalZone,
+nvl((select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID and  xadr_id=zinv_xadr_id),(select XCOU.XCOU_ISO2 from xadr xa1,xcou where xa1.XADR_XCOU_ID=XCOU.XCOU_ID and xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1))) CustomerIdentificationCode,
 nvl((SELECT XCOM.XCOM_VALUE FROM XCOM, xcmt WHERE XCOM.XCOM_PRIMARY = 1 AND xcom_xcmt_id = xcmt_id and xcmt_type=1 AND xcom_xcms_id = zinv_xcms_id and rownum=1),(select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='Hotelemail'))  CustomerEndpointID,
 decode(zwin_zfac_id,null,(select name6 from v8_rep_name,yres where xcms_id=yres_xcms_id and yres_id=zwin_yres_id),(select name6 from v8_rep_name,zfac where xcms_id=zfac_xcms_id and zfac_id=zwin_zfac_id)) CustomerRegistrationName,
 (select zdco_shortdesc from zdco, zpos Z1 where zdco_id=Z1.zpos_zdco_id and Z1.zpos_id=( select max(Z2.zpos_id) from zpos Z2,zpil I2 where Z2.zpos_id=I2.zpil_zpos_id and Z2.zpos_cdt=5 and I2.zpil_zinv_id=zinv_id)) PaymentMeansCode,
