@@ -388,7 +388,8 @@ ZINV_ID ZINV_ID,
 sum(LineExtensionAmount) LineExtensionAmount,
 sum(LineExtensionAmount_Number-round(LineExtensionAmount_Number*ClassifiedTaxCategoryPercent/(100+ClassifiedTaxCategoryPercent),2)) LineExtensionAmountNet,
 sum(round(LineExtensionAmount_Number*ClassifiedTaxCategoryPercent/(100+ClassifiedTaxCategoryPercent),2)) LineExtensionAmountVat,
-ClassifiedTaxCategoryPercent ClassifiedTaxCategoryPercent
+ClassifiedTaxCategoryPercent ClassifiedTaxCategoryPercent,
+ClassifiedTaxCategoryZtcdId ClassifiedTaxCategoryZtcdId
 from
 (
 select
@@ -396,7 +397,9 @@ zpil_zinv_id zinv_id,
 round(z.zpos_grossunitprice*z.zpos_quantity,2) LineExtensionAmount,
 (round(z.zpos_grossunitprice*z.zpos_quantity,2)) LineExtensionAmount_Number,
 TO_CHAR(round(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') LineExtensionAmountVat,
-(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)  ClassifiedTaxCategoryPercent
+(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)  ClassifiedTaxCategoryPercent,
+/*Change: TaxAmount je Steuercode statt je Prozentsatz gruppieren (BR-CO-14 Doppelzaehlung bei zwei ZTCDs mit gleichem Satz)*/
+(select Z3.zpos_ztcd_id from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2 and rownum=1)  ClassifiedTaxCategoryZtcdId
 from
 zpil,zpos z
 where
@@ -405,7 +408,7 @@ and z.zpos_cdt=1
 and zpil_zinv_id = :zinv_id
 and nvl(round(z.zpos_grossunitprice*z.zpos_quantity,2),0)<>0
 )
-group by ZINV_ID,  ClassifiedTaxCategoryPercent
+group by ZINV_ID,  ClassifiedTaxCategoryPercent, ClassifiedTaxCategoryZtcdId
 )
 -- Hauptabfrage: TBH_LR_DE_PEPPOL_XML_FOL_TAX
 SELECT
@@ -417,7 +420,8 @@ TO_CHAR(round(NET_AMOUNT_S,2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') T
 (select zcur_iso3 from zcur where zcur_id=(select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='BaseCurrency')) TaxAmountcurrencyID,
 /*Change: Validierungsfehler 0,5 Cent Steuerueberschuss ergab falschen Brutto Betrag (fw 20260703)*/
 --TO_CHAR(round(TAX_AMOUNT_S,2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') TaxAmount,
-TO_CHAR((select LineExtensionAmountVat from TBH_LR_DE_PEPPOL_XML_SINGLE where TBH_LR_DE_PEPPOL_XML_SINGLE.ClassifiedTaxCategoryPercent=evaluatemath(replace((replace(ztcd_udf,'x',100)),';',','))), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') TaxAmount,
+/*Change: Korrelation ueber ztcd_id (Steuercode) statt Prozentsatz; NVL-Fallback auf TAX_AMOUNT_S wenn keine CTE-Gruppe (kein stilles 0.00). Finding 1 / BR-CO-14/17.*/
+TO_CHAR(NVL((select LineExtensionAmountVat from TBH_LR_DE_PEPPOL_XML_SINGLE where TBH_LR_DE_PEPPOL_XML_SINGLE.ClassifiedTaxCategoryZtcdId=ztcd.ztcd_id), round(TAX_AMOUNT_S,2)), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') TaxAmount,
 decode(TAX_AMOUNT_S,0,'Z','S') TaxCategoryID,
 evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) TaxCategoryPercent,
 'VAT' TaxScheme,

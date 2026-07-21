@@ -31,6 +31,23 @@ def test_tax_taxamount_aus_zeilen_mwst_summiert():
     assert "LineExtensionAmountVat from TBH_LR_DE_PEPPOL_XML_SINGLE" in sql
 
 
+def test_tax_taxamount_korreliert_ueber_ztcd_nicht_prozentsatz():
+    """Finding 1 (BR-CO-14): Der TaxAmount-Subselect muss die Zeilen-CTE ueber
+    die Steuercode-ID (ztcd_id) korrelieren, nicht ueber den Prozentsatz —
+    sonst bekommen zwei Steuercodes mit gleichem Satz beide die volle
+    Gruppen-VAT (Doppelzaehlung). Plus NVL-Fallback statt stillem 0.00."""
+    sql = _read("invoice_tax.sql")
+    flat = sql.replace(" ", "").replace("\n", "")
+    # CTE traegt die ztcd_id und gruppiert danach
+    assert "ClassifiedTaxCategoryZtcdId" in sql
+    assert "groupbyZINV_ID,ClassifiedTaxCategoryPercent,ClassifiedTaxCategoryZtcdId".replace(" ", "") in flat \
+        or "ClassifiedTaxCategoryZtcdId" in flat.split("groupby")[-1]
+    # TaxAmount-Subselect korreliert ueber ztcd_id, nicht ueber evaluatemath-Percent
+    assert "ClassifiedTaxCategoryZtcdId=ztcd.ztcd_id" in flat
+    # Randfall ohne CTE-Treffer faellt auf den posting-basierten Wert zurueck
+    assert "NVL((selectLineExtensionAmountVatfromTBH_LR_DE_PEPPOL_XML_SINGLE" in flat
+
+
 def test_totals_netto_und_steuer_aus_zeilenlogik():
     """InvoiceNet/InvoiceTaxTotal kommen aus derselben Zeilen-Logik wie
     invoice_lines.sql (Netto+Steuer=Brutto-Fix)."""
