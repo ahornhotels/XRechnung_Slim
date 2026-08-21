@@ -29,6 +29,9 @@ validation/xrechnung-*/resources/
 .token_cache.bin
 .tmp_*
 
+# Persoenliche Claude-Code-Overrides (lokal, nicht teamweit)
+.claude/settings.local.json
+
 # Hotel-spezifische Konfigurationen (NICHT ins Repo - sensible/personenbezogene Daten)
 slim/config/hotel.json
 slim/config/connection.json

@@ -118,8 +118,9 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 
 1. `VERSION` bumpen, STATUS.md nachziehen, committen.
 2. `git tag -a vX.Y.Z -m "..."`, `git push origin master`, `git push origin vX.Y.Z`.
-3. GitHub-Release: `gh` ist auf diesem Host **nicht** installiert → per REST-API mit
-   dem Token aus `git credential fill` (Muster siehe Git-Historie der Release-Commits).
+3. GitHub-Release: `gh` ist auf diesem Host **nicht** installiert → Helper-Skript
+   `scripts/gh_release.sh vX.Y.Z "vX.Y.Z — Titel" notes.md` (REST-API, Token aus
+   `git credential fill`, Repo aus origin-Remote).
 4. Verifizieren: `releases/latest` meldet den neuen Tag (was der Auto-Updater abfragt).
 
 ## Git-Stand

@@ -20,9 +20,11 @@ Schrittfolge, um eine neue Version zu veröffentlichen. `X.Y.Z` jeweils ersetzen
 - [ ] `git push origin vX.Y.Z`
 
 ## 4. GitHub-Release
-- [ ] Auf GitHub aus dem Tag `vX.Y.Z` ein **Release** erstellen, Release-Notes
-      eintragen. Kein Asset nötig — der Online-Installer zieht den Quellcode
-      des Tags direkt.
+- [ ] Aus dem Tag `vX.Y.Z` ein **Release** erstellen (als „Latest"), Release-Notes
+      eintragen. Ohne `gh`-CLI per Helper-Skript:
+      `scripts/gh_release.sh vX.Y.Z "vX.Y.Z — Titel" notes.md`
+      (Token aus `git credential fill`, Repo aus origin-Remote abgeleitet).
+      Kein Asset nötig — der Online-Installer zieht den Quellcode des Tags direkt.
 
 ## 5. Verifizieren
 - [ ] Release-Seite zeigt Tag `vX.Y.Z`.
