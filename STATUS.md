@@ -10,10 +10,12 @@ Repo**. Installation über einen **Online-Installer**, Updates über einen
 Dateien). Big-App bleibt parallel im alten Repo `Suite8XRechnung`.
 
 Seit v1.9.0 (16.06.2026) kamen v1.10.0 (Betriebs-Härtung), die Hotfix-/Fix-Serie
-v1.10.1–v1.10.4 und v1.10.5 (Fehler-XML-Diagnose) dazu. **Aktuell keine offene
-Code-Baustelle** — der Arbeitsbaum ist sauber, alle Releases sind getaggt und
-gepusht. Offen sind nur **Betriebs-Gegenprüfungen** (siehe unten) und ein
-zurückgestellter Cleanup.
+v1.10.1–v1.10.4 und v1.10.5 (Fehler-XML-Diagnose) dazu. Die v1.10.5-Diagnose half
+direkt, einen Feld-Vorfall zu lösen (BG-3 bei Gutschrift durch veralteten
+SQL-Override, siehe unten). **Keine größere Code-Baustelle** — der Arbeitsbaum ist
+sauber, alle Releases sind getaggt und gepusht; offen nur ein kosmetischer
+Template-Fix, **Betriebs-Gegenprüfungen** (siehe unten) und ein zurückgestellter
+Cleanup.
 
 ## Release-Historie (diese Serie)
 
@@ -26,6 +28,34 @@ zurückgestellter Cleanup.
 | `v1.10.3` | 21.07. | Review-Nachlauf Findings #7–#17 (siehe unten) |
 | `v1.10.4` | 21.07. | **Fix Adress-Fallback** deterministisch aus min(xadr_id) statt rownum=1 (Finding 8) |
 | `v1.10.5` | 21.08. | **Fehler-XML-Diagnose**: nicht bestandene XMLs (validator/kosit/xsd) landen zur Analyse in `xml_invalid/` samt `.error.txt`; geglückter Retry räumt auf |
+
+## Feld-Vorfall (behoben): BG-3 bei Gutschrift durch veralteten SQL-Override
+
+**Symptom:** Validator meldet „Gutschrift braucht Bezug zur Original-Rechnung"
+(BG-3), obwohl die Original-Rechnungsnummer (48400) korrekt und die Gutschrift
+per Zahlungskommentar sauber verknüpft war.
+
+**Diagnose-Kette (alles grün, außer dem Ergebnis):**
+- VARCHAR-Falle ausgeschlossen: `zinv_number = '48400'` (String, exakt wie im
+  Code) trifft die Rechnung — nur `= 48400` ohne Quotes wäre numerisch/tolerant.
+- DB-Daten korrekt: die `ZPOS_CDT=5`-Zahlungszeile liefert den Kommentar `48400`.
+- v1.10.5 aktiv: die neue `xml_invalid/`-Datei zeigte `<cbc:ID>None</cbc:ID>`
+  → `billingreferenceid` kam leer (`None`) im Header an.
+
+**Root Cause:** Eine **veraltete `slim/data/sql_overrides/invoice_header.sql`**
+(aus der Zeit vor v1.10.0) überschattete via `_read_sql()` die Repo-SQL
+**komplett** und unterschlug alle späteren Header-Fixes — u. a. `PaymentRefComment`
+(v1.10.0, → BG-3-Fallback) **und** den Adress-Fallback `xadr_primary` (v1.10.4).
+Ohne `PaymentRefComment` bekam der Fallback keinen Kommentar → Referenz blieb leer.
+
+**Fix:** Instanz auf v1.10.5 aktualisiert, Override entfernt / auf Standard
+gesetzt → Repo-SQL greift wieder (kein Dienst-Neustart nötig, `_read_sql` liest
+pro Poller-Lauf frisch).
+
+> **Betriebs-Lehre:** Fehlen in der XRechnung Felder (BG-3-Bezug, Kundenadresse
+> u. a.), **zuerst `slim/data/sql_overrides/` prüfen** — ein alter Operator-Override
+> überschattet Repo-Fixes still. Der Marker-Guard warnt im Log:
+> „SQL-Override … wirkt veraltet — fehlende Marker: …" (`_EXPECTED_OVERRIDE_MARKERS`).
 
 ## Code-Review-Kontext (diese Sitzung)
 
@@ -66,6 +96,11 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 
 **Code (offen):**
 
+- [ ] **Template-Kosmetik `creditnote_3.0.xml.j2:28`:** Bei leerem
+      `billingreferenceid` rendert `{{ header.billingreferenceid|e }}` das Wort
+      `None` statt eines leeren Elements (`<cbc:ID>None</cbc:ID>`). Fällt im
+      Normalbetrieb nie auf (Validator bricht vorher ab), nur in der v1.10.5-
+      Diagnose-XML sichtbar. Kleiner TDD-Fix (leeres Feld → wirklich leer).
 - [ ] **Finding 11 — SQL-Konsolidierung:** Die Zeilen-Berechnungslogik ist dreifach
       kopiert (`sql/invoice_lines.sql` + CTEs in `invoice_tax.sql`/`invoice_totals.sql`).
       Divergenz-Guard (`tests_slim/test_sql_templates.py::test_zeilenlogik_synchron_ueber_drei_sql`)
