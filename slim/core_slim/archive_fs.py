@@ -8,6 +8,12 @@ Layout:
   <data_dir>/xml/<YYYY>/<MM>/<zinv_number>.sha256
   <data_dir>/xml/<YYYY>/<MM>/<zinv_number>.kosit-report.xml   (optional)
 
+Fehler-XMLs (Validierung nicht bestanden, zur Diagnose) liegen in einem
+getrennten Parallelbaum — bewusst NICHT unter xml/, damit find_xml und die
+Archiv-API sie nicht mit echten Archiven verwechseln:
+  <data_dir>/xml_invalid/<YYYY>/<MM>/<zinv_number>.xml
+  <data_dir>/xml_invalid/<YYYY>/<MM>/<zinv_number>.error.txt  (Fehlerklasse + Text)
+
 Bei Konflikt (Re-Trigger auf bereits archivierte ZINV-Nummer im gleichen
 Monat): bestehende Datei wird umbenannt zu <zinv_number>.<ts>.xml und
 die neue Datei nimmt den Hauptnamen ein.
@@ -39,6 +45,13 @@ _NAME_MAX_LEN = 64
 def _bucket(data_dir: Path, now: Optional[datetime] = None) -> Path:
     n = now or now_local()
     return Path(data_dir) / "xml" / f"{n.year:04d}" / f"{n.month:02d}"
+
+
+def _invalid_bucket(data_dir: Path, now: Optional[datetime] = None) -> Path:
+    """Parallelbaum fuer Fehler-XMLs — bewusst NICHT unter ``xml/``, damit
+    ``find_xml`` und die Archiv-API sie nicht mit echten Archiven verwechseln."""
+    n = now or now_local()
+    return Path(data_dir) / "xml_invalid" / f"{n.year:04d}" / f"{n.month:02d}"
 
 
 def _safe_name(name: str) -> str:
@@ -128,6 +141,80 @@ def save_xml(
         "kosit_path": str(kosit_path) if kosit_path else None,
         "renamed_existing": renamed,
     }
+
+
+def save_invalid_xml(
+    data_dir: Path,
+    zinv_number: str,
+    xml_bytes: bytes,
+    event: str,
+    error_text: str,
+    now: Optional[datetime] = None,
+) -> dict:
+    """Legt eine NICHT bestandene XML zu Diagnosezwecken unter
+    ``<data_dir>/xml_invalid/<YYYY>/<MM>/`` ab, samt ``.error.txt``-Beiblatt
+    (Fehlerklasse + Fehlertext).
+
+    Bei Konflikt (gleiche Nummer, gleicher Monat) wird die bestehende XML wie
+    im Erfolgsarchiv zu ``<stem>.<ts>.xml`` versioniert.
+
+    Returns:
+        {"xml_path": str, "error_path": str, "renamed_existing": str | None}
+    """
+    safe = _safe_name(zinv_number)
+    bucket = _invalid_bucket(data_dir, now)
+    bucket.mkdir(parents=True, exist_ok=True)
+
+    xml_path = bucket / f"{safe}.xml"
+    err_path = bucket / f"{safe}.error.txt"
+
+    renamed: Optional[str] = None
+    if xml_path.exists():
+        ts = (now or now_local()).strftime("%Y%m%dT%H%M%S")
+        rename_to = bucket / f"{safe}.{ts}.xml"
+        try:
+            xml_path.rename(rename_to)
+            renamed = str(rename_to)
+        except OSError:
+            logger.exception(
+                "Konnte existierende Fehler-XML nicht umbenennen: %s", xml_path
+            )
+
+    xml_path.write_bytes(xml_bytes)
+    err_path.write_text(
+        f"event: {event}\n{error_text}\n", encoding="utf-8"
+    )
+
+    return {
+        "xml_path": str(xml_path),
+        "error_path": str(err_path),
+        "renamed_existing": renamed,
+    }
+
+
+def delete_invalid(data_dir: Path, zinv_number: str) -> int:
+    """Entfernt alle Fehler-XMLs (inkl. versionierter und ``.error.txt``) einer
+    ZINV-Nummer aus dem ``xml_invalid``-Baum. Fuer das Aufraeumen nach einem
+    spaeter geglueckten Retry. No-Op wenn nichts vorhanden.
+
+    Returns:
+        Anzahl entfernter XML-Hauptdateien (ohne .error.txt).
+    """
+    safe = _safe_name(zinv_number)
+    root = Path(data_dir) / "xml_invalid"
+    if not root.exists():
+        return 0
+    removed = 0
+    for p in root.rglob(f"*{safe}*"):
+        if not p.is_file():
+            continue
+        try:
+            p.unlink()
+            if p.name.endswith(".xml"):
+                removed += 1
+        except OSError:
+            logger.exception("Konnte Fehler-XML nicht loeschen: %s", p)
+    return removed
 
 
 # Versionierte Konflikt-Dateien: <stem>.<YYYYmmddTHHMMSS>.xml

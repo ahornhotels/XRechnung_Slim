@@ -138,6 +138,7 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
     for row in pending:
         wmai_id = row["wmai_id"]
         zinv_number: Optional[str] = None
+        inv = None  # fuer den except-Pfad (Fehler-XML-Ablage) sichtbar halten
 
         # Eigene Connection pro WMAI — wenn DB-Cleanup einer einzelnen
         # WMAI scheitert, fahren die nächsten mit einer frischen
@@ -234,6 +235,10 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                     data_dir, zinv_number, xml, filename=filename,
                 )
 
+                # Ein zuvor gescheiterter, jetzt geglueckter Retry raeumt
+                # seine Diagnose-Fehler-XML wieder weg.
+                archive_fs.delete_invalid(data_dir, zinv_number)
+
                 # Anhängen (atomar in der Suite8-DB).
                 result = attach_xml_to_wmai(
                     wmai_id=wmai_id, xml_bytes=xml,
@@ -263,6 +268,12 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                     "Suite8-Attach fehlgeschlagen (wmai=%s zinv=%s)",
                     wmai_id, zinv_number,
                 )
+                # Diagnose-Ablage: bei baubaren Fehlern die (fachlich
+                # unvollstaendige) XML zur Fehleranalyse in xml_invalid/ legen.
+                if event in _BUILDABLE_FAILS and inv is not None:
+                    _save_invalid_for_diagnosis(
+                        data_dir, zinv_number, inv, event, str(e),
+                    )
                 _audit_fail_with_spam_guard(
                     data_dir, event, wmai_id, zinv_number,
                     f"zinv={zinv_number}: {e}",
@@ -270,6 +281,36 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 )
 
     return summary
+
+
+# Fehlerklassen, bei denen eine XML gerendert werden KANN (Rohdaten stehen
+# bereit) — hier lohnt die Diagnose-Ablage. Nicht dabei: zinv_not_found /
+# pattern_* / DB-Fehler (kein inv vorhanden).
+_BUILDABLE_FAILS = {"validator_fail", "kosit_fail", "xml_build_fail"}
+
+
+def _save_invalid_for_diagnosis(
+    data_dir: Path,
+    zinv_number: Optional[str],
+    inv: dict,
+    event: str,
+    error_text: str,
+) -> None:
+    """Rendert die (fachlich unvollstaendige) XML OHNE Validierungs-Gate und
+    legt sie unter xml_invalid/ ab, damit der Operator das fehlende Feld
+    direkt am Dokument sieht. Bewusst best-effort: schlaegt sogar das Rendern
+    fehl, wird das nur geloggt — der reguläre Fehlerpfad läuft weiter."""
+    try:
+        xml = xml_builder.render(inv)
+        archive_fs.save_invalid_xml(
+            data_dir, zinv_number or "unknown", xml,
+            event=event, error_text=error_text,
+        )
+    except Exception:
+        logger.exception(
+            "Diagnose-Ablage der Fehler-XML fehlgeschlagen (zinv=%s)",
+            zinv_number,
+        )
 
 
 def _classify_failure(e: Exception) -> str:

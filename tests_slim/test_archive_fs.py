@@ -162,3 +162,73 @@ def test_find_xml_excludes_kosit_reports_and_versions(tmp_path):
     # Nur die Hauptdatei — keine .kosit-report.xml, keine .<ts>.xml-Version
     assert len(found) == 1
     assert found[0].read_bytes() == b"<v2/>"
+
+
+# ------------------------------------------------ Fehler-XML-Ablage (invalid)
+
+def test_save_invalid_writes_xml_and_error_txt(tmp_path):
+    r = archive_fs.save_invalid_xml(
+        tmp_path, "48400", b"<CreditNote/>",
+        event="validator_fail", error_text="BG-3 fehlt",
+    )
+    xml_path = Path(r["xml_path"])
+    assert xml_path.exists()
+    assert xml_path.read_bytes() == b"<CreditNote/>"
+
+    err_path = Path(r["error_path"])
+    assert err_path.exists()
+    text = err_path.read_text(encoding="utf-8")
+    assert "validator_fail" in text
+    assert "BG-3 fehlt" in text
+
+
+def test_save_invalid_uses_year_month_bucket_under_xml_invalid(tmp_path):
+    target = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    r = archive_fs.save_invalid_xml(
+        tmp_path, "abc", b"<X/>",
+        event="kosit_fail", error_text="BR-DE-5", now=target,
+    )
+    p = r["xml_path"].replace("\\", "/")
+    assert "/xml_invalid/2026/07/" in p
+
+
+def test_save_invalid_stays_out_of_valid_archive(tmp_path):
+    """Fehler-XMLs duerfen die Erfolgs-Archivsuche nicht verunreinigen."""
+    archive_fs.save_invalid_xml(
+        tmp_path, "48400", b"<bad/>",
+        event="validator_fail", error_text="x",
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+    # find_xml sucht nur unter <data_dir>/xml — nichts darf auftauchen
+    assert archive_fs.find_xml(tmp_path, "48400") == []
+    assert not (tmp_path / "xml").exists()
+
+
+def test_save_invalid_conflict_versioning(tmp_path):
+    t1 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
+    t2 = datetime(2026, 6, 3, 13, 0, 0, tzinfo=timezone.utc)
+    archive_fs.save_invalid_xml(tmp_path, "48400", b"<v1/>",
+                                event="validator_fail", error_text="a", now=t1)
+    r = archive_fs.save_invalid_xml(tmp_path, "48400", b"<v2/>",
+                                    event="validator_fail", error_text="b", now=t2)
+    assert r["renamed_existing"] is not None
+    assert Path(r["xml_path"]).read_bytes() == b"<v2/>"
+    assert Path(r["renamed_existing"]).read_bytes() == b"<v1/>"
+
+
+def test_delete_invalid_removes_xml_and_error(tmp_path):
+    archive_fs.save_invalid_xml(
+        tmp_path, "48400", b"<bad/>",
+        event="validator_fail", error_text="x",
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+    removed = archive_fs.delete_invalid(tmp_path, "48400")
+    assert removed >= 1
+    # Kein Rest im xml_invalid-Baum
+    leftovers = list((tmp_path / "xml_invalid").rglob("*48400*"))
+    assert leftovers == []
+
+
+def test_delete_invalid_noop_when_absent(tmp_path):
+    # Darf nicht crashen, wenn es nie eine Fehler-XML gab
+    assert archive_fs.delete_invalid(tmp_path, "nie-dagewesen") == 0

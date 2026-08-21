@@ -298,3 +298,129 @@ def test_zinv_not_found_classified(tmp_path, mocked_db):
     audit_files = list(tmp_path.glob("audit-*.jsonl"))
     entries = [json.loads(l) for l in audit_files[0].read_text(encoding="utf-8").splitlines() if l.strip()]
     assert entries[0]["event"] == "zinv_not_found"
+
+
+# ------------------------------------------------ Fehler-XML-Ablage im Poller
+
+def test_validator_fail_ablegt_fehler_xml(tmp_path, mocked_db):
+    """Bei validator_fail wird die XML trotz Fehler gerendert und unter
+    xml_invalid/ abgelegt — samit der Operator die fehlenden Felder sieht."""
+    cm, conn = mocked_db
+    issues = [{"field": "billing_reference", "severity": "error",
+               "message": "Gutschrift braucht Bezug zur Original-Rechnung"}]
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(201, "Folio_IND_48400.pdf")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=8), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 8, "header": {"id": "48400"},
+                                    "lines": [], "totals": {}}), \
+         patch.object(poller.invoice_validator, "validate", return_value=issues), \
+         patch.object(poller.xml_builder, "render",
+                      return_value=b"<CreditNote>diag</CreditNote>"), \
+         patch.object(poller, "get_wmai_error", return_value=None), \
+         patch.object(poller, "set_wmai_error"):
+        s = poller.run_once(data_dir=tmp_path)
+
+    assert s["failed"] == 1
+    invalid = list((tmp_path / "xml_invalid").rglob("*48400*.xml"))
+    assert len(invalid) == 1
+    assert invalid[0].read_bytes() == b"<CreditNote>diag</CreditNote>"
+    # error.txt-Beiblatt mit Fehlerklasse liegt daneben
+    assert (invalid[0].parent / "48400.error.txt").exists()
+
+
+def test_kosit_fail_ablegt_fehler_xml(tmp_path, mocked_db):
+    from modules.kosit_validator import KositValidationError
+    cm, conn = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(202, "Folio_IND_48401.pdf")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=7), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 7, "header": {"id": "48401"},
+                                    "lines": [], "totals": {}}), \
+         patch.object(poller.invoice_validator, "validate", return_value=[]), \
+         patch.object(poller.xml_builder, "build_and_validate", return_value=b"<X/>"), \
+         patch.object(poller.xml_builder, "render", return_value=b"<X/>"), \
+         patch.object(poller.kosit_validator, "validate",
+                      side_effect=KositValidationError(["BR-DE-5 verletzt"])), \
+         patch.object(poller, "get_wmai_error", return_value=None), \
+         patch.object(poller, "set_wmai_error"):
+        s = poller.run_once(data_dir=tmp_path)
+
+    assert s["failed"] == 1
+    assert list((tmp_path / "xml_invalid").rglob("*48401*.xml"))
+
+
+def test_zinv_not_found_legt_keine_fehler_xml_ab(tmp_path, mocked_db):
+    """Nicht-baubare Fehler (kein inv) duerfen keine Fehler-XML erzeugen."""
+    cm, conn = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(203, "Folio_IND_999999.pdf")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=None), \
+         patch.object(poller, "get_wmai_error", return_value=None), \
+         patch.object(poller, "set_wmai_error"):
+        poller.run_once(data_dir=tmp_path)
+    assert not (tmp_path / "xml_invalid").exists()
+
+
+def test_erfolg_raeumt_vorherige_fehler_xml_auf(tmp_path, mocked_db):
+    """Ein geglueckter Retval loescht eine zuvor abgelegte Fehler-XML."""
+    from slim.core_slim import archive_fs
+    # Vorlauf: es liegt bereits eine Fehler-XML fuer 144853 vor
+    archive_fs.save_invalid_xml(tmp_path, "144853", b"<alt/>",
+                                event="validator_fail", error_text="frueher")
+    assert list((tmp_path / "xml_invalid").rglob("*144853*.xml"))
+
+    cm, conn = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(204, "Folio_IND_144853.pdf")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=999), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 999, "header": {"id": "144853"},
+                                    "lines": [], "totals": {}}), \
+         patch.object(poller.invoice_validator, "validate", return_value=[]), \
+         patch.object(poller.xml_builder, "build_and_validate",
+                      return_value=b"<Invoice>OK</Invoice>"), \
+         patch.object(poller.kosit_validator, "validate"), \
+         patch.object(poller, "attach_xml_to_wmai",
+                      return_value={"wmaa_id": 7, "wtxt_id": 8, "wmai_id": 204}):
+        s = poller.run_once(data_dir=tmp_path)
+
+    assert s["attached"] == 1
+    # Fehler-XML wurde aufgeraeumt
+    assert list((tmp_path / "xml_invalid").rglob("*144853*.xml")) == []
+
+
+def test_render_fehler_bei_ablage_crasht_poller_nicht(tmp_path, mocked_db):
+    """Schlaegt sogar das Diagnose-Rendern fehl, laeuft der normale
+    Fehlerpfad (failed++, Audit) unveraendert weiter."""
+    cm, conn = mocked_db
+    issues = [{"field": "x", "severity": "error", "message": "irgendwas"}]
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(205, "Folio_IND_48402.pdf")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=8), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 8, "header": {"id": "48402"},
+                                    "lines": [], "totals": {}}), \
+         patch.object(poller.invoice_validator, "validate", return_value=issues), \
+         patch.object(poller.xml_builder, "render",
+                      side_effect=RuntimeError("Jinja kaputt")), \
+         patch.object(poller, "get_wmai_error", return_value=None), \
+         patch.object(poller, "set_wmai_error") as set_err:
+        s = poller.run_once(data_dir=tmp_path)
+
+    assert s["failed"] == 1
+    set_err.assert_called_once()
+    audit_files = list(tmp_path.glob("audit-*.jsonl"))
+    entries = [json.loads(l) for l in audit_files[0].read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert entries[0]["event"] == "validator_fail"
