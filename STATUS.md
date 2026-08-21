@@ -1,6 +1,6 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-07-23 · Version: 1.10.4 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-08-21 · Version: 1.10.5 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
 ## Kurzfassung
 
@@ -9,10 +9,11 @@ Repo**. Installation über einen **Online-Installer**, Updates über einen
 **inkrementellen Auto-Updater** (GitHub Compare-/Contents-API, nur geänderte
 Dateien). Big-App bleibt parallel im alten Repo `Suite8XRechnung`.
 
-Seit v1.9.0 (16.06.2026) kamen v1.10.0 (Betriebs-Härtung) und die Hotfix-/Fix-Serie
-v1.10.1–v1.10.4 dazu. **Aktuell keine offene Code-Baustelle** — der Arbeitsbaum ist
-sauber, alle Releases sind getaggt und gepusht. Offen sind nur **Betriebs-
-Gegenprüfungen** (siehe unten) und ein zurückgestellter Cleanup.
+Seit v1.9.0 (16.06.2026) kamen v1.10.0 (Betriebs-Härtung), die Hotfix-/Fix-Serie
+v1.10.1–v1.10.4 und v1.10.5 (Fehler-XML-Diagnose) dazu. **Aktuell keine offene
+Code-Baustelle** — der Arbeitsbaum ist sauber, alle Releases sind getaggt und
+gepusht. Offen sind nur **Betriebs-Gegenprüfungen** (siehe unten) und ein
+zurückgestellter Cleanup.
 
 ## Release-Historie (diese Serie)
 
@@ -24,6 +25,7 @@ Gegenprüfungen** (siehe unten) und ein zurückgestellter Cleanup.
 | `v1.10.2` | 21.07. | **Fix TaxAmount je Steuercode** statt Prozentsatz (BR-CO-14-Doppelzählung bei 2 ZTCDs gleichen Satzes; NVL-Fallback gegen stilles 0.00) |
 | `v1.10.3` | 21.07. | Review-Nachlauf Findings #7–#17 (siehe unten) |
 | `v1.10.4` | 21.07. | **Fix Adress-Fallback** deterministisch aus min(xadr_id) statt rownum=1 (Finding 8) |
+| `v1.10.5` | 21.08. | **Fehler-XML-Diagnose**: nicht bestandene XMLs (validator/kosit/xsd) landen zur Analyse in `xml_invalid/` samt `.error.txt`; geglückter Retry räumt auf |
 
 ## Code-Review-Kontext (diese Sitzung)
 
@@ -96,7 +98,7 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 
 ## Tests
 
-- `python -m pytest tests_slim/` → **247 passed, 1 skipped** (Live-DB-Integration).
+- `python -m pytest tests_slim/` → **258 passed, 1 skipped** (Live-DB-Integration).
 
 ## Wichtige Dateien
 
@@ -122,6 +124,6 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 
 ## Git-Stand
 
-- Branch `master`, aktuelles Release/Tag `v1.10.4` (21.07.2026, Adress-Fallback-
-  Determinismus). Arbeitsbaum sauber, alles gepusht.
-- Tag-Kette: `v1.10.4` → `v1.10.3` → `v1.10.2` → `v1.10.1` → `v1.10.0` → `v1.9.0` @ `1b419bf`.
+- Branch `master`, aktuelles Release/Tag `v1.10.5` (21.08.2026, Fehler-XML-
+  Diagnose in `xml_invalid/`). Arbeitsbaum sauber, alles gepusht.
+- Tag-Kette: `v1.10.5` → `v1.10.4` → `v1.10.3` → `v1.10.2` → `v1.10.1` → `v1.10.0` → `v1.9.0` @ `1b419bf`.
