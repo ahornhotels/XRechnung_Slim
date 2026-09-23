@@ -1,6 +1,6 @@
 # Projekt-Status / Handoff — XRechnung_Slim
 
-Stand: 2026-08-21 · Version: 1.10.5 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
+Stand: 2026-09-23 · Version: 1.10.6 · Repo: https://github.com/ahornhotels/XRechnung_Slim (public, GPLv3)
 
 ## Kurzfassung
 
@@ -10,12 +10,20 @@ Repo**. Installation über einen **Online-Installer**, Updates über einen
 Dateien). Big-App bleibt parallel im alten Repo `Suite8XRechnung`.
 
 Seit v1.9.0 (16.06.2026) kamen v1.10.0 (Betriebs-Härtung), die Hotfix-/Fix-Serie
-v1.10.1–v1.10.4 und v1.10.5 (Fehler-XML-Diagnose) dazu. Die v1.10.5-Diagnose half
-direkt, einen Feld-Vorfall zu lösen (BG-3 bei Gutschrift durch veralteten
-SQL-Override, siehe unten). **Keine größere Code-Baustelle** — der Arbeitsbaum ist
+v1.10.1–v1.10.4, v1.10.5 (Fehler-XML-Diagnose) und v1.10.6 (BG-23-Abgleich)
+dazu. Die v1.10.5-Diagnose half direkt, einen Feld-Vorfall zu lösen (BG-3 bei
+Gutschrift durch veralteten SQL-Override, siehe unten); v1.10.6 behebt einen
+zweiten (BR-Z-01 bei 0-%-Buchungen, siehe unten). **Keine größere Code-Baustelle** — der Arbeitsbaum ist
 sauber, alle Releases sind getaggt und gepusht; offen nur ein kosmetischer
 Template-Fix, **Betriebs-Gegenprüfungen** (siehe unten) und ein zurückgestellter
 Cleanup.
+
+Neu (08.09.2026, keine Code-Änderung): ein **bedienerfreundliches
+Einbindungshandbuch** für IT/DBA/Front Office (nicht-technisch, mit konkreten
+Suite8-Klickpfaden statt DB-Feldnamen) unter `docs/handbuch/` — als HTML zum
+lokalen Öffnen im Browser und als ODT zum Bearbeiten in Word/LibreOffice, siehe
+„Einbindungshandbuch" unten. Dabei wurde außerdem die Gutschrift/Storno-Logik
+von Slim gegen Suite8-Doku und Code verifiziert (siehe „Gutschriften/Stornorechnungen").
 
 ## Release-Historie (diese Serie)
 
@@ -28,6 +36,7 @@ Cleanup.
 | `v1.10.3` | 21.07. | Review-Nachlauf Findings #7–#17 (siehe unten) |
 | `v1.10.4` | 21.07. | **Fix Adress-Fallback** deterministisch aus min(xadr_id) statt rownum=1 (Finding 8) |
 | `v1.10.5` | 21.08. | **Fehler-XML-Diagnose**: nicht bestandene XMLs (validator/kosit/xsd) landen zur Analyse in `xml_invalid/` samt `.error.txt`; geglückter Retry räumt auf |
+| `v1.10.6` | 23.09. | **Fix BG-23-Abgleich** (BR-Z-01): fehlende Nullsteuer-Gruppen aus den Positionen ergänzen, Gruppen gleicher Kategorie/Satz zusammenfassen — Buchungen mit 0 % MwSt (CityTax/Kurtaxe) |
 
 ## Feld-Vorfall (behoben): BG-3 bei Gutschrift durch veralteten SQL-Override
 
@@ -56,6 +65,101 @@ pro Poller-Lauf frisch).
 > u. a.), **zuerst `slim/data/sql_overrides/` prüfen** — ein alter Operator-Override
 > überschattet Repo-Fixes still. Der Marker-Guard warnt im Log:
 > „SQL-Override … wirkt veraltet — fehlende Marker: …" (`_EXPECTED_OVERRIDE_MARKERS`).
+
+## Feld-Vorfall (behoben): BR-Z-01 bei Buchungen mit 0 % MwSt (CityTax)
+
+**Symptom:** `zinv=739759` scheiterte an der KoSIT-Prüfung mit
+„[BR-Z-01] … shall contain in the VAT breakdown (BG-23) **exactly one** VAT
+category code (BT-118) equal with 'Zero rated'".
+
+**Root Cause:** Die Steuerkategorie wird an zwei Stellen aus **unterschiedlichen
+Quellen** abgeleitet:
+
+| Quelle | Ableitung | Ergebnis bei 0 % |
+|--------|-----------|------------------|
+| `sql/invoice_lines.sql:32` | Steuersumme je `TAXLINK`; keine Steuerbuchung → `Z` | Position trägt `Z` |
+| `sql/invoice_tax.sql` | baut **nur** aus Steuerbuchungen (`WHERE z.ZPOS_CDT IN (2)`), gruppiert je `ZTCD_ID` | **keine Gruppe** |
+
+Für einen 0-%-Steuercode (CityTax, Kurtaxe, durchlaufende Posten) legt Suite8
+gar keine Steuerbuchung an. Die Position trägt damit korrekt `Z`, in BG-23
+entsteht dafür aber keine Zeile — genau das rügt BR-Z-01. Der Python-Layer
+korrigierte bisher nur den Prozentsatz (`_normalize_tax_categories`, BR-Z-08)
+und filterte 0/0-Zeilen (BR-CO-17); den Abgleich Positionen ↔ BG-23 machte
+niemand.
+
+**Fix (v1.10.6):** `_reconcile_vat_breakdown` in `modules/xml_builder.py`, in
+`render()` nach Split/Positivierung eingehängt. Sie fasst Gruppen gleicher
+(Kategorie, Satz) zusammen — deckt das *exactly one* ab, wenn zwei Steuercodes
+denselben Satz haben — und ergänzt fehlende Nullsteuer-Gruppen (`Z, E, AE, G, K, O`)
+aus den tatsächlich verwendeten Positions-/Allowance-Kategorien mit
+`TaxableAmount` = Summe der Nettos und `TaxAmount` = 0.00. `S`-Gruppen werden
+bewusst **nicht** neu erzeugt: dort ist der Steuerbetrag nicht eindeutig
+ableitbar, und die Suite8-Rundung gegen Brutto soll unangetastet bleiben.
+
+Nebeneffekt: der 0-%-Netto steckt via `invoice_totals.sql` bereits in BT-106,
+fehlte aber in BG-23 — die ergänzte Zeile stellt damit auch BR-CO-13 wieder her.
+
+**Verifikation:** gegen den echten KoSIT-Validator, gleiche Rechnung, nur der Fix
+als Unterschied — ohne Fix BR-Z-01, mit Fix keine `BR-Z-*`/`BR-S-*`/`BR-CO-13/14/17`
+mehr. Tests: `tests_slim/test_vat_breakdown_reconcile.py` (7 Fälle inkl.
+Regressionswächter „7 % und 19 % dürfen nicht verschmelzen" und „Phantomgruppe
+ohne Position bleibt gefiltert"), Gesamtsuite 265 passed / 1 skipped.
+
+> **Offen (Gegenprüfung):** Die Ist-Daten zu `zinv=739759` konnten **nicht**
+> geprüft werden — die von der Entwicklungsmaschine erreichbare V8LIVE-DB ist ein
+> alter Abzug (letzte Rechnung `zinv_number` 144871 vom 04.04.2026). Der Fix ist am
+> nachgebauten CityTax-Fall belegt, nicht an der Original-Rechnung. Nach dem
+> Ausrollen einen Retry auf 739759 fahren und das Ergebnis hier nachtragen.
+
+## Gutschriften/Stornorechnungen — Wege in Suite8 (Referenz, 08.09.2026)
+
+Recherche gegen Suite8-Doku (Data Dictionary 8.10.2, Kassenmodul-Handbuch) und
+Slim-Code, damit künftige BG-3-Vorfälle schneller einzuordnen sind.
+
+**Erkennung durch Slim** (`invoice_fetcher.is_credit_note()`): `ZINV_ROLE` ∈ {3, 31}
+**oder** Summe `LineExtensionAmountNet` aller Zeilen < 0. Laut Data Dictionary ist
+`ZINV_ROLE`=3/31 an länderspezifische Fiskal-Integrationen gekoppelt (PL „Faktura
+Korekta", IT „Fattura", TR/EG-Fiskalfelder) — für DE-Häuser vermutlich nie erfüllt;
+maßgeblich ist praktisch nur die negative Zeilensumme.
+
+**BillingReference (BG-3), zweistufig in `fetch_invoice()`:**
+1. SQL (`sql/invoice_header.sql:23-26`): `orig.ZINV_ID = zinv.ZINV_VOID_ZINV_ID`.
+2. Python-Fallback (`_resolve_billing_reference_from_payment`, nur bei 381 + Stufe 1
+   leer): liest `ZPOS.ZPOS_COMMENT` der Zahlungszeile (`ZPOS_CDT=5`, verknüpft über
+   `ZPIL.ZPIL_ZINV_ID`, neueste Zeile), extrahiert Ziffernfolgen, validiert gegen
+   `ZINV_NUMBER` (Selbstbezug ausgeschlossen).
+
+**Einziger in der Praxis bestätigter Weg:** negativer Buchungsbetrag im
+Rechnungsfenster (Kasse → Rechnungen → Zahlung) **plus** Original-Rechnungsnummer
+im Feld „Bemerkung" der Zahlungsbuchung. Design-Spec-Zitat (`docs/superpowers/specs/
+2026-07-03-betriebs-haertung-design.md`): „Legt der Operator die Storno-/Gutschrift-
+Rechnung in Suite8 ohne diesen Bezug an, bleibt das Feld leer … In der Hotel-Praxis
+trägt der Operator die Original-Rechnungsnummer stattdessen als Freitext in den
+Kommentar der Zahlungszeile ein." — d. h. `ZINV_VOID_ZINV_ID` wird in der Praxis
+erkennbar nicht zuverlässig gepflegt.
+
+**Ungeklärt/nicht code-verifiziert:** ob die Suite8-Funktion „Rechnung ungültig
+machen" (`Kasse → Rechnungen → Optionen → Ungültige Rechnung`, Parameter
+„Handhabung ungültiger Rechnungen" unter Länderspezifisch 2) `ZINV_VOID_ZINV_ID`
+setzt — Handbuch verortet die Funktion primär bei Ländern mit fiskalischem
+Neudruckverbot, nicht bestätigt für DE. Ebenso ungeklärt: „Debit. zuweisen"
+(Kasse → Debitorenverwaltung, Guest-Ledger-Häuser).
+
+**Mitgeholt, aber ungenutzt** in `invoice_header.sql:109`: `ZINV_CORRECTING_ZINV_ID`,
+`ZINV_VOID_REASON`, `ZINV_EXPORTSTATUS`, `ZINV_FISCALNUMBER`, `ZINV_FISCALINVOICE`,
+`ZINV_NUMBER2`, `ZINV_MANUALNUMBER`, `ZINV_CITYLEDGERNUMBER` — Altlast aus der
+Original-View, in keiner Bezugs-/Credit-Note-Logik ausgewertet.
+
+## Einbindungshandbuch (nicht-technisch, für IT/DBA/Front Office)
+
+Unter `docs/handbuch/` (lokal, noch **nicht** committet — siehe Git-Stand):
+`XRechnung_Slim_Handbuch.html` (per Doppelklick im Browser zu öffnen, kein
+claude.ai-Login nötig) und `XRechnung_Slim_Handbuch.odt` (Word/LibreOffice).
+Zusätzlich als Online-Artifact veröffentlicht (privat, im aktuellen Chat-Verlauf
+verlinkt). Inhalt: Software-Zweck, Wahl des Installationsrechners (Empfehlung
+Interface-PC/Server + GitHub-Internetzugang), Setup-Assistent, Suite8-seitige
+Voraussetzungen mit konkreten Klickpfaden (Kassenmodul/Kundenverwaltung statt
+DB-Feldnamen), Backend-/Netzwerkzugriff für andere PCs, Troubleshooting.
 
 ## Code-Review-Kontext (diese Sitzung)
 
@@ -146,6 +250,7 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 - `modules/xml_builder.py` — Rendering, `_ensure_duedate`, CreditNote-Behandlung
 - `sql/invoice_header.sql` · `invoice_tax.sql` · `invoice_totals.sql` — Steuer-/Adress-SQL
 - `docs/V8LIVE_gegenpruefung.md` — read-only Prüf-Queries für die offenen SQL-Fixes
+- `docs/handbuch/` — nicht-technisches Einbindungshandbuch (HTML + ODT), noch nicht committet
 - `docs/superpowers/specs/2026-07-03-betriebs-haertung-design.md` — Design-Spec v1.10.0
 - `INSTALL_FROM_GITHUB.md` / `RELEASE_CHECKLIST.md` — Install- / Release-Anleitung
 
@@ -161,5 +266,8 @@ NULL-Steuersatz-Zeilen, Unicode-Ziffern-Crash) — der Validator fängt diese vo
 ## Git-Stand
 
 - Branch `master`, aktuelles Release/Tag `v1.10.5` (21.08.2026, Fehler-XML-
-  Diagnose in `xml_invalid/`). Arbeitsbaum sauber, alles gepusht.
+  Diagnose in `xml_invalid/`). Code-Arbeitsbaum sauber, alles gepusht.
+- Offen (unstaged, kein Code): `docs/handbuch/` (Handbuch HTML+ODT) sowie diese
+  STATUS.md-Aktualisierung — bewusst noch nicht committet, da rein redaktionell
+  und nicht mit dem Nutzer abgestimmt, ob das Handbuch ins öffentliche Repo soll.
 - Tag-Kette: `v1.10.5` → `v1.10.4` → `v1.10.3` → `v1.10.2` → `v1.10.1` → `v1.10.0` → `v1.9.0` @ `1b419bf`.
