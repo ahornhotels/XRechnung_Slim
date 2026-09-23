@@ -24,7 +24,9 @@ TAG="$1"; NAME="$2"; BODY_FILE="$3"
 # Ziel-Repo (OWNER/REPO) aus dem origin-Remote ableiten — funktioniert fuer
 # https://github.com/OWNER/REPO(.git) und git@github.com:OWNER/REPO(.git).
 ORIGIN=$(git config --get remote.origin.url)
-REPO=$(printf '%s' "$ORIGIN" | sed -E 's#.*github\.com[/:]([^/]+/[^/]+?)(\.git)?$#\1#')
+# Kein lazy '+?' verwenden - POSIX-ERE kennt das nicht, '.git' bliebe im
+# Namen haengen und die API-URL liefe ins 404. Zweistufig abschneiden.
+REPO=$(printf '%s' "$ORIGIN" | sed -E 's#.*github[.]com[/:]##; s#[.]git$##')
 [ -n "$REPO" ] || { echo "FEHLER: konnte OWNER/REPO nicht aus '$ORIGIN' ableiten" >&2; exit 1; }
 
 TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')
