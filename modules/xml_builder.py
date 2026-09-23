@@ -305,6 +305,110 @@ def _normalize_tax_categories(lines: list, breakdown: list) -> tuple[list, list]
     return normalized_lines, cleaned_breakdown
 
 
+# Steuerkategorien ohne Steuerbetrag. Fehlt fuer eine davon die Gruppe in
+# BG-23, darf sie aus den Positionen rekonstruiert werden (TaxAmount = 0).
+_ZERO_TAX_CATEGORIES = {"Z", "E", "AE", "G", "K", "O"}
+
+
+def _cat_key(cat, percent) -> tuple:
+    """Normalisierter Schluessel (Kategorie, Prozent) fuer BG-23-Gruppen."""
+    try:
+        pct = Decimal(str(percent or 0)).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        pct = Decimal("0.00")
+    return (str(cat or "S").upper(), pct)
+
+
+def _reconcile_vat_breakdown(invoice: dict) -> dict:
+    """BR-Z-01 (und analog BR-E-01/BR-S-01): jede in Positionen bzw. Zu-/
+    Abschlaegen verwendete Steuerkategorie braucht in BG-23 **genau eine**
+    passende Gruppe.
+
+    Zwei Abweichungen aus Suite8 machen das noetig:
+
+    1. **Fehlende Gruppe.** ``sql/invoice_tax.sql`` baut die Aufschluesselung
+       ausschliesslich aus Steuerbuchungen (``ZPOS_CDT=2``). Buchungen mit
+       0 % MwSt — CityTax, Kurtaxe, durchlaufende Posten — haben gar keine
+       Steuerbuchung, erscheinen also nie im Breakdown. Die Positionszeile
+       wird in ``sql/invoice_lines.sql`` aber korrekt als ``Z`` klassifiziert
+       (Steuersumme je TAXLINK = 0). Ergebnis ohne diesen Schritt: Position
+       ``Z``, BG-23 ohne ``Z`` → KoSIT BR-Z-01.
+       Die Netto-Summe der betroffenen Positionen steckt bereits in BT-106
+       (``sql/invoice_totals.sql`` nutzt dieselbe Zeilenlogik), das Ergaenzen
+       der Gruppe stellt also zugleich BR-CO-13 wieder her.
+
+    2. **Doppelte Gruppe.** Der Breakdown gruppiert je Steuercode
+       (``ZTCD_ID``), nicht je Kategorie/Satz. Zwei Steuercodes mit gleichem
+       Satz ergeben zwei Zeilen — BR-Z-01/BR-S-01 verlangen aber *exactly
+       one*. Solche Gruppen werden hier summiert zusammengefasst.
+
+    Nur Kategorien aus ``_ZERO_TAX_CATEGORIES`` werden neu angelegt: dort ist
+    der Steuerbetrag zwingend 0, der Wert also eindeutig ableitbar. Fuer eine
+    fehlende ``S``-Gruppe waere er es nicht — dann bleibt es beim Original,
+    damit die Suite8-Rundung (gegen Brutto) nicht ueberschrieben wird.
+
+    Gibt ein NEUES Invoice-Dict zurueck (Original unangetastet).
+    """
+    breakdown = invoice.get("tax_breakdown") or []
+    lines = invoice.get("lines") or []
+    allowances = invoice.get("allowances") or []
+
+    def _dec(v) -> Decimal:
+        try:
+            return Decimal(str(v if v not in (None, "") else 0))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+
+    # (1) Vorhandene Gruppen je (Kategorie, Satz) zusammenfassen — Reihenfolge
+    #     der ersten Nennung bleibt erhalten.
+    merged: dict = {}
+    for b in breakdown:
+        key = _cat_key(b.get("taxcategoryid"), b.get("taxcategorypercent"))
+        slot = merged.get(key)
+        if slot is None:
+            slot = dict(b)
+            slot["taxcategoryid"]      = key[0]
+            slot["taxcategorypercent"] = key[1]
+            slot["taxableamount"]      = _dec(b.get("taxableamount"))
+            slot["taxamount"]          = _dec(b.get("taxamount"))
+            merged[key] = slot
+        else:
+            slot["taxableamount"] += _dec(b.get("taxableamount"))
+            slot["taxamount"]     += _dec(b.get("taxamount"))
+
+    # (2) Tatsaechlich verwendete Kategorien samt Netto-Summe einsammeln.
+    #     Allowances mindern die Bemessungsgrundlage ihrer Kategorie.
+    used: dict = {}
+    for ln in lines:
+        key = _cat_key(ln.get("classifiedtaxcategoryid"),
+                       ln.get("classifiedtaxcategorypercent"))
+        used[key] = used.get(key, Decimal(0)) + _dec(
+            ln.get("lineextensionamountnet") or ln.get("lineextensionamount"))
+    for al in allowances:
+        key = _cat_key(al.get("category"), al.get("percent"))
+        used[key] = used.get(key, Decimal(0)) - _dec(al.get("amount"))
+
+    # (3) Fehlende Nullsteuer-Gruppen ergaenzen.
+    for key, net in used.items():
+        if key in merged or key[0] not in _ZERO_TAX_CATEGORIES:
+            continue
+        merged[key] = {
+            "taxcategoryid":      key[0],
+            "taxcategorypercent": key[1],
+            "taxableamount":      net,
+            "taxamount":          Decimal(0),
+        }
+
+    out = dict(invoice)
+    out["tax_breakdown"] = [
+        {**slot,
+         "taxableamount": str(slot["taxableamount"].quantize(Decimal("0.01"))),
+         "taxamount":     str(slot["taxamount"].quantize(Decimal("0.01")))}
+        for slot in merged.values()
+    ]
+    return out
+
+
 def _make_positive_for_credit_note(invoice: dict) -> dict:
     """UBL CreditNote verlangt POSITIVE Werte im Body. Suite8 liefert sie
     bei Gutschriften aber negativ (Sum<0). Diese Funktion wandelt alle
@@ -381,7 +485,8 @@ def render(invoice: dict, version: str = "3.0") -> bytes:
     Pre-Processing:
     - CreditNote: _make_positive_for_credit_note (alle Betraege positiv)
     - Invoice:    _split_negative_lines_to_allowances (BR-27/BR-S-01-Fixes)
-    Beide bekommen anschliessend _ensure_duedate (BR-CO-25).
+    Beide bekommen anschliessend _reconcile_vat_breakdown (BR-Z-01) und
+    _ensure_duedate (BR-CO-25).
     """
     from modules.invoice_fetcher import is_credit_note
     is_cn = is_credit_note(invoice)
@@ -391,6 +496,9 @@ def render(invoice: dict, version: str = "3.0") -> bytes:
     else:
         prepared = _split_negative_lines_to_allowances(invoice)
         tmpl_name = f"xrechnung_{version}.xml.j2"
+    # Muss NACH Split/Positivierung laufen: erst dann stehen die endgueltigen
+    # Positions- und Allowance-Kategorien fest, gegen die BG-23 abgeglichen wird.
+    prepared = _reconcile_vat_breakdown(prepared)
     prepared = _ensure_duedate(prepared, is_credit_note=is_cn)
     template = _env.get_template(tmpl_name)
     return template.render(**prepared).encode("utf-8")
