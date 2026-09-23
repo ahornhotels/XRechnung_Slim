@@ -44,3 +44,8 @@ slim/config/.token_cache.bin
 slim/config/.setup_done
 slim/data/
 slim/logs/
+
+# Interne Dokumente (NICHT ins oeffentliche Repo - Betriebs-/Vorfallsdetails)
+# Bleiben lokal liegen und werden privat weitergefuehrt.
+STATUS.md
+docs/handbuch/
