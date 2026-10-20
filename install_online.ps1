@@ -4,11 +4,11 @@
 
  Laedt alle Bausteine selbst aus dem Netz und richtet die App ein - OHNE
  grosses Bundle-ZIP. Voraussetzung: Internetzugang (python.org, PyPI,
- Adoptium, GitHub, nssm.cc) und eine 64-bit-Oracle-Bibliothek. Die App
- laeuft mit 64-bit-Python; der Client des Suite8-Servers ist haeufig 32-bit
- und damit fuer sie unbrauchbar. In dem Fall einen Instant Client (x64) nach
- install\instantclient\ legen. Geladen wird er NICHT - Oracle erlaubt keine
- Weiterverteilung.
+ Adoptium, GitHub, nssm.cc, download.oracle.com). Die App laeuft mit
+ 64-bit-Python; der Oracle-Client des Suite8-Servers ist haeufig 32-bit und
+ damit fuer sie unbrauchbar. Fehlt ein 64-bit-Client, laedt der Installer den
+ Oracle Instant Client (Basic Lite, x64) nach install\instantclient\.
+ Abschaltbar mit -SkipOracle.
 
  Was passiert:
    1) Quellcode (Release-Source-ZIP von GitHub) -> InstallDir
@@ -16,12 +16,12 @@
    3) Temurin JRE (Adoptium) -> install\jre   (fuer KoSIT)
    4) NSSM -> install\nssm.exe                 (Dienst-Wrapper)
    5) KoSIT-Validator + XRechnung-Konfig -> validation\   (optional)
-   6) Oracle: 64-bit-Client bzw. Instant Client pruefen (kein Download)
+   6) Oracle: 64-bit-Client pruefen, sonst Instant Client laden -> install\instantclient
    7) Hinweis: slim\setup_slim.cmd als Admin starten
 
  Aufruf (als Administrator empfohlen):
    powershell -ExecutionPolicy Bypass -File install_online.ps1
-   ... -InstallDir "D:\Apps\XRechnung_Slim" -Ref v1.9.0 -SkipKosit
+   ... -InstallDir "D:\Apps\XRechnung_Slim" -Ref v1.9.0 -SkipKosit -SkipOracle
 ================================================================
 #>
 [CmdletBinding()]
@@ -35,6 +35,8 @@ param(
   [string]$KositConfigTag   = "v2026-01-31",
   [string]$KositConfigAsset = "xrechnung-3.0.2-validator-configuration-2026-01-31.zip",
   [string]$ValidatorVersion = "1.6.2",
+  [string]$InstantClientVersion = "19.26.0.0.0",
+  [switch]$SkipOracle,
   [switch]$SkipKosit,
   [switch]$SkipJre
 )
@@ -199,14 +201,14 @@ try {
   }
 
   # ── 6) Oracle-Client (nur erkennen) ───────────────────────────
-  Info "[6/6] Oracle-Client pruefen (wird NICHT geladen)..."
+  Info "[6/6] Oracle-Client (64-bit) pruefen..."
   # Die App laeuft mit 64-bit-Python und kann nur eine 64-bit-oci.dll laden.
   # Ein 32-bit-Client - auf Suite8-Servern der Normalfall - ist fuer sie
-  # unbrauchbar (DPI-1047 "not the correct architecture"). Fruehere Fassungen
-  # nahmen den ersten Treffer OHNE Architektur-Pruefung und meldeten ihn als
-  # "gefunden"; der Hinweis auf 'oracle_client_lib_dir' blieb dadurch aus und
-  # die Installation lief spaeter im Thin-Mode in DPY-3015 (alter Verifier).
-  # Darum: alle Treffer durchgehen und einen 64-bit-Client bevorzugen.
+  # unbrauchbar (DPI-1047 "not the correct architecture"). Fehlt ein
+  # 64-bit-Client, faellt die App auf den Thin-Mode zurueck und bricht bei
+  # Datenbanken mit altem Passwort-Verifier ab:
+  #   DPY-3015: password verifier type 0x939 is not supported ... thin mode
+  # Darum: alle Treffer pruefen, 64-bit bevorzugen, sonst Instant Client laden.
   $ora64 = $null
   $ora32 = $null
   foreach ($root in @("C:\ORACLE","C:\oracle","C:\app","C:\Program Files\Oracle")) {
@@ -220,31 +222,61 @@ try {
     if ($ora64) { break }
   }
 
-  $bundled = Join-Path $InstallDir "install\instantclient\oci.dll"
-  $bundledOk = $false
-  if (Test-Path $bundled) {
-    if ((Get-DllArchitecture $bundled) -eq "x64") { $bundledOk = $true }
+  $icDir = Join-Path $InstallDir "install\instantclient"
+  $icDll = Join-Path $icDir "oci.dll"
+  $icOk  = $false
+  if (Test-Path $icDll) {
+    if ((Get-DllArchitecture $icDll) -eq "x64") { $icOk = $true }
   }
 
   if ($ora64) {
     Ok "Oracle-Client (64-bit) gefunden: $($ora64.Directory.FullName)"
   }
-  elseif ($bundledOk) {
-    Ok "Mitgelieferter 64-bit Instant Client vorhanden: $(Split-Path $bundled -Parent)"
+  elseif ($icOk) {
+    Ok "Instant Client (64-bit) bereits vorhanden: $icDir"
+  }
+  elseif ($SkipOracle) {
+    Warn "Kein 64-bit-Client - Download per -SkipOracle abgeschaltet."
+    Warn "Die App nutzt dann den Thin-Mode (Fehler DPY-3015 bei altem Verifier)."
   }
   else {
     if ($ora32) {
-      Warn "Oracle-Client gefunden, aber 32-bit: $($ora32.Directory.FullName)"
-      Warn "Die App laeuft mit 64-bit-Python und kann diesen Client NICHT laden."
+      Info "   Oracle-Client ist 32-bit ($($ora32.Directory.FullName)) - fuer die"
+      Info "   App unbrauchbar. Lade 64-bit Instant Client $InstantClientVersion..."
+    } else {
+      Info "   Kein Oracle-Client gefunden. Lade 64-bit Instant Client $InstantClientVersion..."
     }
-    else {
-      Warn "Kein Oracle-Client gefunden."
+    # URL-Schema von Oracle: Verzeichnis = Version ohne Punkte, Dateiname mit
+    # Version + "dbru". Es gibt KEINE stabile "latest"-URL fuer Windows (404),
+    # daher ist die Version fest und per Parameter ueberschreibbar.
+    $icVerFlat = $InstantClientVersion -replace '\.',''
+    $icUrl = "https://download.oracle.com/otn_software/nt/instantclient/$icVerFlat/instantclient-basiclite-windows.x64-$InstantClientVersion" + "dbru.zip"
+    $icZip = Join-Path $tmp "instantclient.zip"
+    $icEx  = Join-Path $tmp "instantclient_ex"
+    try {
+      Get-File $icUrl $icZip
+      Expand-Archive -Path $icZip -DestinationPath $icEx -Force
+      # Oracle packt in einen Unterordner (z.B. instantclient_19_26). Die App
+      # erwartet die DLLs FLACH in install\instantclient\ - also umkopieren.
+      $inner = Get-ChildItem $icEx -Directory | Where-Object { $_.Name -like "instantclient*" } | Select-Object -First 1
+      if (-not $inner) { throw "unerwarteter Archivaufbau: kein instantclient*-Ordner" }
+      New-Item -ItemType Directory -Force -Path $icDir | Out-Null
+      Get-ChildItem $inner.FullName -File | Copy-Item -Destination $icDir -Force
+      if ((Test-Path $icDll) -and (Get-DllArchitecture $icDll) -eq "x64") {
+        Ok "Instant Client (64-bit) eingerichtet: $icDir"
+      } else {
+        throw "oci.dll fehlt oder ist nicht 64-bit"
+      }
     }
-    Warn "Ohne 64-bit-Client nutzt die App den oracledb-Thin-Mode. Verlangt die"
-    Warn "Suite8-DB den Thick-Mode (Fehler DPY-3015, alter Password-Verifier),"
-    Warn "dann einen 64-bit Instant Client Basic Lite (x64) nach"
-    Warn "'install\instantclient\' legen ODER im Wizard 'oracle_client_lib_dir'"
-    Warn "auf das bin-Verzeichnis eines 64-bit-Clients setzen."
+    catch {
+      Warn "Instant Client konnte nicht geladen werden: $($_.Exception.Message)"
+      Warn "Die App nutzt sonst den Thin-Mode und bricht bei Datenbanken mit"
+      Warn "altem Passwort-Verifier mit DPY-3015 ab. Manueller Weg:"
+      Warn "  1) $icUrl"
+      Warn "  2) ZIP entpacken, Inhalt des Unterordners FLACH nach:"
+      Warn "     $icDir"
+      Warn "  3) Danach muss $icDll existieren."
+    }
   }
 
   Write-Host ""

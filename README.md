@@ -15,7 +15,7 @@ Versand frei. Konfiguration und Status über eine Browser-Oberfläche auf
 - Datums-robuste Rechnungsnummer-Erkennung (mehrsprachige Betreffe, „Nummer eintippen").
 - DB-Trigger mit Idempotenz-Guard (kein Doppel-Anhängen).
 - Eingebauter **inkrementeller Auto-Updater** (lädt nur geänderte Dateien aus GitHub).
-- Nutzt den auf dem Suite8-Server vorhandenen Oracle-Client.
+- Nutzt einen 64-bit-Oracle-Client; fehlt er, lädt der Installer den Instant Client.
 
 ## Installation (Schnellstart)
 
@@ -43,8 +43,8 @@ neu. Konfiguration und Daten bleiben erhalten. Versionspflege:
 - `core/` — Basis (Config, Crypto, Oracle-Verbindung, Logging) — vendored
 - `modules/` — Pattern-Erkennung, KoSIT-Validator, WMAI-Mailer, XML-Builder
 - `validation/` — KoSIT-XRechnung-Validierungsartefakte (Jar git-ignoriert)
-- `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM (git-ignoriert).
-  Der Oracle-Client wird vom Suite8-Server genutzt, nicht mitgeliefert.
+- `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM, Oracle Instant
+  Client (alles git-ignoriert, wird vom Installer geladen).
 - `tests_slim/` — Testsuite
 - `install_online.ps1` — Online-Installer (lädt Abhängigkeiten selbst)
 
@@ -71,5 +71,6 @@ Gewährleistung bereitgestellt.
 - `validation/xrechnung-3.0.2/` — KoSIT/EN16931-Validierungsartefakte, Apache-2.0
   (siehe die dortigen `README.md`/`CHANGELOG.md`).
 - Laufzeit-Bundle (git-ignoriert, nicht Teil des Repos): Oracle Instant Client
-  (proprietär, **nicht** redistribuierbar), Adoptium Temurin JRE (GPLv2+CE),
+  (proprietär, **nicht** redistribuierbar — der Installer lädt ihn direkt von
+  `download.oracle.com`, dieses Repo verteilt ihn nicht), Adoptium Temurin JRE (GPLv2+CE),
   portable Python (PSF), pip-Wheels (jeweils eigene, permissive Lizenzen).

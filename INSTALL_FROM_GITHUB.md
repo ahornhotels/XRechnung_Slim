@@ -1,12 +1,25 @@
 # Installation aus GitHub
 
-Voraussetzungen: Windows Server, Administrator-Rechte, Internetzugang und ein
-auf dem Suite8-Server **bereits vorhandener Oracle-Client** (wird genutzt, nicht
-mitgeliefert).
+Voraussetzungen: Windows Server, Administrator-Rechte und Internetzugang
+(zusätzlich zu GitHub & Co. auch `download.oracle.com`).
+
+> **Oracle-Client, 64-bit:** Die App läuft mit 64-bit-Python und braucht eine
+> **64-bit**-Oracle-Bibliothek. Der Client des Suite8-Servers ist häufig 32-bit
+> und damit unbrauchbar. Der Installer prüft das (PE-Header) und lädt bei
+> Bedarf den **Oracle Instant Client Basic Lite (x64)** nach
+> `install\instantclient\`. Abschaltbar mit `-SkipOracle`.
+>
+> Fehlt die 64-bit-Bibliothek, fällt die App auf den oracledb-Thin-Mode
+> zurück und bricht bei Datenbanken mit älterem Passwort-Verifier ab:
+> `DPY-3015: password verifier type 0x939 is not supported ... in thin mode`.
+>
+> Instant Client 19 setzt die **Visual C++ Redistributable x64** voraus (die aus
+> Visual Studio 2017). Auf Suite8-Servern meist vorhanden.
 
 ## 1. Online-Installer ausführen
 
-Lädt Quellcode, portables Python, Temurin JRE, NSSM und den KoSIT-Validator
+Lädt Quellcode, portables Python, Temurin JRE, NSSM, den KoSIT-Validator und —
+falls kein 64-bit-Oracle-Client vorhanden ist — den Oracle Instant Client
 selbst aus dem Netz. **Ein** PowerShell-Befehl (als Administrator):
 
 ```powershell
@@ -17,10 +30,17 @@ Optionen:
 ```powershell
 # anderes Zielverzeichnis / bestimmte Version / ohne KoSIT
 .\install_online.ps1 -InstallDir "D:\Apps\XRechnung_Slim" -Ref v1.9.0 -SkipKosit
+
+# ohne Instant-Client-Download (z.B. abgeschotteter Server oder eigener x64-Client)
+.\install_online.ps1 -SkipOracle
+
+# andere Instant-Client-Version
+.\install_online.ps1 -InstantClientVersion "19.28.0.0.0"
 ```
 
 Der Installer richtet alles unter dem Zielordner ein (Default
-`C:\FIDELIO\XRechnung_Slim`) und erkennt den vorhandenen Oracle-Client.
+`C:\FIDELIO\XRechnung_Slim`). Beim Oracle-Client prüft er die Architektur
+und meldet einen 32-bit-Fund ausdrücklich als unbrauchbar.
 
 > `git clone` allein genügt **nicht** — die Binärbausteine (Python, JRE, NSSM,
 > KoSIT-Jar) sind git-ignoriert und werden erst vom Installer nachgeladen.
