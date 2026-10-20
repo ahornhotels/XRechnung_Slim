@@ -4,7 +4,8 @@
 
  Laedt alle Bausteine selbst aus dem Netz und richtet die App ein - OHNE
  grosses Bundle-ZIP. Voraussetzung: Internetzugang (python.org, PyPI,
- Adoptium, GitHub, nssm.cc, download.oracle.com). Die App laeuft mit
+ Adoptium, GitHub, download.oracle.com). nssm.cc wird nur noch als
+ Rueckfallebene gebraucht - nssm.exe liegt dem Repo bei. Die App laeuft mit
  64-bit-Python; der Oracle-Client des Suite8-Servers ist haeufig 32-bit und
  damit fuer sie unbrauchbar. Fehlt ein 64-bit-Client, laedt der Installer den
  Oracle Instant Client (Basic Lite, x64) nach install\instantclient\.
@@ -14,7 +15,7 @@
    1) Quellcode (Release-Source-ZIP von GitHub) -> InstallDir
    2) Portable Python (python.org embeddable) + pip + requirements.txt
    3) Temurin JRE (Adoptium) -> install\jre   (fuer KoSIT)
-   4) NSSM -> install\nssm.exe                 (Dienst-Wrapper)
+   4) NSSM -> install\nssm.exe   (aus vendor\nssm\, sonst Download)
    5) KoSIT-Validator + XRechnung-Konfig -> validation\   (optional)
    6) Oracle: 64-bit-Client pruefen, sonst Instant Client laden -> install\instantclient
    7) Hinweis: slim\setup_slim.cmd als Admin starten
@@ -50,8 +51,25 @@ function Ok($m){ Write-Host "   $m" -ForegroundColor Green }
 function Warn($m){ Write-Host "   $m" -ForegroundColor Yellow }
 
 function Get-File($url, $dest) {
-  Info "Download: $url"
-  Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+  # Bis zu 3 Versuche mit wachsender Pause. Downloads scheitern in der Praxis
+  # sporadisch (nssm.cc war mehrfach kurz weg); ein Abbruch der ganzen
+  # Installation wegen eines Aussetzers ist unnoetig.
+  $tries = 3
+  for ($i = 1; $i -le $tries; $i++) {
+    if ($i -eq 1) { Info "Download: $url" }
+    else          { Info "Download (Versuch $i/$tries): $url" }
+    try {
+      Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -TimeoutSec 180
+      return
+    }
+    catch {
+      if ($i -eq $tries) { throw }
+      $wait = $i * 3
+      Warn "fehlgeschlagen: $($_.Exception.Message)"
+      Warn "neuer Versuch in $wait s..."
+      Start-Sleep -Seconds $wait
+    }
+  }
 }
 
 function Get-DllArchitecture($path) {
@@ -166,14 +184,40 @@ try {
   # ── 4) NSSM ───────────────────────────────────────────────────
   Info "[4/6] NSSM..."
   $nssm = Join-Path $installSub "nssm.exe"
-  if (Test-Path $nssm) { Ok "NSSM bereits vorhanden" }
+  # NSSM ist Public Domain und liegt diesem Repo als vendor\nssm\nssm.exe bei
+  # (win64). nssm.cc war in der Praxis mehrfach nicht erreichbar und hat
+  # Installationen scheitern lassen. Da der Installer den Quellcode ohnehin
+  # auspackt, ist die Datei immer zur Hand - sie hat daher Vorrang. Der
+  # Download bleibt Rueckfallebene fuer aeltere Refs ohne dieses Verzeichnis.
+  $nssmVendor = Join-Path $InstallDir "vendor\nssm\nssm.exe"
+  if (Test-Path $nssm) {
+    Ok "NSSM bereits vorhanden"
+  }
+  elseif (Test-Path $nssmVendor) {
+    Copy-Item $nssmVendor $nssm -Force
+    Ok "nssm.exe aus mitgelieferter Kopie uebernommen (kein Download)"
+  }
   else {
-    $nssmZip = Join-Path $tmp "nssm.zip"
-    Get-File "https://nssm.cc/release/nssm-2.24.zip" $nssmZip
-    $nssmEx = Join-Path $tmp "nssm"
-    Expand-Archive -Path $nssmZip -DestinationPath $nssmEx -Force
-    Copy-Item (Join-Path $nssmEx "nssm-2.24\win64\nssm.exe") $nssm -Force
-    Ok "nssm.exe in install\"
+    try {
+      $nssmZip = Join-Path $tmp "nssm.zip"
+      Get-File "https://nssm.cc/release/nssm-2.24.zip" $nssmZip
+      $nssmEx = Join-Path $tmp "nssm"
+      Expand-Archive -Path $nssmZip -DestinationPath $nssmEx -Force
+      $cand = Get-ChildItem $nssmEx -Recurse -Filter "nssm.exe" |
+              Where-Object { $_.FullName -like "*win64*" } | Select-Object -First 1
+      if (-not $cand) { throw "nssm.exe (win64) im Archiv nicht gefunden" }
+      Copy-Item $cand.FullName $nssm -Force
+      Ok "nssm.exe in install\"
+    }
+    catch {
+      Warn "NSSM konnte nicht geladen werden: $($_.Exception.Message)"
+      Warn "Ohne nssm.exe laesst sich der Dienst nicht einrichten. Manuell:"
+      Warn "  1) https://nssm.cc/release/nssm-2.24.zip herunterladen"
+      Warn "  2) daraus win64\nssm.exe kopieren nach:"
+      Warn "     $nssm"
+      Warn "  3) danach slim\setup_slim.cmd als Administrator starten."
+      throw "NSSM fehlt - Installation abgebrochen."
+    }
   }
 
   # ── 5) KoSIT-Validator + XRechnung-Konfig ─────────────────────

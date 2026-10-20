@@ -44,7 +44,9 @@ neu. Konfiguration und Daten bleiben erhalten. Versionspflege:
 - `modules/` — Pattern-Erkennung, KoSIT-Validator, WMAI-Mailer, XML-Builder
 - `validation/` — KoSIT-XRechnung-Validierungsartefakte (Jar git-ignoriert)
 - `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM, Oracle Instant
-  Client (alles git-ignoriert, wird vom Installer geladen).
+  Client (alles git-ignoriert, wird vom Installer befüllt).
+- `vendor/nssm/` — `nssm.exe` (Public Domain), damit der Dienst-Wrapper nicht
+  von der Erreichbarkeit von `nssm.cc` abhängt.
 - `tests_slim/` — Testsuite
 - `install_online.ps1` — Online-Installer (lädt Abhängigkeiten selbst)
 

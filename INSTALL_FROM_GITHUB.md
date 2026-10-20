@@ -18,9 +18,11 @@ Voraussetzungen: Windows Server, Administrator-Rechte und Internetzugang
 
 ## 1. Online-Installer ausführen
 
-Lädt Quellcode, portables Python, Temurin JRE, NSSM, den KoSIT-Validator und —
-falls kein 64-bit-Oracle-Client vorhanden ist — den Oracle Instant Client
-selbst aus dem Netz. **Ein** PowerShell-Befehl (als Administrator):
+Lädt Quellcode, portables Python, Temurin JRE, den KoSIT-Validator und — falls
+kein 64-bit-Oracle-Client vorhanden ist — den Oracle Instant Client selbst aus
+dem Netz. Jeder Download wird bis zu dreimal versucht. NSSM liegt dem Repo bei
+(`vendor/nssm/`, Public Domain) und braucht keinen Download — `nssm.cc` war in
+der Praxis mehrfach nicht erreichbar. **Ein** PowerShell-Befehl (als Administrator):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/ahornhotels/XRechnung_Slim/master/install_online.ps1 -OutFile $env:TEMP\install_online.ps1; & $env:TEMP\install_online.ps1"
@@ -42,8 +44,9 @@ Der Installer richtet alles unter dem Zielordner ein (Default
 `C:\FIDELIO\XRechnung_Slim`). Beim Oracle-Client prüft er die Architektur
 und meldet einen 32-bit-Fund ausdrücklich als unbrauchbar.
 
-> `git clone` allein genügt **nicht** — die Binärbausteine (Python, JRE, NSSM,
-> KoSIT-Jar) sind git-ignoriert und werden erst vom Installer nachgeladen.
+> `git clone` allein genügt **nicht** — die Binärbausteine (Python, JRE,
+> KoSIT-Jar, Instant Client) sind git-ignoriert und werden erst vom Installer
+> beschafft. Ausnahme: `nssm.exe` liegt unter `vendor/nssm/` im Repo.
 
 ## 2. Einrichtung abschließen
 
