@@ -4,8 +4,11 @@
 
  Laedt alle Bausteine selbst aus dem Netz und richtet die App ein - OHNE
  grosses Bundle-ZIP. Voraussetzung: Internetzugang (python.org, PyPI,
- Adoptium, GitHub, nssm.cc) und ein auf dem Suite8-Server bereits
- vorhandener Oracle-Client (wird genutzt, NICHT mitgeliefert).
+ Adoptium, GitHub, nssm.cc) und eine 64-bit-Oracle-Bibliothek. Die App
+ laeuft mit 64-bit-Python; der Client des Suite8-Servers ist haeufig 32-bit
+ und damit fuer sie unbrauchbar. In dem Fall einen Instant Client (x64) nach
+ install\instantclient\ legen. Geladen wird er NICHT - Oracle erlaubt keine
+ Weiterverteilung.
 
  Was passiert:
    1) Quellcode (Release-Source-ZIP von GitHub) -> InstallDir
@@ -13,7 +16,7 @@
    3) Temurin JRE (Adoptium) -> install\jre   (fuer KoSIT)
    4) NSSM -> install\nssm.exe                 (Dienst-Wrapper)
    5) KoSIT-Validator + XRechnung-Konfig -> validation\   (optional)
-   6) Oracle: vorhandenen Client erkennen (kein Download)
+   6) Oracle: 64-bit-Client bzw. Instant Client pruefen (kein Download)
    7) Hinweis: slim\setup_slim.cmd als Admin starten
 
  Aufruf (als Administrator empfohlen):
@@ -47,6 +50,28 @@ function Warn($m){ Write-Host "   $m" -ForegroundColor Yellow }
 function Get-File($url, $dest) {
   Info "Download: $url"
   Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+}
+
+function Get-DllArchitecture($path) {
+  # Liest die Machine-Angabe aus dem PE-Header einer DLL/EXE.
+  # 0x8664 = x64, 0x14C = x86. Rueckgabe: "x64", "x86" oder "" (unlesbar).
+  try {
+    $fs = [IO.File]::OpenRead($path)
+    try {
+      $buf = New-Object byte[] 4096
+      $read = $fs.Read($buf, 0, $buf.Length)
+      if ($read -lt 64) { return "" }
+      $peOff = [BitConverter]::ToInt32($buf, 60)
+      if ($peOff -lt 0 -or ($peOff + 6) -ge $read) { return "" }
+      if ($buf[$peOff] -ne 0x50 -or $buf[$peOff + 1] -ne 0x45) { return "" }
+      $machine = [BitConverter]::ToUInt16($buf, $peOff + 4)
+      if ($machine -eq 0x8664) { return "x64" }
+      if ($machine -eq 0x14C)  { return "x86" }
+      return ""
+    }
+    finally { $fs.Close() }
+  }
+  catch { return "" }
 }
 
 try {
@@ -175,16 +200,51 @@ try {
 
   # ── 6) Oracle-Client (nur erkennen) ───────────────────────────
   Info "[6/6] Oracle-Client pruefen (wird NICHT geladen)..."
-  $oraFound = $false
+  # Die App laeuft mit 64-bit-Python und kann nur eine 64-bit-oci.dll laden.
+  # Ein 32-bit-Client - auf Suite8-Servern der Normalfall - ist fuer sie
+  # unbrauchbar (DPI-1047 "not the correct architecture"). Fruehere Fassungen
+  # nahmen den ersten Treffer OHNE Architektur-Pruefung und meldeten ihn als
+  # "gefunden"; der Hinweis auf 'oracle_client_lib_dir' blieb dadurch aus und
+  # die Installation lief spaeter im Thin-Mode in DPY-3015 (alter Verifier).
+  # Darum: alle Treffer durchgehen und einen 64-bit-Client bevorzugen.
+  $ora64 = $null
+  $ora32 = $null
   foreach ($root in @("C:\ORACLE","C:\oracle","C:\app","C:\Program Files\Oracle")) {
-    if (Test-Path $root) {
-      $oci = Get-ChildItem $root -Recurse -Filter "oci.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-      if ($oci) { Ok "Oracle-Client gefunden: $($oci.Directory.FullName)"; $oraFound = $true; break }
+    if (-not (Test-Path $root)) { continue }
+    $hits = Get-ChildItem $root -Recurse -Filter "oci.dll" -ErrorAction SilentlyContinue
+    foreach ($hit in $hits) {
+      $arch = Get-DllArchitecture $hit.FullName
+      if ($arch -eq "x64") { $ora64 = $hit; break }
+      if ($arch -eq "x86" -and -not $ora32) { $ora32 = $hit }
     }
+    if ($ora64) { break }
   }
-  if (-not $oraFound) {
-    Warn "Kein Oracle-Client gefunden. Die App nutzt sonst den oracledb-Thin-Mode;"
-    Warn "falls die Suite8-DB Thick verlangt (DPY-3015), im Wizard 'oracle_client_lib_dir' setzen."
+
+  $bundled = Join-Path $InstallDir "install\instantclient\oci.dll"
+  $bundledOk = $false
+  if (Test-Path $bundled) {
+    if ((Get-DllArchitecture $bundled) -eq "x64") { $bundledOk = $true }
+  }
+
+  if ($ora64) {
+    Ok "Oracle-Client (64-bit) gefunden: $($ora64.Directory.FullName)"
+  }
+  elseif ($bundledOk) {
+    Ok "Mitgelieferter 64-bit Instant Client vorhanden: $(Split-Path $bundled -Parent)"
+  }
+  else {
+    if ($ora32) {
+      Warn "Oracle-Client gefunden, aber 32-bit: $($ora32.Directory.FullName)"
+      Warn "Die App laeuft mit 64-bit-Python und kann diesen Client NICHT laden."
+    }
+    else {
+      Warn "Kein Oracle-Client gefunden."
+    }
+    Warn "Ohne 64-bit-Client nutzt die App den oracledb-Thin-Mode. Verlangt die"
+    Warn "Suite8-DB den Thick-Mode (Fehler DPY-3015, alter Password-Verifier),"
+    Warn "dann einen 64-bit Instant Client Basic Lite (x64) nach"
+    Warn "'install\instantclient\' legen ODER im Wizard 'oracle_client_lib_dir'"
+    Warn "auf das bin-Verzeichnis eines 64-bit-Clients setzen."
   }
 
   Write-Host ""
