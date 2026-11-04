@@ -261,12 +261,26 @@ def _resolve_billing_reference_from_payment(cur, header: dict) -> None:
             return
 
 
+def is_void_storno(invoice: dict) -> bool:
+    """True wenn die Rechnung eine Suite8-Stornorechnung ist
+    (ZINV_VOID_ZINV_ID verweist auf die stornierte Original-Rechnung)."""
+    void_id = (invoice.get("header") or {}).get("zinv_void_zinv_id")
+    try:
+        return int(void_id or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def is_credit_note(invoice: dict) -> bool:
     """True wenn die Rechnung als XRechnung CreditNote (InvoiceTypeCode=381)
     gerendert werden soll. Heuristik:
     - ZINV_ROLE in (3, 31)  -> offizielle Suite8-Credit-Note
     - Summe der Line-Netto-Betraege < 0  -> de-facto Gutschrift, in der
       Hotel-Praxis die haeufige Form (Suite8-ROLE=0 mit negativen Lines).
+
+    - ZINV_VOID_ZINV_ID gesetzt  -> Suite8-Stornorechnung. Sie traegt per ZPIL
+      dieselben ZPOS wie das Original mit POSITIVEN Betraegen; ohne diese
+      Pruefung ginge sie als zweite Rechnung (380) hinaus.
 
     Sum exakt 0 zaehlt NICHT als CreditNote (das ist Pfand-Aufhebung,
     wird vom Netto=0-Validator-Check abgefangen).
@@ -277,7 +291,7 @@ def is_credit_note(invoice: dict) -> bool:
         role_int = int(role)
     except (TypeError, ValueError):
         role_int = 0
-    if role_int in (3, 31):
+    if role_int in (3, 31) or is_void_storno(invoice):
         return True
     lines = invoice.get("lines") or []
     try:

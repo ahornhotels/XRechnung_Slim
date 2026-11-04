@@ -492,6 +492,9 @@ def render(invoice: dict, version: str = "3.0") -> bytes:
     is_cn = is_credit_note(invoice)
     if is_cn:
         prepared = _make_positive_for_credit_note(invoice)
+        # CreditNote-Template mit '380' waere immer falsch (z. B. VOID-Storno,
+        # fuer den das SQL '380' liefert) — Typcode hier verbindlich setzen.
+        prepared["header"]["invoicetypecode"] = "381"
         tmpl_name = f"creditnote_{version}.xml.j2"
     else:
         prepared = _split_negative_lines_to_allowances(invoice)

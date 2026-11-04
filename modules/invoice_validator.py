@@ -103,6 +103,24 @@ def validate(invoice: dict) -> list[dict]:
                          "XRechnung abwickeln."),
         })
 
+    # Storno einer Gutschrift: Suite8-Stornos tragen die ZPOS des Originals mit
+    # unveraendertem Vorzeichen. Ist die Summe negativ, war das Original selbst
+    # eine Gutschrift — der Storno waere fachlich eine Rechnung. Nicht raten.
+    from modules.invoice_fetcher import is_void_storno
+    if is_void_storno(invoice):
+        try:
+            net_sum = sum(float(ln.get("lineextensionamountnet") or 0) for ln in lines)
+        except (TypeError, ValueError):
+            net_sum = 0.0
+        if net_sum < 0:
+            issues.append({
+                "field":    "storno",
+                "severity": "error",
+                "message":  ("Storno einer Gutschrift (ZINV_VOID_ZINV_ID gesetzt, "
+                             "Positionssumme negativ) wird nicht automatisch als "
+                             "XRechnung erzeugt - bitte manuell pruefen."),
+            })
+
     # CreditNote-Pflichtfeld: BillingReference auf Original-Rechnung
     if (header.get("invoicetypecode") or "") == "381":
         if not (header.get("billingreferenceid") or "").strip():
