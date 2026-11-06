@@ -67,9 +67,9 @@ def _guest_info_available() -> bool:
 # worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
 _EXPECTED_OVERRIDE_MARKERS = {
     "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
-    "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId",),
-    "invoice_totals.sql": ("LineExtensionAmountVat_number",),
-    "invoice_lines.sql": ("DepositZinvId", "OriginYresId"),
+    "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId", "Z3.zpos_cdt=2"),
+    "invoice_totals.sql": ("LineExtensionAmountVat_number", "Z3.zpos_cdt=2"),
+    "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "Z3.zpos_cdt=2"),
 }
 _warned_stale_overrides: set[str] = set()
 

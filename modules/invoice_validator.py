@@ -76,6 +76,26 @@ def validate(invoice: dict) -> list[dict]:
                 "message": f"Position {idx+1} ({line.get('itemname', '?')}): USt-Satz nicht ermittelbar"
             })
 
+    # Leistung ohne Steuerbuchung in Suite8 (kein CDT-2-Partner): wird als
+    # Z 0 % uebernommen. Bei echten Auslagen richtig, bei einer steuerpflichtigen
+    # Leistung ein Buchungsfehler in Suite8 - daher Hinweis, kein Block.
+    ohne_steuer = []
+    for line in lines:
+        try:
+            missing = int(line.get("taxlinecount")) == 0 and not int(line.get("ispaidout") or 0)
+        except (TypeError, ValueError):
+            missing = False
+        if missing:
+            ohne_steuer.append(str(line.get("itemname") or "?"))
+    if ohne_steuer:
+        names = ", ".join(sorted(set(ohne_steuer)))
+        issues.append({
+            "field": "lines.tax_missing",
+            "severity": "warning",
+            "message": (f"Position(en) ohne Steuerbuchung in Suite8, als 0 % (Z) uebernommen: "
+                        f"{names}. Bei Auslagen korrekt, sonst Steuerbuchung in Suite8 pruefen."),
+        })
+
     totals = invoice.get("totals") or {}
     if totals.get("invoicegross") is None:
         issues.append({

@@ -63,12 +63,13 @@ def test_zeilenlogik_synchron_ueber_drei_sql():
     in nur einer Kopie landet — stille Divergenz fuehrt zu Netto+Steuer<>Brutto
     (BR-CO-*), genau der Fehlerklasse, die der 03.07.-Fix beseitigt hat."""
     fragments = (
-        "round(z.zpos_grossunitprice*z.zpos_quantity,2)",
+        "round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2)",
+        "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))",
         ("(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) "
          "from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and "
          "Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)"),
-        ("(select 0 from dual where not exists (select 1 from zpos Z3 where "
-         "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2))"),
+        ("when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where "
+         "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0"),
     )
     sqls = {name: _read(f"invoice_{name}.sql").replace(" ", "").replace("\n", "")
             for name in ("lines", "tax", "totals")}

@@ -394,21 +394,26 @@ from
 (
 select
 zpil_zinv_id zinv_id,
-round(z.zpos_grossunitprice*z.zpos_quantity,2) LineExtensionAmount,
-(round(z.zpos_grossunitprice*z.zpos_quantity,2)) LineExtensionAmount_Number,
+round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2) LineExtensionAmount,
+(round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2)) LineExtensionAmount_Number,
 TO_CHAR(round(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') LineExtensionAmountVat,
--- Ohne CDT-2-Partner (Auslage/durchlaufender Posten) ist der Satz 0 statt NULL.
-nvl((select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id),
-    (select 0 from dual where not exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2)))  ClassifiedTaxCategoryPercent,
+-- Satz: Paid-Out (CDT 5) und Leistung ohne CDT-2-Partner (Auslage/durch-
+-- laufender Posten) = 0. Ohne TAXLINK bleibt er NULL (Validator blockt).
+case when z.zpos_cdt=5 then 0
+     when exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2)
+     then (select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)
+     when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0
+end  ClassifiedTaxCategoryPercent,
 /*Change: TaxAmount je Steuercode statt je Prozentsatz gruppieren (BR-CO-14 Doppelzaehlung bei zwei ZTCDs mit gleichem Satz)*/
 (select Z3.zpos_ztcd_id from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2 and rownum=1)  ClassifiedTaxCategoryZtcdId
 from
 zpil,zpos z
 where
 z.zpos_id=zpil_zpos_id
-and z.zpos_cdt=1
+-- Paid-Out (CDT 5, PAIDOUT 1) ist eine Auslage-Position (Nutzerentscheidung, wie OPERA)
+and (z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))
 and zpil_zinv_id = :zinv_id
-and nvl(round(z.zpos_grossunitprice*z.zpos_quantity,2),0)<>0
+and nvl(round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2),0)<>0
 )
 group by ZINV_ID,  ClassifiedTaxCategoryPercent, ClassifiedTaxCategoryZtcdId
 )

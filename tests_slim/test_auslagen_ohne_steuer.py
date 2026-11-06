@@ -18,8 +18,10 @@ NS = {
     "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
     "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
 }
-FRAG = ("(select 0 from dual where not exists (select 1 from zpos Z3 where "
-        "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2))")
+FRAG = ("when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where "
+        "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0")
+PAIDOUT_WHERE = "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))"
+SIGN = "round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2)"
 
 
 def _z(name, amount):
@@ -61,7 +63,9 @@ def test_xml_z_auslage_neben_19_und_7():
               (s.findtext("cbc:TaxableAmount", namespaces=NS), s.findtext("cbc:TaxAmount", namespaces=NS))
               for s in doc.findall("cac:TaxTotal/cac:TaxSubtotal", NS)}
     assert groups[("Z", "0.00")] == ("15.00", "0.00")
-    assert len([k for k in groups if k[0] == "Z"]) == 1
+    z_count = sum(1 for s in doc.findall("cac:TaxTotal/cac:TaxSubtotal", NS)
+                  if s.findtext("cac:TaxCategory/cbc:ID", namespaces=NS) == "Z")
+    assert z_count == 1
     _assert_xsd_valid(xml, _INV_XSD)
 
 
@@ -74,3 +78,44 @@ def test_negative_z_auslage_wird_abschlag_z():
     assert [(a.findtext("cac:TaxCategory/cbc:ID", namespaces=NS),
              a.findtext("cac:TaxCategory/cbc:Percent", namespaces=NS),
              a.findtext("cbc:Amount", namespaces=NS)) for a in acs] == [("Z", "0.00", "2.00")]
+
+
+def _flat(name):
+    return (SQL_DIR / f"invoice_{name}.sql").read_text(encoding="utf-8").replace(" ", "").replace(chr(10), "").lower()
+
+
+def test_ohne_taxlink_bleibt_satz_unbestimmt():
+    """TAXLINK NULL: Satz nicht ermittelbar -> weiter Fehler, nicht still 0 %."""
+    for name in ("lines", "tax", "totals"):
+        assert "z.zpos_taxlink_idisnotnullandnotexists" in _flat(name), name
+
+
+def test_paidout_ist_position_in_allen_drei_sql():
+    """Nutzerentscheidung (a) wie OPERA: Paid-Out (CDT 5, PAIDOUT 1) ist eine
+    Auslage-Position mit Z 0 %, Betrag mit umgekehrtem Vorzeichen."""
+    for name in ("lines", "tax", "totals"):
+        sql = _flat(name)
+        assert PAIDOUT_WHERE.replace(" ", "").lower() in sql, name
+        assert SIGN.replace(" ", "").lower() in sql, name
+        assert "when z.zpos_cdt=5 then 0" in (SQL_DIR / f"invoice_{name}.sql").read_text(encoding="utf-8").lower(), name
+
+
+def test_override_marker_fuer_neue_satzlogik():
+    from modules.invoice_fetcher import _EXPECTED_OVERRIDE_MARKERS
+    for name in ("invoice_lines.sql", "invoice_tax.sql", "invoice_totals.sql"):
+        assert "Z3.zpos_cdt=2" in _EXPECTED_OVERRIDE_MARKERS[name], name
+
+
+def test_lines_sql_meldet_fehlende_steuerbuchung():
+    assert "taxlinecount" in _flat("lines")
+
+
+def test_position_ohne_steuerbuchung_gibt_warnung_kein_fehler():
+    inv = _auslagen_rechnung()
+    for ln in inv["lines"]:
+        ln["taxlinecount"] = 0 if ln["classifiedtaxcategoryid"] == "Z" else 1
+    issues = invoice_validator.validate(inv)
+    warn = [i for i in issues if i["field"] == "lines.tax_missing"]
+    assert len(warn) == 1 and warn[0]["severity"] == "warning"
+    assert "Auslagen Gastronomie" in warn[0]["message"]
+    assert not [i for i in issues if i["field"].endswith("tax_percent")]
