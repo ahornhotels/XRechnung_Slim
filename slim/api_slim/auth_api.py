@@ -42,6 +42,11 @@ _ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/a
 # nicht an der Antwortzeit erkennbar sind.
 _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 
+
+def _LOCAL_FAIL_DELAY() -> None:
+    import time
+    time.sleep(1.0)
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -132,15 +137,21 @@ def login(payload: LoginPayload, request: Request):
     name = payload.username.strip()
     fail = HTTPException(401, "Anmeldung fehlgeschlagen")
     # Sperre je Adresse UND Benutzer: ein Dritter im Netz kann den Verwalter
-    # nicht aussperren (andere Adresse = eigener Zaehler), auch nicht am Server.
-    key = f"{_client_ip(request)}|{name}"
-    if GUARD.blocked(key):
+    # nicht aussperren (andere Adresse = eigener Zaehler). Am Server selbst
+    # teilen sich alle Sitzungen (z. B. RDP) 127.0.0.1 - dort keine Sperre,
+    # sondern 1 s Wartezeit je Fehlversuch gegen Durchprobieren.
+    local = _is_local(request)
+    key = f"{_client_ip(request)}|{name[:64]}"
+    if not local and GUARD.blocked(key):
         _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
     user = USERS.get(name)
     ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
-        GUARD.fail(key)
+        if local:
+            _LOCAL_FAIL_DELAY()
+        else:
+            GUARD.fail(key)
         _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail
     GUARD.ok(key)

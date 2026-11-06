@@ -272,14 +272,19 @@ def test_vor_einrichtung_nur_lokal_und_ohne_benutzer(setup):
     assert client.get("/api/sql/templates").status_code == 401          # Benutzer da -> Anmeldung
 
 
-def test_sperre_auch_lokal_aber_getrennt_von_fremden(setup):
+def test_lokal_keine_sperre_aber_wartezeit(setup):
+    """Am Server teilen sich alle Sitzungen (RDP) 127.0.0.1: keine Sperre,
+    stattdessen Wartezeit je Fehlversuch. Fremde Adressen werden gesperrt."""
     client, users, mp = setup
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
     for _ in range(5):
         _login(client, "admin", "falsches-passwort")                     # fremde Adresse
+    assert _login(client, "admin", "langes-passwort").status_code == 401  # gesperrt
+    waits = []
+    mp.setattr(auth_api, "_LOCAL_FAIL_DELAY", lambda: waits.append(1))
     mp.setattr(auth_api, "_is_local", lambda request: True)
     mp.setattr(auth_api, "_client_ip", lambda request: "127.0.0.1")
-    assert _login(client, "admin", "langes-passwort").status_code == 200  # lokal nicht betroffen
-    for _ in range(5):
+    for _ in range(6):
         _login(client, "admin", "falsches-passwort")
-    assert _login(client, "admin", "langes-passwort").status_code == 401  # lokal eigene Sperre
+    assert len(waits) == 6
+    assert _login(client, "admin", "langes-passwort").status_code == 200

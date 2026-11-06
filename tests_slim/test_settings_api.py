@@ -63,9 +63,10 @@ def test_speichern_sicherung_und_fremde_schluessel_bleiben(env):
 
 def test_leeres_geheimnis_bleibt_unveraendert(env):
     client, cfg, _ = env
-    client.put("/api/settings/datenbank", json={"values": {"tns_alias": "V9", "password": ""}})
+    r = client.put("/api/settings/datenbank", json={"values": {"tns_alias": "V8", "password": ""}})
+    assert r.status_code == 200
     saved = json.loads((cfg / "connection.json").read_text(encoding="utf-8"))
-    assert saved["password"] == "gAAAA-alt" and saved["tns_alias"] == "V9"
+    assert saved["password"] == "gAAAA-alt" and saved["tns_alias"] == "V8"
 
 
 def test_neues_geheimnis_wird_verschluesselt(env):
@@ -139,3 +140,99 @@ def test_fetcher_wendet_verkaeufer_override_an(monkeypatch):
     h = {"suppliername": "Suite8-Name", "suppliercityname": "Musterstadt"}
     invoice_fetcher._apply_seller_overrides(h)
     assert h == {"suppliername": "Hotel GmbH", "suppliercityname": "Musterstadt"}
+
+
+# --- Security-Review Einstellungen ---
+
+def test_neues_db_ziel_verlangt_passwort(env):
+    client, cfg, _ = env
+    r = client.put("/api/settings/datenbank", json={"values": {"tns_alias": "FREMD"}})
+    assert r.status_code == 422 and "password" in r.json()["detail"]
+    assert json.loads((cfg / "connection.json").read_text(encoding="utf-8"))["tns_alias"] == "V8"
+    r = client.put("/api/settings/datenbank", json={"values": {"tns_alias": "FREMD", "password": "neues-db-passwort"}})
+    assert r.status_code == 200
+
+
+def test_unveraendertes_db_ziel_braucht_kein_passwort(env):
+    client, _, _ = env
+    assert client.put("/api/settings/datenbank", json={"values": {"tns_alias": "V8"}}).status_code == 200
+
+
+@pytest.mark.parametrize("key,value", [("owner", "../evil"), ("repo", "a/b"), ("owner", "x" * 101)])
+def test_update_quelle_streng_geprueft(env, key, value):
+    client, _, _ = env
+    assert client.put("/api/settings/update", json={"values": {key: value}}).status_code == 422
+
+
+@pytest.mark.parametrize("value", [r"\server\share\client", "relativ\pfad", "//server/share"])
+def test_client_pfade_nur_lokal_absolut(env, value):
+    client, _, _ = env
+    r = client.put("/api/settings/datenbank",
+                   json={"values": {"oracle_client_lib_dir": value, "password": "neues-db-passwort"}})
+    assert r.status_code == 422 and "oracle_client_lib_dir" in r.json()["detail"]
+
+
+def test_leerer_client_pfad_erlaubt(env):
+    client, _, _ = env
+    r = client.put("/api/settings/datenbank", json={"values": {"oracle_client_lib_dir": "", "password": "neues-db-passwort"}})
+    assert r.status_code == 200
+
+
+
+# --- Review zur Einstellungs-API ---
+
+def test_versand_braucht_ein_erkennungsmuster(env):
+    client, _, _ = env
+    r = client.put("/api/settings/versand", json={"values": {
+        "suite8_recognize_subject_pattern": "", "suite8_recognize_filename_pattern": ""}})
+    assert r.status_code == 422 and "suite8_recognize_subject_pattern" in r.json()["detail"]
+
+
+def test_betreffmuster_standard_sichtbar_und_nicht_geleert(env):
+    client, cfg, _ = env
+    data = client.get("/api/settings").json()
+    assert "zinv_number" in _field(data, "versand", "suite8_recognize_subject_pattern")["value"]
+    assert client.put("/api/settings/versand", json={"values": {"absender_email": "rechnung@example.com"}}).status_code == 200
+    assert "suite8_recognize_subject_pattern" not in json.loads((cfg / "hotel.json").read_text(encoding="utf-8"))
+
+
+def test_muster_mit_zwei_gruppen_abgelehnt(env):
+    client, _, _ = env
+    r = client.put("/api/settings/versand", json={"values": {
+        "suite8_recognize_subject_pattern": r"(?P<zinv_id>\d+)-(?P<zinv_number>\d+)"}})
+    assert r.status_code == 422
+
+
+def test_sicherungen_begrenzt(env, monkeypatch):
+    client, cfg, _ = env
+    monkeypatch.setattr(settings_api, "_KEEP_BACKUPS", 3)
+    for i in range(6):
+        client.put("/api/settings/hotel", json={"values": {"hotel_code": f"H{i}"}})
+    assert len(list(cfg.glob("hotel.json.*.sicherung"))) == 3
+
+
+def test_verkaeufer_rechtlicher_name_und_iban(env, monkeypatch):
+    client, cfg, _ = env
+    monkeypatch.setattr(settings_api, "_suite8_seller_values", lambda: {})
+    keys = [r["key"] for r in client.get("/api/settings/seller").json()]
+    assert "supplierregistrationname" in keys
+    client.put("/api/settings/seller", json={"values": {"payeefinancialaccountid": "DE89 3704 0044 0532 0130 00"}})
+    saved = json.loads((cfg / "hotel.json").read_text(encoding="utf-8"))
+    assert saved["seller_overrides"]["payeefinancialaccountid"] == "DE89370400440532013000"
+
+
+def test_fetcher_override_rechtlicher_name(monkeypatch):
+    from modules import invoice_fetcher
+    monkeypatch.setattr(invoice_fetcher, "load_json",
+                        lambda p, default=None: {"seller_overrides": {"supplierregistrationname": "Hotel GmbH"}})
+    h = {"supplierregistrationname": "Alt"}
+    invoice_fetcher._apply_seller_overrides(h)
+    assert h["supplierregistrationname"] == "Hotel GmbH"
+
+
+def test_save_json_atomar(tmp_path):
+    from core.config_loader import save_json
+    p = tmp_path / "x.json"
+    save_json(p, {"a": 1})
+    assert json.loads(p.read_text(encoding="utf-8")) == {"a": 1}
+    assert not list(tmp_path.glob("*.tmp"))

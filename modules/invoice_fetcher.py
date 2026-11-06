@@ -48,7 +48,7 @@ def _seller_contact_defaults() -> dict:
 
 
 _SELLER_OVERRIDE_KEYS = frozenset({
-    "suppliername", "supplierstreetname", "suppliercityname", "supplierpostalzone",
+    "supplierregistrationname", "suppliername", "supplierstreetname", "suppliercityname", "supplierpostalzone",
     "suppliercompanyid", "payeefinancialaccountid", "payeefinancialaccountbic",
     "payeefinancialaccountname", "suppliercontacttelephone", "suppliercontactelectronicmail",
 })
@@ -64,7 +64,8 @@ def _apply_seller_overrides(header: dict) -> None:
         return
     for k, v in overrides.items():
         if k in _SELLER_OVERRIDE_KEYS and v is not None and str(v).strip():
-            header[k] = str(v).strip()
+            v = str(v).strip()
+            header[k] = v.replace(" ", "") if k == "payeefinancialaccountid" else v
 
 
 def _gastzeile_template() -> str:

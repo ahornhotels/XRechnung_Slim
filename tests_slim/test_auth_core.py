@@ -143,3 +143,12 @@ def test_schnelle_schreibfolge_liefert_aktuellen_stand(tmp_path):
         s.create(f"u{i}", "langes-passwort", "ansehen")
         s.set_role(f"u{i}", "verwalten")
         assert s.get(f"u{i}")["role"] == "verwalten"
+
+
+
+def test_sperrliste_hart_begrenzt():
+    g = auth.LoginGuard(max_keys=2)
+    for i in range(100):
+        for _ in range(5):
+            g.fail(f"k{i}")
+    assert len(g._until) <= 20

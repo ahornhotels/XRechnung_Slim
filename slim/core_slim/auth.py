@@ -224,6 +224,12 @@ class LoginGuard:
             if len(self._until) > self.max_keys:
                 for k in [k for k, u in self._until.items() if u <= now]:
                     del self._until[k]
+            # Harte Obergrenze (Speicher): erst beim Zehnfachen, dann die
+            # Sperren, die am fruehesten ohnehin ablaufen.
+            hard = self.max_keys * 10
+            if len(self._until) > hard:
+                for k, _ in sorted(self._until.items(), key=lambda kv: kv[1])[:len(self._until) - hard]:
+                    del self._until[k]
             while len(self._fails) > self.max_keys:
                 self._fails.pop(next(iter(self._fails)))
 

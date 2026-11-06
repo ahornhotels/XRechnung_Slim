@@ -71,7 +71,8 @@ async function post(url, body) {
 
 async function init() {
   const s = await (await fetch("/api/auth/state")).json();
-  if (!s.setup_done) { $("sub").innerHTML = 'Slim ist noch nicht eingerichtet. <a href="/setup">Zur Einrichtung</a>'; return; }
+  if (!s.setup_done && !s.users_exist) { $("sub").innerHTML = 'Slim ist noch nicht eingerichtet. <a href="/setup">Zur Einrichtung</a>'; return; }
+  if (s.logged_in && !s.must_change && !s.setup_done) { location.href = "/setup"; return; }
   if (!s.users_exist) {
     if (s.local) return show("f-boot", "Es gibt noch keinen Benutzer. Legen Sie den ersten Verwalter an.");
     $("sub").textContent = "Es gibt noch keinen Benutzer. Bitte am Server selbst (http://127.0.0.1) den ersten Verwalter anlegen.";

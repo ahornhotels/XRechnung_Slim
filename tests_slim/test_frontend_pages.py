@@ -28,3 +28,10 @@ def test_routen_fuer_seiten():
     src = inspect.getsource(m)
     for route in ('"/login"', '"/users"', '"/settings"'):
         assert f"@app.get({route})" in src
+
+
+
+def test_login_bei_neueinrichtung_mit_benutzern():
+    """Marker geloescht, Benutzer vorhanden: Anmeldeformular statt Sackgasse."""
+    src = (FRONT / "login.html").read_text(encoding="utf-8")
+    assert "!s.setup_done && !s.users_exist" in src

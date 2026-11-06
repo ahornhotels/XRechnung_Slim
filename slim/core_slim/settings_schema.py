@@ -40,14 +40,15 @@ class Section:
 
 
 def _regex_with_group(value: str) -> None:
+    """Gleiche Regel wie Setup-Wizard und Pattern-Seite: kompilierbar und GENAU
+    eine der Gruppen (?P<zinv_number>...) / (?P<zinv_id>...)."""
     if not value:
         return
+    from modules.suite8_pattern import PatternMatchError, validate_pattern
     try:
-        rx = re.compile(value)
-    except re.error as e:
-        raise SettingError(f"kein gueltiger regulaerer Ausdruck ({e})")
-    if not ({"zinv_number", "zinv_id"} & set(rx.groupindex)):
-        raise SettingError("braucht eine benannte Gruppe (?P<zinv_number>...) oder (?P<zinv_id>...)")
+        validate_pattern(value)
+    except PatternMatchError as e:
+        raise SettingError(str(e))
 
 
 def _attachment_name(value: str) -> None:
@@ -74,6 +75,21 @@ def _gastzeile(value: str) -> None:
         raise SettingError("unbekannte Platzhalter: " + ", ".join(sorted(unknown)))
 
 
+def _github_name(value: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", value or "") or ".." in value:
+        raise SettingError("nur Buchstaben, Ziffern, Punkt, Bindestrich, Unterstrich (max. 100)")
+
+
+def _local_dir(value: str) -> None:
+    """Nur lokale absolute Ordner: Aus dem Client-Ordner laedt Slim
+    Programmbibliotheken, ein Netzwerkpfad waere ein Einfallstor."""
+    if not value:
+        return
+    v = value.replace("/", "\\")
+    if v.startswith("\\\\") or not re.match(r"^[A-Za-z]:\\", v):
+        raise SettingError(r"lokaler absoluter Ordner erwartet (z. B. C:\oracle\instantclient), kein Netzwerkpfad")
+
+
 def _email(value: str) -> None:
     if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
         raise SettingError("keine gueltige E-Mail-Adresse")
@@ -86,8 +102,8 @@ SECTIONS: tuple[Section, ...] = (
         Setting("tns_alias", C, "TNS-Alias", "Name der Suite8-Datenbank aus der tnsnames.ora, z. B. V8.", restart=True),
         Setting("username", C, "Benutzer", "Oracle-Benutzer, mit dem Slim liest und Anhaenge schreibt.", restart=True),
         Setting("password", C, "Passwort", "Oracle-Passwort. Wird verschluesselt gespeichert und nie angezeigt. Leer lassen = unveraendert.", type="secret", restart=True),
-        Setting("tns_admin", C, "Ordner der tnsnames.ora", "Pfad zum Ordner mit tnsnames.ora (TNS_ADMIN).", restart=True),
-        Setting("oracle_client_lib_dir", C, "Oracle-Client-Ordner", "Pfad zum 64-bit Oracle Instant Client. Leer = Thin-Modus bzw. automatische Suche.", restart=True),
+        Setting("tns_admin", C, "Ordner der tnsnames.ora", "Lokaler Ordner mit tnsnames.ora (TNS_ADMIN).", restart=True, check=_local_dir),
+        Setting("oracle_client_lib_dir", C, "Oracle-Client-Ordner", "Lokaler Ordner des 64-bit Oracle Instant Client. Leer = Thin-Modus bzw. automatische Suche.", restart=True, check=_local_dir),
     )),
     Section("hotel", "Hotel", (
         Setting("hotel_code", H, "Hauskuerzel", "Kurzname des Hauses, erscheint in Protokoll und Archiv."),
@@ -99,8 +115,8 @@ SECTIONS: tuple[Section, ...] = (
     )),
     Section("versand", "Versand", (
         Setting("absender_email", H, "Absender-E-Mail", "Absenderadresse der Rechnungsmails.", check=_email),
-        Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulaerer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group),
-        Setting("suite8_recognize_filename_pattern", H, "Erkennung im Dateinamen", "Regulaerer Ausdruck fuer den PDF-Dateinamen, mit (?P<zinv_number>...) oder (?P<zinv_id>...). Leer = nicht verwendet.", check=_regex_with_group),
+        Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulaerer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
+        Setting("suite8_recognize_filename_pattern", H, "Erkennung im Dateinamen", "Regulaerer Ausdruck fuer den PDF-Dateinamen, mit (?P<zinv_number>...) oder (?P<zinv_id>...). Leer = nicht verwendet.", check=_regex_with_group, default=""),
         Setting("suite8_poll_interval_seconds", H, "Abrufintervall (Sekunden)", "Wie oft Slim nach neuen Rechnungsmails sucht.", type="int", minimum=5, maximum=3600, restart=True, default=30),
         Setting("suite8_attachment_name_template", H, "Name des XML-Anhangs", "Dateiname der XRechnung, muss {zinv_number} enthalten.", check=_attachment_name, default="{zinv_number}.xml"),
         Setting("xml_only_all", H, "Nur XML fuer alle", "Ein: Jede Rechnungsmail enthaelt nur die XRechnung, PDF und RTF werden aus der Mail genommen.", type="bool", default=False),
@@ -124,8 +140,8 @@ SECTIONS: tuple[Section, ...] = (
     )),
     Section("update", "Update", (
         Setting("enabled", U, "Automatische Updates", "Neue Versionen von GitHub einspielen.", type="bool", default=True),
-        Setting("owner", U, "GitHub-Besitzer", "Besitzer des Repositorys.", default="ahornhotels"),
-        Setting("repo", U, "GitHub-Repository", "Name des Repositorys.", default="XRechnung_Slim"),
+        Setting("owner", U, "GitHub-Besitzer", "Besitzer des Repositorys.", default="ahornhotels", check=_github_name),
+        Setting("repo", U, "GitHub-Repository", "Name des Repositorys.", default="XRechnung_Slim", check=_github_name),
         Setting("pat_token", U, "Zugriffstoken", "Nur noetig, wenn das Repository privat ist (Leserecht auf Inhalte). Wird verschluesselt gespeichert und nie angezeigt. Leer lassen = unveraendert.", type="secret"),
     )),
 )

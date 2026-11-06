@@ -38,12 +38,13 @@ def load_json(path: Path, default=None):
 
 def save_json(path: Path, data) -> None:
     """Schreibt ein Dict als formatiertes JSON nach <path>."""
+    import os
+    import threading
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)   # atomar: nie eine halb geschriebene Datei
 
 
 def load_app_settings() -> dict:
