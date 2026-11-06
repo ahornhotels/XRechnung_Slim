@@ -42,6 +42,8 @@ ALLOWED_KEYS = frozenset({
     "payeefinancialaccountid",
     "customername",
     "customerstreetname",
+    "customeradditionalstreetname",
+    "customeraddressline",
     "customercityname",
     "customerpostalzone",
     "customeridentificationcode",
@@ -140,6 +142,12 @@ def apply_to_invoice(data_dir: Path, wmai_id: int, invoice: dict) -> dict:
     # dranlassen — sonst gemischtes BG-3-Paar. BT-26 ist optional.
     if "billingreferenceid" in overrides and "billingreferenceissuedate" not in overrides:
         out["header"]["billingreferenceissuedate"] = None
+    # Korrigiert der Operator die Strasse, gehoeren die aus Strasse 2/3
+    # abgeleiteten Zusatzzeilen zur ALTEN Strasse - nicht stehen lassen.
+    if "customerstreetname" in overrides:
+        for k in ("customeradditionalstreetname", "customeraddressline"):
+            if k not in overrides:
+                out["header"][k] = None
     logger.info(
         "Override für WMAI %s angewandt (%d Feld(er): %s)",
         wmai_id, len(overrides), ", ".join(overrides.keys()),

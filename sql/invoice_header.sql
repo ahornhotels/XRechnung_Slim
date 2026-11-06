@@ -78,6 +78,7 @@ SupplierRegistrationName,
 --(select xadr_street1 from xadr where xadr_id=zinv_xadr_id)  CustomerStreetName,
 /* Strasse 1/2/3 roh: Rechnungsadresse und Primaeradresse. Python
    (invoice_enrich.apply_customer_address) ueberspringt leere Zeilen. */
+(select xadr_id from xadr where xadr_id=zinv_xadr_id) CustomerAdrId,
 (select xadr_street1 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet1,
 (select xadr_street2 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet2,
 (select xadr_street3 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet3,

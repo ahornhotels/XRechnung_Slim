@@ -123,7 +123,99 @@ def test_header_sql_liefert_drei_strassenzeilen_und_marker():
     assert "CustomerAdrStreet2" in _EXPECTED_OVERRIDE_MARKERS["invoice_header.sql"]
 
 
-def test_fetch_invoice_wendet_adresse_an():
-    import inspect
+
+
+# --- Review-Fixes: eine Adressquelle je Adresse, Overrides, echte Integration ---
+
+def test_vorhandene_rechnungsadresse_nur_leerzeichen_kein_primaer_mix():
+    """Existiert die Rechnungsadresse, kommt die Strasse NUR aus ihr. Sonst
+    entstuende 'Primaerweg 9' mit Ort/PLZ der Rechnungsadresse."""
+    h = {"customeradrid": 7, "customeradrstreet1": "  ", "customeradrstreet2": None,
+         "customeradrstreet3": None, "customerprimstreet1": "Primaerweg 9",
+         "customerprimstreet2": None, "customerprimstreet3": None,
+         "customerstreetname": "  "}
+    ie.apply_customer_address(h)
+    assert not (h["customerstreetname"] or "").strip()
+
+
+def test_rechnungsadresse_fehlt_ganz_nimmt_primaer():
+    h = {"customeradrid": None, "customeradrstreet1": None, "customeradrstreet2": None,
+         "customeradrstreet3": None, "customerprimstreet1": "Primaerweg 9",
+         "customerprimstreet2": "Haus B", "customerprimstreet3": None,
+         "customerstreetname": "Primaerweg 9"}
+    ie.apply_customer_address(h)
+    assert (h["customerstreetname"], h["customeradditionalstreetname"]) == ("Primaerweg 9", "Haus B")
+
+
+def test_header_sql_liefert_adress_id():
+    from pathlib import Path
+    sql = (Path(__file__).resolve().parent.parent / "sql" / "invoice_header.sql").read_text(encoding="utf-8")
+    assert "CustomerAdrId" in sql
+
+
+def test_strassen_override_leert_abgeleitete_zeilen(tmp_path):
+    from slim.core_slim import overrides
+    overrides.save(tmp_path, 5, {"customerstreetname": "Hauptstr. 1"})
+    inv = {"header": {"customerstreetname": "c/o Einkauf",
+                      "customeradditionalstreetname": "Hauptstr. 1",
+                      "customeraddressline": "Etage 3"}}
+    out = overrides.apply_to_invoice(tmp_path, 5, inv)
+    assert out["header"]["customerstreetname"] == "Hauptstr. 1"
+    assert not out["header"].get("customeradditionalstreetname")
+    assert not out["header"].get("customeraddressline")
+
+
+def test_zusatzzeilen_sind_ueberschreibbar(tmp_path):
+    from slim.core_slim import overrides
+    overrides.save(tmp_path, 6, {"customerstreetname": "Hauptstr. 1",
+                                 "customeradditionalstreetname": "Haus B"})
+    out = overrides.apply_to_invoice(tmp_path, 6, {"header": {"customeraddressline": "x"}})
+    assert out["header"]["customeradditionalstreetname"] == "Haus B"
+    assert not out["header"].get("customeraddressline")
+
+
+def test_validator_meldung_nennt_alle_strassenzeilen():
+    from modules.invoice_validator import REQUIRED_HEADER_FIELDS
+    msg = REQUIRED_HEADER_FIELDS["customerstreetname"][1]
+    assert "STREET1" in msg and "STREET3" in msg
+
+
+def test_fetch_invoice_verteilt_strassenzeilen(monkeypatch):
+    """Echte Integration: fetch_invoice mit Fake-Cursor, nicht nur Quelltextsuche."""
+    from contextlib import contextmanager
     from modules import invoice_fetcher
-    assert "apply_customer_address" in inspect.getsource(invoice_fetcher.fetch_invoice)
+
+    rows = {
+        "invoice_header.sql": ({"ID": "1", "CUSTOMERSTREETNAME": None, "CUSTOMERADRID": 7,
+                                "CUSTOMERADRSTREET1": None, "CUSTOMERADRSTREET2": "Am Markt 5",
+                                "CUSTOMERADRSTREET3": "c/o Einkauf",
+                                "CUSTOMERPRIMSTREET1": None, "CUSTOMERPRIMSTREET2": None,
+                                "CUSTOMERPRIMSTREET3": None, "DOCUMENTCURRENCYCODE": "EUR"},),
+        "invoice_lines.sql": (), "invoice_tax.sql": (), "invoice_totals.sql": (),
+    }
+
+    class _Cur:
+        def execute(self, sql, params=None):
+            self.rows = next((r for k, r in rows.items() if sql == k), ())
+            self.description = [(c,) for c in (self.rows[0].keys() if self.rows else ())]
+
+        def fetchall(self):
+            return [tuple(r.values()) for r in self.rows]
+
+        def fetchone(self):
+            return None
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+    @contextmanager
+    def _fake_conn():
+        yield _Conn()
+
+    monkeypatch.setattr(invoice_fetcher, "get_connection", _fake_conn)
+    monkeypatch.setattr(invoice_fetcher, "_read_sql", lambda name: name)
+    monkeypatch.setattr(invoice_fetcher, "_resolve_billing_reference_from_payment", lambda c, h: None)
+    inv = invoice_fetcher.fetch_invoice(1)
+    h = inv["header"]
+    assert (h["customerstreetname"], h["customeradditionalstreetname"]) == ("Am Markt 5", "c/o Einkauf")

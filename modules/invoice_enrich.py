@@ -20,16 +20,25 @@ def street_lines(*raw: Optional[str]) -> list[str]:
 def apply_customer_address(header: dict) -> None:
     """Verteilt Strasse 1/2/3 auf StreetName, AdditionalStreetName, AddressLine.
 
-    Quelle ist die Rechnungsadresse (ZINV_XADR_ID); sind dort alle drei Zeilen
-    leer, die Primaeradresse. Liefert das SQL die Spalten nicht (alter
+    Quelle ist die Rechnungsadresse (ZINV_XADR_ID), wenn es sie gibt, sonst
+    die Primaeradresse. Liefert das SQL die Spalten nicht (alter
     Override), bleibt der Kopf unveraendert.
     """
     if not any(k in header for k in _ADR_KEYS + _PRIM_KEYS):
         return
-    lines = street_lines(*(header.get(k) for k in _ADR_KEYS))
+    if "customeradrid" in header:
+        # Eine Quelle je Adresse: existiert die Rechnungsadresse, kommt die
+        # Strasse nur aus ihr (sonst Primaer-Strasse mit fremdem Ort/PLZ).
+        keys = _ADR_KEYS if header.get("customeradrid") else _PRIM_KEYS
+        lines = street_lines(*(header.get(k) for k in keys))
+    else:
+        lines = (street_lines(*(header.get(k) for k in _ADR_KEYS))
+                 or street_lines(*(header.get(k) for k in _PRIM_KEYS)))
     if not lines:
-        lines = street_lines(*(header.get(k) for k in _PRIM_KEYS))
-    if not lines:
+        if header.get("customeradrid"):
+            header["customerstreetname"] = None
+            header["customeradditionalstreetname"] = None
+            header["customeraddressline"] = None
         return
     lines += [None, None]
     header["customerstreetname"] = lines[0]

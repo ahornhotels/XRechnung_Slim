@@ -26,7 +26,7 @@ REQUIRED_HEADER_FIELDS: dict[str, tuple[str, str]] = {
     "suppliercompanyid":           ("supplier.tax_id",      "Hotel-UStID fehlt (WUSS.HotelTaxNumber)"),
     "payeefinancialaccountid":     ("supplier.iban",        "Hotel-IBAN fehlt (WUSS.HotelbankIBAN)"),
     "customername":                ("customer.name",        "Kundenname fehlt (XCMS.XCMS_NAME1)"),
-    "customerstreetname":          ("customer.street",      "Kunden-Strasse fehlt (XADR.XADR_STREET1)"),
+    "customerstreetname":          ("customer.street",      "Kunden-Strasse fehlt (XADR.XADR_STREET1 bis STREET3 der Rechnungs- bzw. Primaeradresse leer)"),
     "customercityname":            ("customer.city",        "Kunden-Ort fehlt (XADR.XADR_CITY)"),
     "customerpostalzone":          ("customer.zip",         "Kunden-PLZ fehlt (XADR.XADR_ZIP)"),
     "customeridentificationcode":  ("customer.country",     "Kunden-Land fehlt (XADR.XADR_XCOU_ID -> XCOU.XCOU_ISO2)"),
