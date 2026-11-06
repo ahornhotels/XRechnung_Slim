@@ -38,6 +38,90 @@ class XmlBuildError(Exception):
     pass
 
 
+def _de_date(iso) -> str:
+    """'2026-02-06' -> '06.02.2026' (unveraendert, wenn nicht parsebar)."""
+    s = str(iso or "")[:10]
+    parts = s.split("-")
+    return f"{parts[2]}.{parts[1]}.{parts[0]}" if len(parts) == 3 else s
+
+
+def deposit_allowances(lines: list) -> tuple[list, list, list]:
+    """Anzahlungsabbuchungen der Schlussrechnung -> Abschlaege (OPERA-Muster).
+
+    Suite8 bucht beim Check-in je Anzahlung ein negatives Paar aus
+    Anzahlungsartikel und Steuer mit Verweis auf die Anzahlungsrechnung
+    (``depositzinvid``). Nach § 14 Abs. 5 Satz 2 UStG werden Entgelt UND
+    Steuer der Anzahlung abgesetzt: je Steuersatz EIN Abschlag
+    "Abzueglich Anzahlungsrechnung Nr. ... vom ..." plus BG-3 je Beleg.
+
+    Wird eine Anzahlung storniert, bucht Suite8 den Storno-Beleg als
+    Plus-Zeile mit gleichem Betrag dazu — solche Paare heben sich auf und
+    tauchen weder im Abschlag noch in BG-3 auf.
+
+    Returns:
+        (allowances, billing_references, problems) — ``problems`` sind
+        Klartext-Gruende, warum die Verrechnung nicht eindeutig ist (dann
+        blockt der Validator; hier wird nichts geraten).
+    """
+    from modules.invoice_fetcher import is_deposit_line
+
+    def _net(ln) -> Decimal:
+        try:
+            return Decimal(str(ln.get("lineextensionamountnet") or 0)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+
+    deps = [ln for ln in lines or [] if is_deposit_line(ln)]
+    if not deps:
+        return [], [], []
+
+    # Storno-Paare (+x / -x, gleiche Kategorie/Satz) aufheben.
+    remaining = list(deps)
+    for pos in [ln for ln in deps if _net(ln) > 0]:
+        if pos not in remaining:
+            continue
+        key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
+        for neg in remaining:
+            if (_net(neg) == -_net(pos)
+                    and _cat_key(neg.get("classifiedtaxcategoryid"),
+                                 neg.get("classifiedtaxcategorypercent")) == key):
+                remaining.remove(pos)
+                remaining.remove(neg)
+                break
+
+    problems = []
+    if any(_net(ln) > 0 for ln in remaining):
+        problems.append("Anzahlung wird auf der Rechnung zurueckgebucht, ohne dass eine "
+                        "gleich hohe Anzahlungsabbuchung gegenuebersteht")
+    if any(not (str(ln.get("depositinvoicenumber") or "").strip()
+                and ln.get("depositinvoicedate")) for ln in remaining):
+        problems.append("Anzahlungsrechnung ohne Nummer oder Datum")
+
+    groups: dict = {}
+    for ln in remaining:
+        key = _cat_key(ln.get("classifiedtaxcategoryid"), ln.get("classifiedtaxcategorypercent"))
+        g = groups.setdefault(key, {"net": Decimal(0), "refs": []})
+        g["net"] += _net(ln)
+        ref = (str(ln.get("depositinvoicenumber") or "").strip(), ln.get("depositinvoicedate"))
+        if ref not in g["refs"]:
+            g["refs"].append(ref)
+
+    allowances, refs = [], []
+    for (cat, pct), g in groups.items():
+        if g["net"] >= 0:
+            continue
+        g_refs = sorted(g["refs"], key=lambda r: (str(r[1] or ""), r[0]))
+        plural = "en" if len(g_refs) > 1 else ""
+        reason = (f"Abzüglich Anzahlungsrechnung{plural} "
+                  + ", ".join(f"Nr. {nr} vom {_de_date(d)}" for nr, d in g_refs))
+        allowances.append({"amount": str(-g["net"]), "category": cat,
+                           "percent": pct, "reason": reason})
+        for nr, d in g_refs:
+            if nr and {"id": nr, "issuedate": d} not in refs:
+                refs.append({"id": nr, "issuedate": d})
+    return allowances, refs, problems
+
+
 def _split_negative_lines_to_allowances(invoice: dict) -> dict:
     """Vorverarbeitung fuer XRechnung-Konformitaet (BR-27, BR-S-01).
 
@@ -102,9 +186,12 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
         cleaned_breakdown.append(b)
     breakdown = cleaned_breakdown
 
+    from modules.invoice_fetcher import is_deposit_line
     pos_lines   = []
-    allowances  = []
+    allowances, billing_refs, _ = deposit_allowances(lines)
     for ln in lines:
+        if is_deposit_line(ln):
+            continue          # als Anzahlungs-Abschlag oben abgebildet
         try:
             price = Decimal(str(ln.get("priceamount") or ln.get("lineextensionamount") or 0))
             net   = Decimal(str(ln.get("lineextensionamountnet") or ln.get("lineextensionamount") or 0))
@@ -165,7 +252,9 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
             "taxamount":          str(v["tax"]),
         }
         for (cat, pct), v in agg.items()
-        if v["taxable"] != 0 or v["tax"] != 0
+        # 0/0 nur behalten, wenn Anzahlungen die Gruppe exakt aufzehren: Position
+        # und Abschlag nutzen sie, BG-23 braucht sie dann (BR-S-01/BR-S-08).
+        if v["taxable"] != 0 or v["tax"] != 0 or billing_refs
     ]
 
     # Falls die Re-Aggregation nichts uebrig laesst (Net = 0 nach Verrechnung),
@@ -201,6 +290,7 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
     out = dict(invoice)
     out["lines"]         = pos_lines
     out["allowances"]    = allowances
+    out["billing_references"] = billing_refs
     out["tax_breakdown"] = new_breakdown
     out["totals"]        = dict(invoice.get("totals") or {})
     out["totals"]["invoicenet"]            = str(sum_lines_net)

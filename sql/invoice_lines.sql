@@ -16,6 +16,9 @@ ItemName ItemName,
 ClassifiedTaxCategoryID ClassifiedTaxCategoryID,
 ClassifiedTaxCategoryPercent ClassifiedTaxCategoryPercent,
 TaxSchemeID TaxSchemeID,
+DepositZinvId DepositZinvId,
+DepositInvoiceNumber DepositInvoiceNumber,
+DepositInvoiceDate DepositInvoiceDate,
 TO_CHAR(LineExtensionAmount_Number-round(LineExtensionAmount_Number*ClassifiedTaxCategoryPercent/(100+ClassifiedTaxCategoryPercent),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 (
@@ -32,6 +35,12 @@ z.zpos_descript  ItemName,
 decode(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),0,'Z','S') ClassifiedTaxCategoryID,
 (select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)  ClassifiedTaxCategoryPercent,
 'VAT' TaxSchemeID,
+-- Anzahlungsabbuchung beim Check-in: negatives DEx/MSx-Paar mit Verweis auf die
+-- Anzahlungsrechnung (ZINV_ROLE=1). xml_builder macht daraus je Steuersatz einen
+-- Abschlag "Abzueglich Anzahlungsrechnung Nr. ... vom ..." plus BG-3.
+z.zpos_deposit_zinv_id DepositZinvId,
+(select d.zinv_number from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceNumber,
+(select to_char(d.zinv_date,'YYYY-MM-DD') from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceDate,
 to_char(round(z.zpos_unitprice,2),'999999990D99','NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 zpil,zpos z

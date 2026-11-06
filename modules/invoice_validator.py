@@ -92,7 +92,33 @@ def validate(invoice: dict) -> list[dict]:
         net_val   = float(totals.get("invoicenet")   or 0)
     except (TypeError, ValueError):
         gross_val, net_val = 0.0, 0.0
-    if abs(gross_val) < 0.005 and abs(net_val) < 0.005:
+    # Anzahlungsabbuchungen (Check-in) pruefen. Eine voll angezahlte Rechnung
+    # (Endbetrag 0) ist eine gueltige Rechnung — die Null-Sperre gilt dann nicht.
+    from modules.invoice_fetcher import is_deposit_line, is_void_storno
+    from modules.xml_builder import deposit_allowances
+    has_deposit = any(is_deposit_line(ln) for ln in lines)
+    if has_deposit:
+        _, _, problems = deposit_allowances(lines)
+        service = [ln for ln in lines if not is_deposit_line(ln)]
+        try:
+            service_net = sum(float(ln.get("lineextensionamountnet") or 0) for ln in service)
+        except (TypeError, ValueError):
+            service_net = 0.0
+        if is_void_storno(invoice):
+            problems.append("Stornorechnung mit Anzahlungsverrechnung")
+        if service_net <= -0.005:
+            problems.append("Gutschrift mit Anzahlungsverrechnung")
+        if abs(service_net) < 0.005:
+            problems.append("nur Anzahlungsbuchungen ohne Leistung "
+                            "(Erstattung/Ausbuchung einer Anzahlung)")
+        for p in problems:
+            issues.append({
+                "field":    "deposit",
+                "severity": "error",
+                "message":  f"Anzahlung nicht automatisch abbildbar: {p} - bitte manuell pruefen.",
+            })
+
+    if abs(gross_val) < 0.005 and abs(net_val) < 0.005 and not has_deposit:
         issues.append({
             "field":    "totals.net",
             "severity": "error",

@@ -19,6 +19,19 @@
   </cac:InvoicePeriod>
   {% endif %}
 
+  {# BG-3 je Anzahlungsrechnung, deren Betrag unten als Abschlag abgesetzt wird
+     (xml_builder.deposit_allowances). #}
+  {% for br in (billing_references or []) %}
+  <cac:BillingReference>
+    <cac:InvoiceDocumentReference>
+      <cbc:ID>{{ br.id|e }}</cbc:ID>
+      {% if br.issuedate %}
+      <cbc:IssueDate>{{ br.issuedate }}</cbc:IssueDate>
+      {% endif %}
+    </cac:InvoiceDocumentReference>
+  </cac:BillingReference>
+  {% endfor %}
+
   <cac:AccountingSupplierParty>
     <cac:Party>
       {% if header.suppliercontactelectronicmail %}

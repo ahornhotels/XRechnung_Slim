@@ -51,6 +51,7 @@ _EXPECTED_OVERRIDE_MARKERS = {
     "invoice_header.sql": ("PaymentRefComment", "xadr_primary"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId",),
     "invoice_totals.sql": ("LineExtensionAmountVat_number",),
+    "invoice_lines.sql": ("DepositZinvId",),
 }
 _warned_stale_overrides: set[str] = set()
 
@@ -106,6 +107,43 @@ def _rows_to_dicts(cursor) -> list[dict]:
     return result
 
 
+# Aeltere Suite8-Versionen kennen ZPOS.ZPOS_DEPOSIT_ZINV_ID evtl. nicht. Dann
+# laeuft die Positions-SQL ohne Anzahlungsbezug (Spalte -> NULL), statt fuer
+# ALLE Rechnungen mit ORA-00904 zu scheitern. Merkt sich das pro Prozess.
+_deposit_column_missing = False
+
+
+def _lines_sql_without_deposit(sql: str) -> str:
+    return re.sub(r"z\.zpos_deposit_zinv_id", "to_number(null)", sql, flags=re.IGNORECASE)
+
+
+def _fetch_lines(cur, zinv_id: int) -> list[dict]:
+    global _deposit_column_missing
+    sql = _read_sql("invoice_lines.sql")
+    if _deposit_column_missing:
+        sql = _lines_sql_without_deposit(sql)
+    try:
+        cur.execute(sql, {"zinv_id": zinv_id})
+    except Exception as e:
+        if _deposit_column_missing or "ZPOS_DEPOSIT_ZINV_ID" not in str(e).upper():
+            raise
+        _deposit_column_missing = True
+        logger.warning(
+            "Spalte ZPOS.ZPOS_DEPOSIT_ZINV_ID fehlt in dieser Suite8-Version - "
+            "Positionen ohne Anzahlungsbezug (%s)", e)
+        cur.execute(_lines_sql_without_deposit(sql), {"zinv_id": zinv_id})
+    return _rows_to_dicts(cur)
+
+
+def is_deposit_line(line: dict) -> bool:
+    """True fuer die Anzahlungsabbuchung beim Check-in: Position mit Verweis
+    auf die Anzahlungsrechnung (ZPOS_DEPOSIT_ZINV_ID)."""
+    try:
+        return int(line.get("depositzinvid") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def fetch_invoice(zinv_id: int) -> Optional[dict]:
     """Holt alle Daten zu einer Rechnung. Gibt None zurueck wenn Header leer (Rechnung nicht gefunden)."""
     with get_connection() as conn:
@@ -117,8 +155,7 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             return None
         header = header_rows[0]
 
-        cur.execute(_read_sql("invoice_lines.sql"), {"zinv_id": zinv_id})
-        lines = _rows_to_dicts(cur)
+        lines = _fetch_lines(cur, zinv_id)
 
         cur.execute(_read_sql("invoice_tax.sql"), {"zinv_id": zinv_id})
         tax_breakdown = _rows_to_dicts(cur)
@@ -277,7 +314,7 @@ def is_credit_note(invoice: dict) -> bool:
     - ZINV_ROLE in (3, 31)  -> offizielle Suite8-Credit-Note
     - Summe der Line-Netto-Betraege < 0  -> de-facto Gutschrift, in der
       Hotel-Praxis die haeufige Form (Suite8-ROLE=0 mit negativen Lines).
-
+      Anzahlungsabbuchungen (is_deposit_line) zaehlen dabei nicht mit.
     - ZINV_VOID_ZINV_ID gesetzt  -> Suite8-Stornorechnung. Sie traegt per ZPIL
       dieselben ZPOS wie das Original mit POSITIVEN Betraegen; ohne diese
       Pruefung ginge sie als zweite Rechnung (380) hinaus.
@@ -293,7 +330,9 @@ def is_credit_note(invoice: dict) -> bool:
         role_int = 0
     if role_int in (3, 31) or is_void_storno(invoice):
         return True
-    lines = invoice.get("lines") or []
+    # Anzahlungsabbuchungen zaehlen nicht: ein Anzahlungsueberhang auf der
+    # Schlussrechnung ist keine Gutschrift.
+    lines = [ln for ln in (invoice.get("lines") or []) if not is_deposit_line(ln)]
     try:
         net_sum = sum(float(ln.get("lineextensionamountnet") or 0) for ln in lines)
     except (TypeError, ValueError):
