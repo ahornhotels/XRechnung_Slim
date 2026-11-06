@@ -26,6 +26,7 @@ def attach_xml_to_wmai(
     xml_bytes: bytes,
     filename: str,
     conn,
+    remove_pdf: bool = False,
 ) -> dict:
     """Atomar XML-Anhang an eine BLOCKSEND=1-Mail haengen.
 
@@ -34,9 +35,12 @@ def attach_xml_to_wmai(
         xml_bytes: das XRechnung-XML als UTF-8-Bytes
         filename: Anhang-Dateiname (z.B. '144853.xml')
         conn: oracledb-Connection mit Write-Rechten
+        remove_pdf: Nur-XML-Versand. Leert den PDF-Hauptanhang der Mail
+            (WMAI_ATTACHMENT_WTXT_ID/_FILE_NAME) in derselben Transaktion.
+            Geloescht wird nichts; WTXT bleibt stehen.
 
     Returns:
-        {'wtxt_id', 'wmaa_id', 'wmai_id'}
+        {'wtxt_id', 'wmaa_id', 'wmai_id', 'pdf_removed'}
 
     Raises:
         RuntimeError: WMAI war beim UPDATE nicht mehr BLOCKSEND=1 (Race
@@ -79,6 +83,25 @@ def attach_xml_to_wmai(
             },
         )
 
+        # 4b) Nur-XML: PDF-Hauptanhang aus der Mail nehmen. Nur ein PDF, nur
+        #     solange die Mail blockiert und ungesendet ist, nie bei RTF.
+        #     0 Zeilen (kein PDF da) ist kein Fehler - die XML geht trotzdem.
+        pdf_removed = False
+        if remove_pdf:
+            cur.execute(
+                """
+                UPDATE WMAI SET WMAI_ATTACHMENT_WTXT_ID = NULL,
+                                WMAI_ATTACHMENT_FILE_NAME = NULL
+                 WHERE WMAI_ID=:wmai_id
+                   AND WMAI_BLOCKSEND=1
+                   AND WMAI_SENT=0
+                   AND LOWER(WMAI_ATTACHMENT_FILE_NAME) LIKE '%.pdf'
+                   AND WMAI_ATTACHMENT_RTF_WTXT_ID IS NULL
+                """,
+                {"wmai_id": wmai_id},
+            )
+            pdf_removed = cur.rowcount == 1
+
         # 5) WMAI entblocken (nur wenn vorher BLOCKSEND=1 und SENT=0)
         cur.execute(
             """
@@ -106,7 +129,8 @@ def attach_xml_to_wmai(
             "Suite8-Attach erfolgreich: wmai=%s wmaa=%s wtxt=%s size=%d",
             wmai_id, wmaa_id, wtxt_id, len(xml_bytes),
         )
-        return {"wtxt_id": wtxt_id, "wmaa_id": wmaa_id, "wmai_id": wmai_id}
+        return {"wtxt_id": wtxt_id, "wmaa_id": wmaa_id, "wmai_id": wmai_id,
+                "pdf_removed": pdf_removed}
     except Exception:
         conn.rollback()
         raise
