@@ -76,6 +76,14 @@ SupplierRegistrationName,
 (select name from V8_EDITOR_NAM b where B.GUEST_ID=zinv_xcms_id) CustomerName,
 /* Changed weil NULL Wert wenn bei RG-Erstellung noch keine Adresse vorhanden (20260703 FW)*/
 --(select xadr_street1 from xadr where xadr_id=zinv_xadr_id)  CustomerStreetName,
+/* Strasse 1/2/3 roh: Rechnungsadresse und Primaeradresse. Python
+   (invoice_enrich.apply_customer_address) ueberspringt leere Zeilen. */
+(select xadr_street1 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet1,
+(select xadr_street2 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet2,
+(select xadr_street3 from xadr where xadr_id=zinv_xadr_id) CustomerAdrStreet3,
+(select xa1.xadr_street1 from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)) CustomerPrimStreet1,
+(select xa1.xadr_street2 from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)) CustomerPrimStreet2,
+(select xa1.xadr_street3 from xadr xa1 where xa1.xadr_id=(select min(xa2.xadr_id) from xadr xa2 where xa2.xadr_xcms_id=zinv_xcms_id and xa2.xadr_primary=1)) CustomerPrimStreet3,
 --(select xadr_city from xadr where xadr_id=zinv_xadr_id)  CustomerCityName,
 --(select xadr_zip from xadr where xadr_id=zinv_xadr_id)  CustomerPostalZone,
 --(select XCOU.XCOU_ISO2 from xadr,xcou where XADR.XADR_XCOU_ID=XCOU.XCOU_ID and  xadr_id=zinv_xadr_id) CustomerIdentificationCode,

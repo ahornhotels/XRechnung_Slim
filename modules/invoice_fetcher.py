@@ -20,6 +20,7 @@ from typing import Optional
 
 from core.db_connector import get_connection
 from core.config_loader import load_json, CONFIG_DIR
+from modules import invoice_enrich
 
 logger = logging.getLogger(__name__)
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
@@ -48,7 +49,7 @@ def _seller_contact_defaults() -> dict:
 # Operator-Override, ist der Override vor den zugehoerigen Fixes gespeichert
 # worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
 _EXPECTED_OVERRIDE_MARKERS = {
-    "invoice_header.sql": ("PaymentRefComment", "xadr_primary"),
+    "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId",),
     "invoice_totals.sql": ("LineExtensionAmountVat_number",),
     "invoice_lines.sql": ("DepositZinvId",),
@@ -183,6 +184,9 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             gross_val = float(gross)
             header["payableamount"] = f"{spay_cl_val:.2f}"
             header["prepaidamount"] = f"{gross_val - spay_cl_val:.2f}"
+
+        # Strasse 1/2/3 -> BT-50/51/163 (leere Zeilen ueberspringen)
+        invoice_enrich.apply_customer_address(header)
 
         # Waehrung: wenn Suite8 nichts liefert (WUSS.BaseCurrency nicht gepflegt),
         # nimm Default aus config/hotel.json (Default 'EUR'). XRechnung braucht

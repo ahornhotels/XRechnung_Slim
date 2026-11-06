@@ -184,7 +184,7 @@ def test_stale_override_marker_erkennung():
 
     old = "select zinv_number id from zinv where zinv_id = :zinv_id"
     assert set(_stale_override_markers("invoice_header.sql", old)) == {
-        "PaymentRefComment", "xadr_primary",
+        "PaymentRefComment", "xadr_primary", "CustomerAdrStreet2",
     }
 
     # Unbekanntes Template -> keine Marker-Erwartung

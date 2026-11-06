@@ -70,8 +70,11 @@
       <cac:PartyName><cbc:Name>{{ header.customername|e }}</cbc:Name></cac:PartyName>
       <cac:PostalAddress>
         <cbc:StreetName>{{ header.customerstreetname|e }}</cbc:StreetName>
+        {% if header.customeradditionalstreetname %}<cbc:AdditionalStreetName>{{ header.customeradditionalstreetname|e }}</cbc:AdditionalStreetName>{% endif %}
         <cbc:CityName>{{ header.customercityname|e }}</cbc:CityName>
         <cbc:PostalZone>{{ header.customerpostalzone }}</cbc:PostalZone>
+        {# UBL-Reihenfolge: AddressLine (BT-163) nach PostalZone, vor Country #}
+        {% if header.customeraddressline %}<cac:AddressLine><cbc:Line>{{ header.customeraddressline|e }}</cbc:Line></cac:AddressLine>{% endif %}
         <cac:Country><cbc:IdentificationCode>{{ header.customeridentificationcode }}</cbc:IdentificationCode></cac:Country>
       </cac:PostalAddress>
       <cac:PartyLegalEntity>
