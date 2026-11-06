@@ -49,6 +49,7 @@ from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
 from slim.api_slim import auth_api as auth_api_module
+from slim.api_slim import settings_api as settings_api_module
 from slim.core_slim import access
 from slim.core_slim import audit_jsonl
 from slim.core_slim.clock import now_local
@@ -107,6 +108,8 @@ app.include_router(update_api_module.router)
 app.include_router(archive_api_module.router)
 app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
+app.include_router(settings_api_module.router)
+app.include_router(settings_api_module.system_router)
 
 
 def _setup_done() -> bool:

@@ -46,6 +46,27 @@ def _seller_contact_defaults() -> dict:
 
 
 
+
+_SELLER_OVERRIDE_KEYS = frozenset({
+    "suppliername", "supplierstreetname", "suppliercityname", "supplierpostalzone",
+    "suppliercompanyid", "payeefinancialaccountid", "payeefinancialaccountbic",
+    "payeefinancialaccountname", "suppliercontacttelephone", "suppliercontactelectronicmail",
+})
+
+
+def _apply_seller_overrides(header: dict) -> None:
+    """Abweichende Verkaeuferdaten aus der Oberflaeche (hotel.json
+    'seller_overrides') haben Vorrang vor den Suite8-WUSS-Werten. Leere Werte
+    bedeuten: Suite8 gilt. Geschrieben wird nie nach Suite8."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    overrides = hotel.get("seller_overrides") or {}
+    if not isinstance(overrides, dict):
+        return
+    for k, v in overrides.items():
+        if k in _SELLER_OVERRIDE_KEYS and v is not None and str(v).strip():
+            header[k] = str(v).strip()
+
+
 def _gastzeile_template() -> str:
     """Vorlage der Gastzeile aus config/hotel.json ('gastzeile'). Fehlt der
     Schluessel: Standard. Ein leerer String bedeutet 'keine Gastzeile'."""
@@ -253,6 +274,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         if not header_rows:
             return None
         header = header_rows[0]
+        # Verkaeuferdaten aus der Oberflaeche ueberschreiben Suite8 (WUSS)
+        _apply_seller_overrides(header)
 
         lines = _fetch_lines(cur, zinv_id)
         # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel

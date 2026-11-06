@@ -80,10 +80,10 @@ async def middleware(request: Request, call_next):
     path = request.url.path
     if path in _PUBLIC:
         return await call_next(request)
-    if not _setup_done():
-        # Ersteinrichtung: Wizard (/setup, /api/setup/*, /api/config/pattern/*)
-        # braucht keine Anmeldung - es gibt noch keine Benutzer, und die
-        # IP-Freigabe laesst ohne Konfiguration nur localhost zu.
+    if not _setup_done() and _is_local(request) and USERS.count() == 0:
+        # Ersteinrichtung am Server: Der Wizard (/setup, /api/setup/*,
+        # /api/config/pattern/*) laeuft ohne Anmeldung - es gibt noch keine
+        # Benutzer. Nur lokal und nur, solange niemand angelegt ist.
         return await call_next(request)
     sess = SESSIONS.get(request.cookies.get(COOKIE))
     user = USERS.get(sess["user"]) if sess else None
@@ -132,17 +132,15 @@ def login(payload: LoginPayload, request: Request):
     name = payload.username.strip()
     fail = HTTPException(401, "Anmeldung fehlgeschlagen")
     # Sperre je Adresse UND Benutzer: ein Dritter im Netz kann den Verwalter
-    # nicht aussperren; am Server selbst (localhost) gibt es keine Sperre.
-    local = _is_local(request)
+    # nicht aussperren (andere Adresse = eigener Zaehler), auch nicht am Server.
     key = f"{_client_ip(request)}|{name}"
-    if not local and GUARD.blocked(key):
+    if GUARD.blocked(key):
         _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
     user = USERS.get(name)
     ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
-        if not local:
-            GUARD.fail(key)
+        GUARD.fail(key)
         _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail
     GUARD.ok(key)

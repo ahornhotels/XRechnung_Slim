@@ -124,3 +124,22 @@ def test_sperrliste_waechst_nicht_unbegrenzt():
     for i in range(1000):
         g.fail(f"name{i}")
     assert len(g._fails) <= 100
+
+
+def test_aktive_sperre_wird_nicht_verdraengt():
+    g = auth.LoginGuard(max_keys=10)
+    for _ in range(5):
+        g.fail("opfer")
+    for i in range(50):
+        for _ in range(5):
+            g.fail(f"spray{i}")
+    assert g.blocked("opfer")
+
+
+def test_schnelle_schreibfolge_liefert_aktuellen_stand(tmp_path):
+    s = auth.UserStore(tmp_path / "users.json")
+    s.create("admin", "langes-passwort", "verwalten")
+    for i in range(20):
+        s.create(f"u{i}", "langes-passwort", "ansehen")
+        s.set_role(f"u{i}", "verwalten")
+        assert s.get(f"u{i}")["role"] == "verwalten"

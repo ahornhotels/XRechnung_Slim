@@ -84,6 +84,9 @@ class UserStore:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.path)
+        # Cache direkt mit dem geschriebenen Stand fuellen: zwei Schreibvorgaenge
+        # kurz hintereinander koennen dieselbe mtime haben (Windows-Aufloesung).
+        self._cache = (self.path.stat().st_mtime_ns, json.loads(json.dumps(data)))
 
     def count(self) -> int:
         return len(self._load())
@@ -216,10 +219,13 @@ class LoginGuard:
                 self._fails.pop(key, None)
             else:
                 self._fails[key] = fails
+            # Begrenzen, ohne aktive Sperren zu verdraengen: zuerst Abgelaufenes
+            # weg, dann die aeltesten Fehlversuchs-Zaehler (keine Sperren).
+            if len(self._until) > self.max_keys:
+                for k in [k for k, u in self._until.items() if u <= now]:
+                    del self._until[k]
             while len(self._fails) > self.max_keys:
                 self._fails.pop(next(iter(self._fails)))
-            while len(self._until) > self.max_keys:
-                self._until.pop(next(iter(self._until)))
 
     def ok(self, key: str) -> None:
         with self._lock:

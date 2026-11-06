@@ -136,6 +136,7 @@ def test_login_wird_auditiert_ohne_passwort(setup, tmp_path):
 def test_vor_der_einrichtung_fuehrt_wurzel_zum_wizard(setup):
     client, _, mp = setup
     mp.setattr(auth_api, "_setup_done", lambda: False)
+    mp.setattr(auth_api, "_is_local", lambda request: True)
     assert client.get("/", follow_redirects=False).status_code == 200   # Route leitet selbst auf /setup
 
 
@@ -222,6 +223,7 @@ def test_fehler_ohne_passwort_im_text(setup):
 def test_vor_einrichtung_wizard_api_erreichbar(setup):
     client, _, mp = setup
     mp.setattr(auth_api, "_setup_done", lambda: False)
+    mp.setattr(auth_api, "_is_local", lambda request: True)
     assert client.get("/api/sql/templates").status_code == 200   # steht stellvertretend fuer /api/config/pattern/*
 
 
@@ -244,16 +246,6 @@ def test_passwortwechsel_beendet_andere_sitzungen(setup):
     assert client.get("/api/status").status_code == 200        # eigene Sitzung neu ausgestellt
 
 
-def test_sperre_je_adresse_localhost_frei(setup):
-    client, users, mp = setup
-    users.create("admin", "langes-passwort", "verwalten", must_change=False)
-    for _ in range(5):
-        _login(client, "admin", "falsches-passwort")
-    assert _login(client, "admin", "langes-passwort").status_code == 401     # gleiche Adresse gesperrt
-    mp.setattr(auth_api, "_is_local", lambda request: True)
-    assert _login(client, "admin", "langes-passwort").status_code == 200     # am Server immer moeglich
-
-
 def test_lokal_erkennt_ipv6_mapped():
     class R:  # minimaler Request-Ersatz
         class client:
@@ -266,3 +258,28 @@ def test_bootstrap_nur_einmal_auch_gleichzeitig(setup):
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
     with __import__("pytest").raises(auth.AuthError):
         users.create("zweiter", "langes-passwort", "verwalten", only_if_empty=True)
+
+
+# --- Security-Review 2 ---
+
+def test_vor_einrichtung_nur_lokal_und_ohne_benutzer(setup):
+    client, users, mp = setup
+    mp.setattr(auth_api, "_setup_done", lambda: False)
+    assert client.get("/api/sql/templates").status_code == 401          # nicht lokal
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    assert client.get("/api/sql/templates").status_code == 200          # lokal, keine Benutzer
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    assert client.get("/api/sql/templates").status_code == 401          # Benutzer da -> Anmeldung
+
+
+def test_sperre_auch_lokal_aber_getrennt_von_fremden(setup):
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    for _ in range(5):
+        _login(client, "admin", "falsches-passwort")                     # fremde Adresse
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    mp.setattr(auth_api, "_client_ip", lambda request: "127.0.0.1")
+    assert _login(client, "admin", "langes-passwort").status_code == 200  # lokal nicht betroffen
+    for _ in range(5):
+        _login(client, "admin", "falsches-passwort")
+    assert _login(client, "admin", "langes-passwort").status_code == 401  # lokal eigene Sperre
