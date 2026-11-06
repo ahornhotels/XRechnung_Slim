@@ -278,14 +278,14 @@ def test_lokal_keine_sperre_aber_ein_versuch_pro_sekunde(setup):
     client, users, mp = setup
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
     mp.setattr(auth_api, "_is_local", lambda request: True)
-    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
     assert _login(client, "admin", "falsches-passwort").status_code == 401
-    assert _login(client, "admin", "langes-passwort").status_code == 401     # zu frueh
-    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])                              # Sekunde vorbei
+    assert _login(client, "admin", "langes-passwort").status_code == 429     # zu frueh
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})                              # Sekunde vorbei
     for _ in range(10):
-        mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+        mp.setattr(auth_api, "_LOCAL_NEXT", {})
         _login(client, "admin", "falsches-passwort")
-    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
     assert _login(client, "admin", "langes-passwort").status_code == 200     # nie gesperrt
 
 
@@ -294,7 +294,7 @@ def test_lokal_parallele_versuche_pruefen_nur_einmal(setup):
     client, users, mp = setup
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
     mp.setattr(auth_api, "_is_local", lambda request: True)
-    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
     calls = []
     real = auth.verify_password
     mp.setattr(auth_api.auth, "verify_password", lambda pw, h: calls.append(1) or real(pw, h))
@@ -305,3 +305,22 @@ def test_lokal_parallele_versuche_pruefen_nur_einmal(setup):
         th.join()
     assert len(calls) == 1
 
+
+
+def test_lokal_fremder_name_verbraucht_keinen_versuch_des_verwalters(setup):
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
+    for i in range(5):
+        _login(client, f"unbekannt{i}", "irgendwas-langes")
+    assert _login(client, "admin", "langes-passwort").status_code == 200
+
+
+def test_lokal_erfolg_gibt_platz_sofort_frei(setup):
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
+    assert _login(client, "admin", "langes-passwort").status_code == 200
+    assert _login(client, "admin", "langes-passwort").status_code == 200

@@ -45,22 +45,33 @@ _ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/a
 _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 
 
-# Am Server (localhost) gibt es keine Sperre, aber hoechstens einen
-# Anmeldeversuch pro Sekunde. Zu fruehe Versuche werden sofort abgelehnt
-# (kein Warten, kein Thread blockiert, keine Passwortpruefung).
+# Am Server (localhost) gibt es keine Sperre, aber je Benutzername hoechstens
+# einen Versuch pro Sekunde. Zu fruehe Versuche werden sofort mit 429
+# abgelehnt (kein Warten, kein Thread blockiert, keine Passwortpruefung). Ein
+# erfolgreicher Versuch gibt den Platz sofort frei; Fehlversuche mit anderen
+# (z. B. unbekannten) Namen beruehren den Platz eines echten Kontos nicht.
 _LOCAL_RATE_LOCK = threading.Lock()
-_LOCAL_NEXT = [0.0]
+_LOCAL_NEXT: dict[str, float] = {}
 _LOCAL_INTERVAL = 1.0
+_LOCAL_MAX_KEYS = 10_000
 
 
-def _local_slot_free() -> bool:
-    """Reserviert den naechsten lokalen Versuch; False = zu frueh."""
+def _local_slot_free(name: str) -> bool:
+    """Reserviert den naechsten lokalen Versuch fuer `name`; False = zu frueh."""
     with _LOCAL_RATE_LOCK:
         now = time.monotonic()
-        if now < _LOCAL_NEXT[0]:
+        if now < _LOCAL_NEXT.get(name, 0.0):
             return False
-        _LOCAL_NEXT[0] = now + _LOCAL_INTERVAL
+        if len(_LOCAL_NEXT) >= _LOCAL_MAX_KEYS:
+            for k in [k for k, t in _LOCAL_NEXT.items() if t <= now]:
+                del _LOCAL_NEXT[k]
+        _LOCAL_NEXT[name] = now + _LOCAL_INTERVAL
         return True
+
+
+def _local_slot_release(name: str) -> None:
+    with _LOCAL_RATE_LOCK:
+        _LOCAL_NEXT.pop(name, None)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -160,9 +171,9 @@ def login(payload: LoginPayload, request: Request):
     if not local and GUARD.blocked(key):
         _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
-    if local and not _local_slot_free():
+    if local and not _local_slot_free(name[:64]):
         _audit("login_throttled", user=name)
-        raise fail
+        raise HTTPException(429, "Bitte eine Sekunde warten und erneut versuchen")
     user = USERS.get(name)
     ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
@@ -171,6 +182,8 @@ def login(payload: LoginPayload, request: Request):
         _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail
     GUARD.ok(key)
+    if local:
+        _local_slot_release(name[:64])
     token = SESSIONS.create(name)
     _audit("login_ok", user=name)
     resp = JSONResponse({"ok": True, "role": user.get("role"),
