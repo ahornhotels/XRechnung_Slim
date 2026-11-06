@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einstellungen – XRechnung Slim</title>
+<style>
+  :root { --bg:#f4f5f7; --fg:#1a1a1a; --accent:#2d7a3c; --accent-fg:#fff; --error:#b13a2c; --warn:#8a5b15;
+          --warn-bg:#fdf3df; --panel:#fff; --border:#d8dce2; --muted:#6a7280; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111; --fg:#e8e8e8; --accent:#b6d100; --accent-fg:#000; --error:#e06a50; --warn:#ffd47a;
+            --warn-bg:#4a2a13; --panel:#1c1c1c; --border:#2a2a2a; --muted:#999; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  nav { font-size:14px; margin-bottom:16px; } nav a { color:var(--accent); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px 18px 8px; margin-bottom:18px; }
+  .card h2 { font-size:17px; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .field { display:grid; grid-template-columns: minmax(180px, 260px) 1fr; gap:6px 16px; padding:10px 0; border-top:1px solid var(--border); }
+  .field:first-of-type { border-top:0; }
+  .field .lbl { font-weight:500; }
+  .field .help { grid-column: 2; color:var(--muted); font-size:13px; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:4px; background:var(--warn-bg); color:var(--warn); margin-left:6px; white-space:nowrap; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; font-size:14px; }
+  textarea { min-height:60px; font-family: ui-monospace, Consolas, monospace; }
+  .err { color:var(--error); font-size:13px; grid-column:2; }
+  .actions { display:flex; gap:10px; align-items:center; padding:12px 0; flex-wrap:wrap; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:var(--accent-fg); cursor:pointer; font-size:14px; }
+  button.secondary { background:transparent; color:var(--fg); border:1px solid var(--border); }
+  .status { font-size:14px; } .status.ok { color:var(--accent); } .status.bad { color:var(--error); }
+  .banner { background:var(--warn-bg); color:var(--warn); border-radius:8px; padding:10px 14px; margin-bottom:16px; display:none; }
+  .seller { display:grid; grid-template-columns: minmax(160px, 220px) 1fr 1fr; gap:6px 12px; align-items:center; padding:6px 0; border-top:1px solid var(--border); }
+  .seller.head { color:var(--muted); font-size:13px; border-top:0; }
+  .muted { color:var(--muted); }
+  @media (max-width: 640px) {
+    .field { grid-template-columns: 1fr; } .field .help, .err { grid-column:1; }
+    .seller { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Einstellungen</h1>
+  <nav><a href="/">← Übersicht</a> · <a href="/users">Benutzer</a></nav>
+  <div class="banner" id="restart-banner">
+    Einige gespeicherte Änderungen wirken erst nach einem Neustart des Dienstes.
+    <button id="restart">Jetzt neu starten</button>
+  </div>
+  <div id="sections"><p class="muted">Lädt …</p></div>
+
+  <div class="card">
+    <h2>Verkäuferdaten</h2>
+    <p class="muted" style="margin-top:0">Die Werte kommen aus Suite8 (Hoteleinstellungen). Ein abweichender Wert hat in der XRechnung Vorrang; leer = Suite8 gilt. Slim schreibt nie nach Suite8.</p>
+    <div class="seller head"><div>Feld</div><div>Wert aus Suite8</div><div>Abweichend</div></div>
+    <div id="seller"></div>
+    <div class="actions"><button id="seller-save">Speichern</button><span class="status" id="seller-status"></span></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+
+async function api(url, method, body) {
+  const r = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" },
+                              body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { location.href = "/login"; throw new Error("Nicht angemeldet"); }
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) { const e = new Error(typeof j.detail === "string" ? j.detail : "Eingaben prüfen"); e.detail = j.detail; e.status = r.status; throw e; }
+  return j;
+}
+
+function input(f) {
+  const id = "f-" + f.key;
+  if (f.type === "bool") return `<select id="${id}"><option value="true"${f.value ? " selected" : ""}>ja</option><option value="false"${!f.value ? " selected" : ""}>nein</option></select>`;
+  if (f.type === "select") return `<select id="${id}">${f.choices.map(c => `<option${c === f.value ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
+  if (f.type === "int") return `<input type="number" id="${id}" value="${esc(f.value)}">`;
+  if (f.type === "list") return `<textarea id="${id}" placeholder="durch Komma getrennt">${esc((f.value || []).join(", "))}</textarea>`;
+  if (f.type === "secret") return `<input type="password" id="${id}" autocomplete="new-password" placeholder="${f.gesetzt ? "gesetzt – leer lassen = unverändert" : "nicht gesetzt"}">`;
+  return `<input type="text" id="${id}" value="${esc(f.value)}">`;
+}
+
+function render(sections) {
+  $("sections").innerHTML = sections.map(sec => `
+    <div class="card" data-section="${esc(sec.id)}">
+      <h2>${esc(sec.label)}${sec.id === "datenbank" ? '<button class="secondary" id="dbtest">Verbindung testen</button>' : ""}</h2>
+      ${sec.fields.map(f => `
+        <div class="field">
+          <label class="lbl" for="f-${esc(f.key)}">${esc(f.label)}${f.restart ? '<span class="tag">Neustart</span>' : ""}</label>
+          <div>${input(f)}</div>
+          <div class="help">${esc(f.help)}</div>
+          <div class="err" id="e-${esc(f.key)}"></div>
+        </div>`).join("")}
+      <div class="actions"><button class="save">Speichern</button><span class="status"></span></div>
+    </div>`).join("");
+  window._sections = sections;
+}
+
+function collect(sec) {
+  const values = {};
+  for (const f of sec.fields) {
+    const el = $("f-" + f.key);
+    if (f.type === "secret") { if (el.value) values[f.key] = el.value; continue; }
+    values[f.key] = f.type === "bool" ? el.value === "true" : el.value;
+  }
+  return values;
+}
+
+document.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("save")) {
+    const card = e.target.closest(".card");
+    const sec = window._sections.find(s => s.id === card.dataset.section);
+    const status = card.querySelector(".status");
+    card.querySelectorAll(".err").forEach(el => el.textContent = "");
+    status.className = "status"; status.textContent = "Speichert …";
+    try {
+      const r = await api("/api/settings/" + sec.id, "PUT", { values: collect(sec) });
+      status.className = "status ok"; status.textContent = "Gespeichert.";
+      if (r.restart) $("restart-banner").style.display = "block";
+      for (const f of sec.fields) if (f.type === "secret") $("f-" + f.key).value = "";
+    } catch (err) {
+      status.className = "status bad"; status.textContent = err.message;
+      if (err.detail && typeof err.detail === "object")
+        for (const [k, v] of Object.entries(err.detail)) { const el = $("e-" + k); if (el) el.textContent = v; }
+    }
+  }
+  if (e.target.id === "dbtest") {
+    const status = e.target.closest(".card").querySelector(".status");
+    status.className = "status"; status.textContent = "Teste gespeicherte Verbindung …";
+    try {
+      const r = await api("/api/settings/db-test", "POST");
+      status.className = "status " + (r.ok ? "ok" : "bad");
+      status.textContent = r.ok ? "Verbindung in Ordnung." : ("Fehler: " + r.error);
+    } catch (err) { status.className = "status bad"; status.textContent = err.message; }
+  }
+  if (e.target.id === "restart") {
+    if (!confirm("Dienst jetzt neu starten? Die Oberfläche ist danach kurz nicht erreichbar.")) return;
+    try { await api("/api/system/restart", "POST"); } catch (err) {}
+    $("restart-banner").textContent = "Neustart läuft … Die Seite lädt in 15 Sekunden neu.";
+    setTimeout(() => location.reload(), 15000);
+  }
+});
+
+async function loadSeller() {
+  const rows = await api("/api/settings/seller");
+  $("seller").innerHTML = rows.map(r => `
+    <div class="seller">
+      <div>${esc(r.label)}</div>
+      <div class="muted">${r.suite8 ? esc(r.suite8) : "–"}</div>
+      <div><input type="text" data-key="${esc(r.key)}" value="${esc(r.abweichend)}" placeholder="Suite8 gilt"></div>
+    </div>`).join("");
+}
+
+$("seller-save").addEventListener("click", async () => {
+  const values = {};
+  document.querySelectorAll("#seller input").forEach(i => values[i.dataset.key] = i.value);
+  const st = $("seller-status");
+  try { await api("/api/settings/seller", "PUT", { values }); st.className = "status ok"; st.textContent = "Gespeichert."; }
+  catch (err) { st.className = "status bad"; st.textContent = err.message; }
+});
+
+(async () => {
+  try { render((await api("/api/settings")).sections); }
+  catch (err) { $("sections").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
+  try { await loadSeller(); } catch (err) { $("seller").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
+})();
+</script>
+</body>
+</html>
