@@ -83,7 +83,17 @@ def _auslagen_artikel() -> list[str]:
 def _positionen_zusammenfassen() -> bool:
     """hotel.json 'positionen_zusammenfassen' (Standard an)."""
     hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
-    return hotel.get("positionen_zusammenfassen", True) is not False
+    value = hotel.get("positionen_zusammenfassen", True)
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return True
+    if str(value).strip().lower() in ("0", "false", "nein", "no", "aus", "off"):
+        return False
+    if str(value).strip().lower() in ("1", "true", "ja", "yes", "an", "on"):
+        return True
+    logger.warning("hotel.json 'positionen_zusammenfassen'=%r unklar - zusammenfassen bleibt an", value)
+    return True
 
 
 _warned_xml_only_query = False

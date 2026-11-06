@@ -227,11 +227,22 @@ def guest_label(ln: dict) -> Optional[str]:
     return f"Zi. {room}{_HINWEIS_TRENNER}{name}" if room else name
 
 
+_ZERO_CATS = {"Z", "E", "AE", "G", "K", "O"}
+_PER_BOOKING_KEYS = ("lineextensionamountvat", "lineextensionamountvat_number",
+                     "lineextensionamountnet_number", "zposid", "postdate",
+                     "originpostdate", "grossunitprice")
+
+
 def _room_sort(room) -> tuple:
     if _blank(room):
         return (2, 0, "")
     r = str(room).strip()
-    return (0, int(r), r) if r.isdigit() else (1, 0, r)
+    if r.isdecimal():
+        try:
+            return (0, int(r), r)
+        except ValueError:
+            pass
+    return (1, 0, r)
 
 
 def _build_position(members: list[dict], multi: bool) -> dict:
@@ -244,9 +255,17 @@ def _build_position(members: list[dict], multi: bool) -> dict:
     pos["lineextensionamountnet"] = str(net.quantize(cent))
     pos["lineextensionamount"] = str(gross.quantize(cent))
     pct = _d(pos.get("classifiedtaxcategorypercent"))
+    if str(pos.get("classifiedtaxcategoryid") or "").upper() in _ZERO_CATS:
+        pct = Decimal(0)          # wie xml_builder._norm_z_pct: Z/E/O tragen keine Steuer
     if pct is not None:
         pos["vatparts"] = str(sum((n * pct / 100).quantize(cent) for n in nets).quantize(cent))
-    qtys = [_d(m.get("quantity")) for m in members]
+    # Suite8 legt das Vorzeichen mal in die Menge, mal in den Preis (auch in
+    # beide). Massgeblich ist der Betrag: Menge = sign(Betrag) * |Menge|,
+    # der Preis wird dadurch immer positiv.
+    qtys = []
+    for m, n in zip(members, nets):
+        q = _d(m.get("quantity"))
+        qtys.append(None if q is None else (-abs(q) if n < 0 else abs(q)))
     qty = sum(qtys) if all(q is not None for q in qtys) else None
     price = None
     if qty is not None and qty != 0 and (qty > 0) == (net >= 0):
@@ -263,6 +282,10 @@ def _build_position(members: list[dict], multi: bool) -> dict:
     label = guest_label(pos) if multi else None
     pos["note"] = label
     pos["guestlabel"] = label
+    # Werte der einzelnen Buchung gelten fuer die Position nicht mehr.
+    for k in _PER_BOOKING_KEYS:
+        pos.pop(k, None)
+    pos["quantity"] = None if qty is None else _qty_text(qty)
     return pos
 
 

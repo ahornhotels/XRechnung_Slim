@@ -158,3 +158,58 @@ def test_abschlagsgrund_nennt_gast_in_gruppe():
     doc, ns, _ = _bg23(_rechnung(ie.group_lines(lines, merge=True)))
     reasons = [a.findtext("cbc:AllowanceChargeReason", namespaces=ns) for a in doc.findall("cac:AllowanceCharge", ns)]
     assert reasons == ["Rabatt · Zi. 102 · Max Beispiel"]
+
+
+# --- Review zum Zusammenfassen ---
+
+def test_z_mit_satz_traegt_keine_steuer():
+    """Suite8 liefert Z mit Satz 19 (Steuerzeile mit Summe 0): keine Steuer in vatparts."""
+    a = _b(gross=100.0, net=100.0, pct=19); a["classifiedtaxcategoryid"] = "Z"
+    b = dict(a); b["postdate"] = "2026-03-03"
+    rab = _b(item="Rabatt", gross=-20.0, net=-20.0, qty=-1, unit=20.0, pct=19); rab["classifiedtaxcategoryid"] = "Z"
+    out = ie.group_lines([a, b, rab], merge=True)
+    assert all(p.get("vatparts") in (None, "0.00") for p in out)
+    _, _, groups = _bg23(_rechnung(out))
+    assert all(tax == "0.00" for _, _, tax in groups)
+
+
+def test_doppelt_negativ_ist_normale_buchung():
+    """Live-Befund: Das Vorzeichen steckt in Menge ODER Preis; -1 x -107 ist
+    eine Belastung ueber +107 und gehoert zur gleichen Position."""
+    a = _b()                                                     # +1 x 107
+    k = _b(gross=107.0, net=100.0, qty=-1, unit=-107.0, day="2026-03-03")   # -1 x -107 = +107
+    out = ie.group_lines([a, k], merge=True)
+    assert len(out) == 1 and out[0]["invoicedquantity"] == "2" and out[0]["priceamount"] == "100.0000"
+
+
+def test_rueckgabe_ueber_negative_menge_eigene_position():
+    """Pfand +1 x 10 und Rueckgabe -1 x 10: nicht verrechnet (Nutzervorgabe),
+    die Rueckgabe hat Menge 1 mit Betrag -10 und positivem Preis."""
+    out = ie.group_lines([_b(item="Pfand", gross=10.0, net=8.40, pct=19),
+                          _b(item="Pfand", gross=-10.0, net=-8.40, pct=19, qty=-1, unit=10.0, day="2026-03-04")],
+                         merge=True)
+    assert sorted(p["lineextensionamountnet"] for p in out) == ["-8.40", "8.40"]
+    neg = next(p for p in out if p["lineextensionamountnet"] == "-8.40")
+    assert neg["invoicedquantity"] == "-1" and neg["priceamount"] == "8.4000"
+
+
+def test_keine_einzelwerte_der_ersten_buchung_uebrig():
+    lines = [dict(_b(), lineextensionamountvat="7.00", zposid=1),
+             dict(_b(day="2026-03-03"), lineextensionamountvat="7.00", zposid=2)]
+    p = ie.group_lines(lines, merge=True)[0]
+    assert p["quantity"] == "2"
+    for k in ("lineextensionamountvat", "zposid", "postdate"):
+        assert k not in p, k
+
+
+def test_zimmer_mit_sonderziffer_sortiert():
+    out = ie.group_lines([_b(yres=1, xcms=1, room="²"), _b(yres=2, xcms=2, name="Max Beispiel", room="10")], merge=True)
+    assert [p["originroom"] for p in out] == ["10", "²"]
+
+
+def test_schalter_zusammenfassen_textwerte(monkeypatch):
+    from modules import invoice_fetcher
+    for value, expected in ((False, False), ("false", False), ("nein", False), (0, False), (True, True), (None, True)):
+        monkeypatch.setattr(invoice_fetcher, "load_json",
+                            lambda p, default=None, v=value: {} if v is None else {"positionen_zusammenfassen": v})
+        assert invoice_fetcher._positionen_zusammenfassen() is expected, value

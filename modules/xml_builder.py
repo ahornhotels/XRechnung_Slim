@@ -213,7 +213,8 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
         if price < 0 or net < 0:
             reason = ln.get("itemname") or "Gutschrift"
             if ln.get("guestlabel"):   # Gruppenrechnung: Gast im Grund (BT-97)
-                reason = f"{reason} · {ln['guestlabel']}"
+                from modules.invoice_enrich import _HINWEIS_TRENNER
+                reason = f"{reason}{_HINWEIS_TRENNER}{ln['guestlabel']}"
             allowances.append({
                 "amount":     str(abs(net)),
                 "category":   ln.get("classifiedtaxcategoryid") or "S",
