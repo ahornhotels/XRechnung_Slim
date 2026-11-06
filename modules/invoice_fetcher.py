@@ -62,6 +62,42 @@ def _guest_info_available() -> bool:
     return "ZPOS_ORIGINATED_YRES_ID" not in _missing_line_columns
 
 
+
+_warned_xml_only_query = False
+_XML_ONLY_SQL = """
+select 1 from zinv, zwin, xmnr, xmty
+ where zinv_id = :zinv_id
+   and zinv_zwin_id = zwin_id
+   and xmnr_xmty_id = xmty_id
+   and upper(xmty_shortdesc)=upper(:code)
+   and xmnr_xcms_id in (zwin_invoice_to_xcms_id, zinv_xcms_id)
+   and rownum = 1
+"""
+
+
+def _xml_only_reason(cur, zinv_id: int) -> Optional[str]:
+    """Nur-XML-Versand? 'global' (hotel.json xml_only_all), 'membership'
+    (Rechnungsempfaenger hat das Membership mit Kurzbezeichnung
+    xml_only_membership, Standard 'PDF') oder None (PDF und XML wie bisher).
+    Ein DB-Fehler fuehrt zu None: lieber PDF mitsenden als blockieren."""
+    global _warned_xml_only_query
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    if hotel.get("xml_only_all") is True:
+        return "global"
+    code = hotel.get("xml_only_membership", "PDF")
+    if not isinstance(code, str) or not code.strip():
+        return None
+    try:
+        cur.execute(_XML_ONLY_SQL, {"zinv_id": zinv_id, "code": code.strip()})
+        return "membership" if cur.fetchone() else None
+    except Exception as e:
+        if not _warned_xml_only_query:
+            _warned_xml_only_query = True
+            logger.warning("Nur-XML-Pruefung (Membership %s) nicht moeglich - "
+                           "PDF wird mitgesendet (%s)", code, e)
+        return None
+
+
 # Marker, die im aktuellen Repo-Template vorkommen. Fehlen sie in einem
 # Operator-Override, ist der Override vor den zugehoerigen Fixes gespeichert
 # worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
@@ -254,6 +290,7 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             "lines": lines,
             "tax_breakdown": tax_breakdown,
             "totals": totals,
+            "xml_only": _xml_only_reason(cur, zinv_id),
         }
 
 

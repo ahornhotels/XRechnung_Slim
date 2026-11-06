@@ -86,3 +86,41 @@ def test_fehler_beim_leeren_rollback():
     with pytest.raises(RuntimeError):
         _attach(conn, remove_pdf=True)
     assert conn.rollbacks == 1 and conn.commits == 0
+
+
+# --- Poller reicht xml_only durch und protokolliert ---
+
+@pytest.mark.parametrize("reason,removed", [("membership", True), ("global", False), (None, False)])
+def test_poller_reicht_xml_only_durch(tmp_path, reason, removed):
+    import json
+    from unittest.mock import MagicMock, patch
+    from slim.jobs_slim import poller
+    from tests_slim.test_poller_loop import _mock_hotel_cfg, _wmai_row
+
+    conn = MagicMock(); cm = MagicMock()
+    cm.__enter__ = MagicMock(return_value=conn); cm.__exit__ = MagicMock(return_value=None)
+    attach = MagicMock(return_value={"wmaa_id": 7, "wtxt_id": 8, "wmai_id": 101, "pdf_removed": removed})
+    hotel = _mock_hotel_cfg(filename_pattern="", subject_pattern=r"Rechnung Nr\.?\s*(?P<zinv_number>\d+)")
+    with patch.object(poller, "load_hotel_config", return_value=hotel), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller, "find_pending_wmai", return_value=[_wmai_row(101, "x.pdf", "Rechnung Nr. 144853")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=999), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 999, "header": {"id": "144853"}, "lines": [],
+                                    "totals": {}, "xml_only": reason}), \
+         patch.object(poller.invoice_validator, "validate", return_value=[]), \
+         patch.object(poller.xml_builder, "build_and_validate", return_value=b"<Invoice/>"), \
+         patch.object(poller.kosit_validator, "validate"), \
+         patch.object(poller, "attach_xml_to_wmai", attach):
+        poller.run_once(data_dir=tmp_path)
+
+    assert attach.call_args.kwargs["remove_pdf"] is bool(reason)
+    entries = [json.loads(l) for f in tmp_path.glob("audit-*.jsonl")
+               for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
+    ok = next(e for e in entries if e["event"] == "attach_ok")
+    if reason:
+        assert ok["details"]["xml_only"] == reason
+        assert ok["details"]["pdf_removed"] is removed
+        assert ok["details"].get("pdf_not_removed", False) is (not removed)
+    else:
+        assert "xml_only" not in ok["details"]

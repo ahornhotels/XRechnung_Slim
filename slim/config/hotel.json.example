@@ -13,5 +13,7 @@
   "seller_contact_name": "Buchhaltung",
   "seller_contact_phone": "",
   "seller_contact_email": "",
-  "gastzeile": "Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"
+  "gastzeile": "Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}",
+  "xml_only_all": false,
+  "xml_only_membership": "PDF"
 }

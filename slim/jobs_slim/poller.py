@@ -240,10 +240,24 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 archive_fs.delete_invalid(data_dir, zinv_number)
 
                 # Anhängen (atomar in der Suite8-DB).
+                # Nur-XML (Membership 'PDF' oder globaler Schalter): PDF-
+                # Hauptanhang in derselben Transaktion aus der Mail nehmen.
+                xml_only = inv.get("xml_only")
                 result = attach_xml_to_wmai(
                     wmai_id=wmai_id, xml_bytes=xml,
                     filename=filename, conn=conn,
+                    remove_pdf=bool(xml_only),
                 )
+                xml_only_details = {}
+                if xml_only:
+                    removed = bool(result.get("pdf_removed"))
+                    xml_only_details = {"xml_only": xml_only, "pdf_removed": removed}
+                    if not removed:
+                        xml_only_details["pdf_not_removed"] = True
+                        logger.warning(
+                            "Nur-XML (%s) fuer WMAI %s: kein PDF-Hauptanhang entfernt "
+                            "(keiner da, kein .pdf oder RTF-Anhang) - Mail geht mit vorhandenen Anhaengen",
+                            xml_only, wmai_id)
                 summary["attached"] += 1
                 # Override-Datei nach erfolgreichem Attach löschen — sie
                 # hat ihren Zweck erfüllt, und sollte nicht versehentlich
@@ -258,6 +272,7 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                         "sha256": arch["sha256"],
                         "xml_path": arch["xml_path"],
                         **({"override_consumed": True} if had_override else {}),
+                        **xml_only_details,
                     },
                 )
 
