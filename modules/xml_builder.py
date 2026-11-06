@@ -34,6 +34,23 @@ def _fmt(value) -> str:
 _env.filters["fmt"] = _fmt
 
 
+def _price4(value) -> str:
+    """Einzelpreis (BT-146) mit 2 bis 4 Nachkommastellen: zusammengefasste
+    Positionen brauchen ihn genauer, damit Menge x Preis = Betrag (R120)."""
+    if value is None:
+        return "0.00"
+    try:
+        s = f"{Decimal(str(value)).quantize(Decimal('0.0001')):.4f}"
+    except (InvalidOperation, ValueError):
+        return "0.00"
+    while s.endswith("0") and len(s.split(".")[1]) > 2:
+        s = s[:-1]
+    return s
+
+
+_env.filters["price4"] = _price4
+
+
 class XmlBuildError(Exception):
     pass
 
@@ -535,7 +552,8 @@ def _make_positive_for_credit_note(invoice: dict) -> dict:
     # Lines: alle Betragsfelder abs()'d
     out["lines"] = []
     for ln in norm_lines:
-        for key in ("priceamount", "lineextensionamount", "lineextensionamountnet"):
+        for key in ("priceamount", "lineextensionamount", "lineextensionamountnet",
+                    "invoicedquantity", "vatparts"):
             v = ln.get(key)
             if v is None:
                 continue

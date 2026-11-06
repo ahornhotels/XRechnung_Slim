@@ -166,8 +166,17 @@
   {% for line in lines %}
   <cac:CreditNoteLine>
     <cbc:ID>{{ loop.index }}</cbc:ID>
+    {# BT-127: Gast und Zimmer bei Gruppenrechnungen (invoice_enrich.group_lines) #}
+    {% if line.note %}<cbc:Note>{{ line.note|e }}</cbc:Note>{% endif %}
     <cbc:CreditedQuantity unitCode="C62">{{ line.invoicedquantity }}</cbc:CreditedQuantity>
     <cbc:LineExtensionAmount currencyID="{{ header.documentcurrencycode }}">{{ (line.lineextensionamountnet or line.lineextensionamount)|fmt }}</cbc:LineExtensionAmount>
+    {# BT-134/135: Leistungszeitraum der Position #}
+    {% if line.periodstart and line.periodend %}
+    <cac:InvoicePeriod>
+      <cbc:StartDate>{{ line.periodstart }}</cbc:StartDate>
+      <cbc:EndDate>{{ line.periodend }}</cbc:EndDate>
+    </cac:InvoicePeriod>
+    {% endif %}
     <cac:Item>
       <cbc:Name>{{ line.itemname|e }}</cbc:Name>
       <cac:ClassifiedTaxCategory>
@@ -177,7 +186,7 @@
       </cac:ClassifiedTaxCategory>
     </cac:Item>
     <cac:Price>
-      <cbc:PriceAmount currencyID="{{ header.documentcurrencycode }}">{{ (line.priceamount or line.lineextensionamount)|fmt }}</cbc:PriceAmount>
+      <cbc:PriceAmount currencyID="{{ header.documentcurrencycode }}">{{ (line.priceamount or line.lineextensionamount)|price4 }}</cbc:PriceAmount>
     </cac:Price>
   </cac:CreditNoteLine>
   {% endfor %}
