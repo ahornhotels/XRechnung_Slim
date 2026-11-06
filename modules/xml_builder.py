@@ -549,16 +549,31 @@ def _make_positive_for_credit_note(invoice: dict) -> dict:
         except (InvalidOperation, ValueError):
             pass
 
-    # Lines: alle Betragsfelder abs()'d
+    # Lines: Vorzeichen der GANZEN Gutschrift umdrehen (nicht abs() je Zeile),
+    # sonst stimmt bei einer gemischten Gutschrift (Storno-Positionen plus eine
+    # positive Buchung) die Positionssumme nicht mehr mit BT-106 (BR-CO-10).
+    # VOID-Stornos liefern positive Zeilen -> Faktor +1. Der Preis bleibt
+    # immer positiv (BR-27), die Menge traegt das Vorzeichen.
+    def _net_of(ln):
+        try:
+            return Decimal(str(ln.get("lineextensionamountnet") or ln.get("lineextensionamount") or 0))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+    factor = Decimal(-1) if sum(_net_of(ln) for ln in norm_lines) < 0 else Decimal(1)
     out["lines"] = []
     for ln in norm_lines:
-        for key in ("priceamount", "lineextensionamount", "lineextensionamountnet",
-                    "invoicedquantity", "vatparts"):
+        for key in ("lineextensionamount", "lineextensionamountnet", "invoicedquantity"):
             v = ln.get(key)
             if v is None:
                 continue
             try:
-                ln[key] = str(abs(Decimal(str(v))))
+                d = Decimal(str(v)) * factor
+                ln[key] = format(d.normalize(), "f") if key == "invoicedquantity" else str(d)
+            except (InvalidOperation, ValueError):
+                pass
+        if ln.get("priceamount") is not None:
+            try:
+                ln["priceamount"] = str(abs(Decimal(str(ln["priceamount"]))))
             except (InvalidOperation, ValueError):
                 pass
         out["lines"].append(ln)

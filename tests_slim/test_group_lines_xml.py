@@ -68,3 +68,30 @@ def test_gutschrift_menge_positiv_und_xsd():
     assert qty == 3 and (qty * price).quantize(Decimal("0.01")) == amount == Decimal("300.00")
     assert ln.find("cac:InvoicePeriod", NS) is not None
     _assert_xsd_valid(xml, _CN_XSD)
+
+
+def test_gemischte_gutschrift_summe_stimmt():
+    """3 x Storno -100 plus +100 Bar: Positionssumme muss BT-106 (200) ergeben."""
+    lines = [_b(gross=-107.0, net=-100.0, qty=-1, unit=107.0, day=d) for d in ("2026-03-02", "2026-03-03", "2026-03-04")]
+    lines.append(_b(item="Bar", gross=107.0, net=100.0, code="BAR"))
+    inv = _base_invoice(3)
+    inv["lines"] = ie.group_lines(lines, merge=True)
+    inv["tax_breakdown"] = [{"taxcategoryid": "S", "taxcategorypercent": "7.00",
+                             "taxableamount": "-200.00", "taxamount": "-14.00"}]
+    inv["totals"] = {"invoicegross": -214.0, "invoicenet": -200.0, "invoicetaxtotal": -14.0, "spay_cl": 0}
+    doc = etree.fromstring(xml_builder.render(inv))
+    total = Decimal(doc.findtext("cac:LegalMonetaryTotal/cbc:LineExtensionAmount", namespaces=NS))
+    lines_sum = sum(Decimal(l.findtext("cbc:LineExtensionAmount", namespaces=NS))
+                    for l in doc.findall("cac:CreditNoteLine", NS))
+    assert lines_sum == total == Decimal("200.00")
+    for l in doc.findall("cac:CreditNoteLine", NS):
+        q = Decimal(l.findtext("cbc:CreditedQuantity", namespaces=NS))
+        p = Decimal(l.findtext("cac:Price/cbc:PriceAmount", namespaces=NS))
+        assert p >= 0 and (q * p).quantize(Decimal("0.01")) == Decimal(l.findtext("cbc:LineExtensionAmount", namespaces=NS))
+
+
+def test_storno_datum_verlaengert_rechnungszeitraum_nicht():
+    h = {"startdate": "2026-03-02", "enddate": "2026-03-04"}
+    lines = ie.group_lines([_b(), _b(gross=-107.0, net=-100.0, qty=-1, unit=107.0, day="2026-03-10")], merge=True)
+    ie.extend_invoice_period(h, lines)
+    assert h["enddate"] == "2026-03-04"

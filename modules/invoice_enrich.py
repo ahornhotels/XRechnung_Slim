@@ -302,8 +302,14 @@ def group_lines(lines: list[dict], merge: bool) -> list[dict]:
 def extend_invoice_period(header: dict, lines: list[dict]) -> None:
     """BT-73/74 so erweitern, dass alle Positionszeitraeume hineinpassen
     (PEPPOL-EN16931-R110/R111)."""
-    starts = [str(ln["periodstart"]) for ln in lines or [] if not _blank(ln.get("periodstart"))]
-    ends = [str(ln["periodend"]) for ln in lines or [] if not _blank(ln.get("periodend"))]
+    # Negative Positionen werden zu Abschlaegen (ohne eigenen Zeitraum); ihr
+    # Buchungsdatum (z. B. Storno nach Abreise) darf den Zeitraum nicht dehnen.
+    # Nur bei einer reinen Gutschrift (alles negativ) zaehlen sie.
+    lines = [ln for ln in lines or [] if not ln.get("depositzinvid")]
+    positive = [ln for ln in lines if (_d(ln.get("lineextensionamountnet")) or 0) >= 0]
+    lines = positive or lines
+    starts = [str(ln["periodstart"]) for ln in lines if not _blank(ln.get("periodstart"))]
+    ends = [str(ln["periodend"]) for ln in lines if not _blank(ln.get("periodend"))]
     if not starts or not ends:
         return
     s0, e0 = header.get("startdate"), header.get("enddate")
