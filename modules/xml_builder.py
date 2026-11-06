@@ -194,11 +194,15 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
         except (InvalidOperation, ValueError):
             price, net = Decimal("0"), Decimal("0")
         if price < 0 or net < 0:
+            reason = ln.get("itemname") or "Gutschrift"
+            if ln.get("guestlabel"):   # Gruppenrechnung: Gast im Grund (BT-97)
+                reason = f"{reason} · {ln['guestlabel']}"
             allowances.append({
                 "amount":     str(abs(net)),
                 "category":   ln.get("classifiedtaxcategoryid") or "S",
                 "percent":    ln.get("classifiedtaxcategorypercent") or 0,
-                "reason":     (ln.get("itemname") or "Gutschrift"),
+                "reason":     reason,
+                "vatparts":   ln.get("vatparts"),
             })
         else:
             pos_lines.append(ln)
@@ -224,8 +228,11 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
         cat  = ln.get("classifiedtaxcategoryid") or "S"
         pct  = Decimal(str(ln.get("classifiedtaxcategorypercent") or 0))
         net  = Decimal(str(ln.get("lineextensionamountnet") or 0))
-        # VAT pro Zeile: net * pct / 100  (Net-Basis-Aggregation)
-        vat  = (net * pct / Decimal(100)).quantize(Decimal("0.01"))
+        # VAT pro Zeile: net * pct / 100  (Net-Basis-Aggregation). Eine
+        # zusammengefasste Position (invoice_enrich.group_lines) traegt die
+        # Summe der je Buchung gerundeten Steuer - sonst neue Rundungsdifferenz.
+        vat  = (Decimal(str(ln["vatparts"])) if ln.get("vatparts") not in (None, "")
+                else (net * pct / Decimal(100)).quantize(Decimal("0.01")))
         key  = (cat, str(pct))
         a    = agg.setdefault(key, {"taxable": Decimal(0), "tax": Decimal(0)})
         a["taxable"] += net
@@ -234,7 +241,8 @@ def _split_negative_lines_to_allowances(invoice: dict) -> dict:
         cat  = al["category"]
         pct  = Decimal(str(al["percent"]))
         net  = Decimal(str(al["amount"]))
-        vat  = (net * pct / Decimal(100)).quantize(Decimal("0.01"))
+        vat  = (abs(Decimal(str(al["vatparts"]))) if al.get("vatparts") not in (None, "")
+                else (net * pct / Decimal(100)).quantize(Decimal("0.01")))
         key  = (cat, str(pct))
         a    = agg.setdefault(key, {"taxable": Decimal(0), "tax": Decimal(0)})
         a["taxable"] -= net

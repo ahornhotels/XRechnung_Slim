@@ -19,5 +19,6 @@
   "auslagen_artikel": [
     "AUS",
     "DUR"
-  ]
+  ],
+  "positionen_zusammenfassen": true
 }

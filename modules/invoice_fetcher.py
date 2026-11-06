@@ -79,6 +79,13 @@ def _auslagen_artikel() -> list[str]:
     return [str(v).strip() for v in value if str(v).strip()]
 
 
+
+def _positionen_zusammenfassen() -> bool:
+    """hotel.json 'positionen_zusammenfassen' (Standard an)."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    return hotel.get("positionen_zusammenfassen", True) is not False
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -240,6 +247,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         lines = _fetch_lines(cur, zinv_id)
         # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel
         invoice_enrich.apply_auslagen_freigabe(lines, _auslagen_artikel())
+        # Gleiche Buchungen zusammenfassen (Menge), Gruppenrechnung je Gast/Zimmer
+        lines = invoice_enrich.group_lines(lines, _positionen_zusammenfassen())
 
         cur.execute(_read_sql("invoice_tax.sql"), {"zinv_id": zinv_id})
         tax_breakdown = _rows_to_dicts(cur)
@@ -274,6 +283,7 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         if _guest_info_available():
             invoice_enrich.apply_guest_info({"header": header, "lines": lines},
                                             _gastzeile_template())
+        invoice_enrich.extend_invoice_period(header, lines)
 
         # Waehrung: wenn Suite8 nichts liefert (WUSS.BaseCurrency nicht gepflegt),
         # nimm Default aus config/hotel.json (Default 'EUR'). XRechnung braucht

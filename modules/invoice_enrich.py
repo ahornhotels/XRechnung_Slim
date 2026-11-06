@@ -198,3 +198,114 @@ def apply_auslagen_freigabe(lines: list[dict], allowed: list[str]) -> None:
         for ln in group:
             ln["classifiedtaxcategorypercent"] = None
             ln["taxmissing"] = True
+
+
+# --- Positionen zusammenfassen, Gruppenrechnung (BT-127, BT-134/135) --------
+
+
+def _d(v):
+    from decimal import Decimal, InvalidOperation
+    if v is None or str(v).strip() == "":
+        return None
+    try:
+        return Decimal(str(v))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _qty_text(q) -> str:
+    s = format(q.normalize(), "f")
+    return s if s not in ("-0", "") else "0"
+
+
+def guest_label(ln: dict) -> Optional[str]:
+    """'Zi. 101 · Erika Muster' (ohne Zimmer nur der Name; ohne Herkunft/Gast None)."""
+    if _blank(ln.get("originyresid")) or _blank(ln.get("originguestname")):
+        return None
+    name = str(ln["originguestname"]).strip()
+    room = None if _blank(ln.get("originroom")) else str(ln["originroom"]).strip()
+    return f"Zi. {room}{_HINWEIS_TRENNER}{name}" if room else name
+
+
+def _room_sort(room) -> tuple:
+    if _blank(room):
+        return (2, 0, "")
+    r = str(room).strip()
+    return (0, int(r), r) if r.isdigit() else (1, 0, r)
+
+
+def _build_position(members: list[dict], multi: bool) -> dict:
+    from decimal import Decimal
+    cent, p4 = Decimal("0.01"), Decimal("0.0001")
+    pos = dict(members[0])
+    nets = [_d(m.get("lineextensionamountnet")) or Decimal(0) for m in members]
+    grosses = [_d(m.get("lineextensionamount")) or Decimal(0) for m in members]
+    net, gross = sum(nets), sum(grosses)
+    pos["lineextensionamountnet"] = str(net.quantize(cent))
+    pos["lineextensionamount"] = str(gross.quantize(cent))
+    pct = _d(pos.get("classifiedtaxcategorypercent"))
+    if pct is not None:
+        pos["vatparts"] = str(sum((n * pct / 100).quantize(cent) for n in nets).quantize(cent))
+    qtys = [_d(m.get("quantity")) for m in members]
+    qty = sum(qtys) if all(q is not None for q in qtys) else None
+    price = None
+    if qty is not None and qty != 0 and (qty > 0) == (net >= 0):
+        price = (net / qty).quantize(p4)
+        if (qty * price).quantize(cent) != net.quantize(cent):
+            price = None
+    if price is None:
+        pos["invoicedquantity"], pos["priceamount"] = "1", str(net.quantize(cent))
+    else:
+        pos["invoicedquantity"], pos["priceamount"] = _qty_text(qty), str(price)
+    days = sorted(str(m["postdate"])[:10] for m in members if not _blank(m.get("postdate")))
+    if days:
+        pos["periodstart"], pos["periodend"] = days[0], days[-1]
+    label = guest_label(pos) if multi else None
+    pos["note"] = label
+    pos["guestlabel"] = label
+    return pos
+
+
+def group_lines(lines: list[dict], merge: bool) -> list[dict]:
+    """Fasst gleiche Buchungen zu einer Position mit echter Menge zusammen.
+    Schluessel: Herkunft, Gast, Zimmer, Artikel, Brutto-Einzelpreis, Kategorie,
+    Satz und VORZEICHEN (Stornos werden nicht verrechnet). Anzahlungszeilen
+    bleiben einzeln. Bei mehreren Gaesten Positionstext 'Zi. 101 · Name' und
+    Sortierung nach Zimmer. Ohne die neuen SQL-Spalten: unveraendert."""
+    from modules.invoice_fetcher import is_deposit_line
+    lines = list(lines or [])
+    if not any("grossunitprice" in ln for ln in lines):
+        return lines
+    multi = len(guests(lines)) > 1
+    groups: dict = {}
+    deposits = []
+    for i, ln in enumerate(lines):
+        if is_deposit_line(ln):
+            deposits.append(ln)
+            continue
+        net = _d(ln.get("lineextensionamountnet")) or 0
+        unit = _d(ln.get("grossunitprice"))
+        key = (ln.get("originyresid"), ln.get("originxcmsid"), ln.get("originroom"),
+               ln.get("itemcode"), ln.get("itemname"),
+               None if unit is None else abs(unit).quantize(_d("0.0001")),
+               ln.get("classifiedtaxcategoryid"), ln.get("classifiedtaxcategorypercent"),
+               net < 0) if merge else i
+        groups.setdefault(key, []).append(ln)
+    out = [_build_position(m, multi) for m in groups.values()]
+    if multi:
+        out.sort(key=lambda p: (_room_sort(p.get("originroom")),
+                                str(p.get("originguestname") or ""),
+                                str(p.get("itemname") or ""), str(p.get("periodstart") or "")))
+    return out + deposits
+
+
+def extend_invoice_period(header: dict, lines: list[dict]) -> None:
+    """BT-73/74 so erweitern, dass alle Positionszeitraeume hineinpassen
+    (PEPPOL-EN16931-R110/R111)."""
+    starts = [str(ln["periodstart"]) for ln in lines or [] if not _blank(ln.get("periodstart"))]
+    ends = [str(ln["periodend"]) for ln in lines or [] if not _blank(ln.get("periodend"))]
+    if not starts or not ends:
+        return
+    s0, e0 = header.get("startdate"), header.get("enddate")
+    header["startdate"] = min([str(s0)[:10]] + starts) if not _blank(s0) else min(starts)
+    header["enddate"] = max([str(e0)[:10]] + ends) if not _blank(e0) else max(ends)
