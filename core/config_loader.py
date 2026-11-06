@@ -38,13 +38,35 @@ def load_json(path: Path, default=None):
 
 def save_json(path: Path, data) -> None:
     """Schreibt ein Dict als formatiertes JSON nach <path>."""
+    atomic_write_json(path, data)
+
+
+def atomic_write_json(path: Path, data) -> None:
+    """Atomar schreiben (Temp-Datei + os.replace). Unter Windows kann das Ziel
+    kurz von einem Leser geoeffnet sein (WinError 5/32) - dann einige Male
+    erneut versuchen. Die Temp-Datei wird in jedem Fall aufgeraeumt."""
     import os
     import threading
+    import time
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)   # atomar: nie eine halb geschriebene Datei
+    try:
+        for attempt in range(10):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 9:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 def load_app_settings() -> dict:

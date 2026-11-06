@@ -65,7 +65,7 @@ def _apply_seller_overrides(header: dict) -> None:
     for k, v in overrides.items():
         if k in _SELLER_OVERRIDE_KEYS and v is not None and str(v).strip():
             v = str(v).strip()
-            header[k] = v.replace(" ", "") if k == "payeefinancialaccountid" else v
+            header[k] = v.replace(" ", "") if k == "payeefinancialaccountid" else v  # wie Kopf-SQL
 
 
 def _gastzeile_template() -> str:

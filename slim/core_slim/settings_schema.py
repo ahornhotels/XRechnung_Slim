@@ -102,7 +102,7 @@ SECTIONS: tuple[Section, ...] = (
         Setting("tns_alias", C, "TNS-Alias", "Name der Suite8-Datenbank aus der tnsnames.ora, z. B. V8.", restart=True),
         Setting("username", C, "Benutzer", "Oracle-Benutzer, mit dem Slim liest und Anhaenge schreibt.", restart=True),
         Setting("password", C, "Passwort", "Oracle-Passwort. Wird verschluesselt gespeichert und nie angezeigt. Leer lassen = unveraendert.", type="secret", restart=True),
-        Setting("tns_admin", C, "Ordner der tnsnames.ora", "Lokaler Ordner mit tnsnames.ora (TNS_ADMIN).", restart=True, check=_local_dir),
+        Setting("tns_admin", C, "Ordner der tnsnames.ora", "Ordner mit tnsnames.ora (TNS_ADMIN), auch ein Netzwerkordner.", restart=True),
         Setting("oracle_client_lib_dir", C, "Oracle-Client-Ordner", "Lokaler Ordner des 64-bit Oracle Instant Client. Leer = Thin-Modus bzw. automatische Suche.", restart=True, check=_local_dir),
     )),
     Section("hotel", "Hotel", (

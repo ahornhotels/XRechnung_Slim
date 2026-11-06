@@ -35,3 +35,9 @@ def test_login_bei_neueinrichtung_mit_benutzern():
     """Marker geloescht, Benutzer vorhanden: Anmeldeformular statt Sackgasse."""
     src = (FRONT / "login.html").read_text(encoding="utf-8")
     assert "!s.setup_done && !s.users_exist" in src
+
+
+
+def test_login_leitet_nur_verwalter_zum_wizard():
+    src = (FRONT / "login.html").read_text(encoding="utf-8")
+    assert 's.role === "verwalten" ? "/setup" : "/"' in src

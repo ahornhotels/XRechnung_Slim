@@ -272,33 +272,36 @@ def test_vor_einrichtung_nur_lokal_und_ohne_benutzer(setup):
     assert client.get("/api/sql/templates").status_code == 401          # Benutzer da -> Anmeldung
 
 
-def test_lokal_keine_sperre_aber_wartezeit(setup):
+def test_lokal_keine_sperre_aber_ein_versuch_pro_sekunde(setup):
     """Am Server teilen sich alle Sitzungen (RDP) 127.0.0.1: keine Sperre,
-    stattdessen Wartezeit je Fehlversuch. Fremde Adressen werden gesperrt."""
+    aber hoechstens ein Versuch pro Sekunde - zu fruehe werden sofort abgelehnt."""
     client, users, mp = setup
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
-    for _ in range(5):
-        _login(client, "admin", "falsches-passwort")                     # fremde Adresse
-    assert _login(client, "admin", "langes-passwort").status_code == 401  # gesperrt
-    waits = []
-    mp.setattr(auth_api, "_LOCAL_FAIL_DELAY", lambda: waits.append(1))
     mp.setattr(auth_api, "_is_local", lambda request: True)
-    mp.setattr(auth_api, "_client_ip", lambda request: "127.0.0.1")
-    for _ in range(6):
+    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    assert _login(client, "admin", "falsches-passwort").status_code == 401
+    assert _login(client, "admin", "langes-passwort").status_code == 401     # zu frueh
+    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])                              # Sekunde vorbei
+    for _ in range(10):
+        mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
         _login(client, "admin", "falsches-passwort")
-    assert len(waits) == 6
-    assert _login(client, "admin", "langes-passwort").status_code == 200
+    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    assert _login(client, "admin", "langes-passwort").status_code == 200     # nie gesperrt
 
 
-def test_lokale_fehlversuche_laufen_nacheinander(setup):
-    """Parallele lokale Fehlversuche umgehen die Wartezeit nicht."""
-    import threading, time
+def test_lokal_parallele_versuche_pruefen_nur_einmal(setup):
+    import threading
     client, users, mp = setup
     users.create("admin", "langes-passwort", "verwalten", must_change=False)
     mp.setattr(auth_api, "_is_local", lambda request: True)
-    mp.setattr(auth_api, "_LOCAL_FAIL_DELAY", lambda: time.sleep(0.2))
-    start = time.monotonic()
-    ts = [threading.Thread(target=lambda: _login(TestClient(client.app), "admin", "falsch-falsch-1")) for _ in range(4)]
-    for t in ts: t.start()
-    for t in ts: t.join()
-    assert time.monotonic() - start >= 0.75
+    mp.setattr(auth_api, "_LOCAL_NEXT", [0.0])
+    calls = []
+    real = auth.verify_password
+    mp.setattr(auth_api.auth, "verify_password", lambda pw, h: calls.append(1) or real(pw, h))
+    ts = [threading.Thread(target=lambda: _login(TestClient(client.app), "admin", "falsch-falsch-1")) for _ in range(6)]
+    for th in ts:
+        th.start()
+    for th in ts:
+        th.join()
+    assert len(calls) == 1
+

@@ -74,23 +74,26 @@ _WRITE_LOCK = threading.RLock()   # Lesen-Aendern-Schreiben je Speichervorgang
 _KEEP_BACKUPS = 20
 
 
+def _iban(v):
+    return None if v is None else str(v).replace(" ", "").strip()
+
+
 def _write(name: str, data: dict) -> None:
     """Sicherung der alten Datei, dann atomar schreiben. Es bleiben die
-    letzten _KEEP_BACKUPS Sicherungen je Datei."""
+    letzten _KEEP_BACKUPS Sicherungen je Datei (nach Datum, nicht Name)."""
+    from core.config_loader import atomic_write_json
     p = _path(name)
     if p.exists():
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         backup = p.with_name(f"{p.name}.{stamp}.sicherung")
         backup.write_bytes(p.read_bytes())
-        old = sorted(p.parent.glob(f"{p.name}.*.sicherung"))
+        old = sorted(p.parent.glob(f"{p.name}.*.sicherung"), key=lambda q: q.stat().st_mtime_ns)
         for extra in old[:-_KEEP_BACKUPS]:
             try:
                 extra.unlink()
             except OSError:
                 pass
-    tmp = p.with_name(f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, p)
+    atomic_write_json(p, data)
 
 
 def _key() -> bytes:
@@ -135,22 +138,30 @@ def _suite8_seller_values() -> dict:
     faellt auf Hotelid zurueck, IBAN ohne Leerzeichen. Ohne DB: leeres Dict."""
     try:
         from core.db_connector import get_connection
-        names = sorted({w.upper() for _, w, _ in SELLER_FIELDS})
+        names = sorted({w.upper() for _, w, _ in SELLER_FIELDS} | {"HOTELID"})
         with get_connection() as conn:
             cur = conn.cursor()
             binds = ",".join(f":n{i}" for i in range(len(names)))
-            cur.execute(f"select upper(wuss_name), wuss_value, wuss_xcms_id from wuss "
-                        f"where upper(wuss_name) in ({binds}) order by nvl(wuss_xcms_id, 0)",
+            cur.execute(f"select wuss_name, wuss_value, wuss_xcms_id from wuss "
+                        f"where upper(wuss_name) in ({binds})",
                         {f"n{i}": n for i, n in enumerate(names)})
-            wuss: dict = {}
-            for name, value, _ in cur.fetchall():
-                wuss.setdefault(name, value)      # xcms 0 zuerst
-        out = {k: wuss.get(w.upper()) for k, w, _ in SELLER_FIELDS}
-        firm = wuss.get("UDEF_XRECHNUNG_FIRMIERUNG") or wuss.get("HOTELID")
+            rows = cur.fetchall()
+        # Wie invoice_header.sql: Hausdaten exakt benannt mit wuss_xcms_id=0;
+        # IBAN/BIC exakt benannt ohne xcms-Filter; Firmierung ohne Gross-/
+        # Kleinschreibung - existiert die Zeile, gilt ihr Wert (auch leer),
+        # sonst Hotelid.
+        def exact(name, xcms0=True):
+            for n, v, x in rows:
+                if n == name and (not xcms0 or (x or 0) == 0):
+                    return v
+            return None
+        firm_rows = [v for n, v, _ in rows if str(n).upper() == "UDEF_XRECHNUNG_FIRMIERUNG"]
+        firm = firm_rows[0] if firm_rows else exact("Hotelid", xcms0=False)
+        out = {k: exact(w) for k, w, _ in SELLER_FIELDS}
+        out["payeefinancialaccountid"] = _iban(exact("HotelbankIBAN", xcms0=False))
+        out["payeefinancialaccountbic"] = exact("HotelbankBIC", xcms0=False)
         out["supplierregistrationname"] = firm
-        out["payeefinancialaccountname"] = firm
-        if out.get("payeefinancialaccountid"):
-            out["payeefinancialaccountid"] = str(out["payeefinancialaccountid"]).replace(" ", "")
+        out["payeefinancialaccountname"] = firm or exact("Hotelid", xcms0=False)
         return out
     except Exception as e:
         logger.warning("Suite8-Verkaeuferdaten nicht lesbar: %s", e)
@@ -177,7 +188,7 @@ def put_seller(payload: Values, request: Request):
         for k, v in payload.values.items():
             v = "" if v is None else str(v).strip()
             if k == "payeefinancialaccountid":
-                v = v.replace(" ", "")      # wie das Kopf-SQL
+                v = _iban(v)                # wie das Kopf-SQL
             if len(v) > 300:
                 raise HTTPException(422, {k: "hoechstens 300 Zeichen"})
             if v:
@@ -205,6 +216,13 @@ def db_test():
 
 @router.put("/{section_id}")
 def put_section(section_id: str, payload: Values, request: Request):
+    # Pruefen und Schreiben unter einer Sperre: zwei gleichzeitige Speicher-
+    # vorgaenge koennen sich weder ueberschreiben noch Regeln umgehen.
+    with _WRITE_LOCK:
+        return _put_section(section_id, payload, request)
+
+
+def _put_section(section_id: str, payload: Values, request: Request):
     try:
         sec = schema.section(section_id)
     except KeyError:
@@ -227,13 +245,20 @@ def put_section(section_id: str, payload: Values, request: Request):
         try:
             changes[key] = ("plain", schema.coerce(s, value))
         except schema.SettingError as e:
+            # Ein unveraenderter Altwert (z. B. aus dem Wizard) blockiert das
+            # Speichern anderer Felder nicht.
+            stored = _load(s.file).get(key)
+            if stored is not None and str(stored).strip() == str(value or "").strip():
+                continue
             errors[key] = str(e)
     # Neues Datenbankziel nur mit neu eingegebenem Passwort - sonst koennte ein
     # Verbindungstest das gespeicherte Passwort an einen fremden Server senden.
     if section_id == "datenbank" and "password" not in changes and not errors:
         stored = _load("connection.json")
         target = ("tns_alias", "username", "tns_admin", "oracle_client_lib_dir")
-        if any(k in changes and changes[k][1] != stored.get(k, by_key[k].default or "")
+        def _norm(v):
+            return "" if v is None else str(v).strip()
+        if any(k in changes and _norm(changes[k][1]) != _norm(stored.get(k, by_key[k].default))
                for k in target):
             errors["password"] = "bei geaendertem Datenbankziel bitte das Passwort neu eingeben"
     # Mindestens ein Erkennungsmuster muss bleiben, sonst erkennt der Poller

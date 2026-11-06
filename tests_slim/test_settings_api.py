@@ -236,3 +236,40 @@ def test_save_json_atomar(tmp_path):
     save_json(p, {"a": 1})
     assert json.loads(p.read_text(encoding="utf-8")) == {"a": 1}
     assert not list(tmp_path.glob("*.tmp"))
+
+
+
+# --- letztes Review ---
+
+def test_tnsnames_auf_netzlaufwerk_erlaubt(env):
+    client, _, _ = env
+    r = client.put("/api/settings/datenbank",
+                   json={"values": {"tns_admin": r"\\fidelio\oracle\network\admin", "password": "neues-db-passwort"}})
+    assert r.status_code == 200
+
+
+def test_unveraenderter_altwert_blockiert_speichern_nicht(env):
+    client, cfg, _ = env
+    (cfg / "connection.json").write_text(json.dumps({"tns_alias": "V8 ", "tns_admin": None,
+        "oracle_client_lib_dir": "relativ", "password": "gAAAA-alt"}), encoding="utf-8")
+    r = client.put("/api/settings/datenbank", json={"values": {
+        "tns_alias": "V8", "tns_admin": "", "oracle_client_lib_dir": "relativ", "username": ""}})
+    assert r.status_code == 200, r.text
+
+
+def test_atomares_schreiben_versucht_erneut_bei_windows_sperre(tmp_path, monkeypatch):
+    import os as _os
+    from core import config_loader
+    real = _os.replace
+    tries = []
+
+    def flaky(src, dst):
+        tries.append(1)
+        if len(tries) < 3:
+            raise PermissionError("[WinError 32] in Benutzung")
+        return real(src, dst)
+    monkeypatch.setattr(_os, "replace", flaky)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    config_loader.atomic_write_json(tmp_path / "a.json", {"x": 1})
+    assert json.loads((tmp_path / "a.json").read_text(encoding="utf-8")) == {"x": 1}
+    assert len(tries) == 3 and not list(tmp_path.glob("*.tmp"))

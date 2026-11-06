@@ -45,11 +45,22 @@ _ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/a
 _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 
 
-_LOCAL_LOGIN_LOCK = threading.Lock()
+# Am Server (localhost) gibt es keine Sperre, aber hoechstens einen
+# Anmeldeversuch pro Sekunde. Zu fruehe Versuche werden sofort abgelehnt
+# (kein Warten, kein Thread blockiert, keine Passwortpruefung).
+_LOCAL_RATE_LOCK = threading.Lock()
+_LOCAL_NEXT = [0.0]
+_LOCAL_INTERVAL = 1.0
 
 
-def _LOCAL_FAIL_DELAY() -> None:
-    time.sleep(1.0)
+def _local_slot_free() -> bool:
+    """Reserviert den naechsten lokalen Versuch; False = zu frueh."""
+    with _LOCAL_RATE_LOCK:
+        now = time.monotonic()
+        if now < _LOCAL_NEXT[0]:
+            return False
+        _LOCAL_NEXT[0] = now + _LOCAL_INTERVAL
+        return True
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -143,23 +154,17 @@ def login(payload: LoginPayload, request: Request):
     # Sperre je Adresse UND Benutzer: ein Dritter im Netz kann den Verwalter
     # nicht aussperren (andere Adresse = eigener Zaehler). Am Server selbst
     # teilen sich alle Sitzungen (z. B. RDP) 127.0.0.1 - dort keine Sperre,
-    # sondern 1 s Wartezeit je Fehlversuch gegen Durchprobieren.
+    # sondern hoechstens ein Versuch pro Sekunde (_local_slot_free).
     local = _is_local(request)
     key = f"{_client_ip(request)}|{name[:64]}"
     if not local and GUARD.blocked(key):
         _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
+    if local and not _local_slot_free():
+        _audit("login_throttled", user=name)
+        raise fail
     user = USERS.get(name)
-    if local:
-        # Lokale Versuche laufen nacheinander (eine gemeinsame Sperre), und ein
-        # Fehlversuch haelt sie 1 s: parallele Anfragen umgehen die Wartezeit
-        # nicht - hoechstens ein lokaler Fehlversuch pro Sekunde.
-        with _LOCAL_LOGIN_LOCK:
-            ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
-            if not user or not ok:
-                _LOCAL_FAIL_DELAY()
-    else:
-        ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
+    ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
         if not local:
             GUARD.fail(key)
