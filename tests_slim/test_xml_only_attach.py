@@ -68,9 +68,12 @@ def test_remove_pdf_leert_verweis_vor_entblocken():
     unblock = [i for i, s in enumerate(conn.log) if s.startswith("UPDATE WMAI SET WMAI_BLOCKSEND=0")]
     assert len(upd) == 1 and upd[0] < unblock[0]
     sql = conn.log[upd[0]]
-    for cond in ("WMAI_ATTACHMENT_FILE_NAME = NULL", "WMAI_BLOCKSEND=1", "WMAI_SENT=0",
-                 "LIKE '%.pdf'", "WMAI_ATTACHMENT_RTF_WTXT_ID IS NULL"):
+    for cond in ("WMAI_ATTACHMENT_FILE_NAME = NULL", "WMAI_ATTACHMENT_RTF_WTXT_ID = NULL",
+                 "WMAI_BLOCKSEND=1", "WMAI_SENT=0", "LIKE '%.pdf'"):
         assert cond in sql, cond
+    # Live-Befund: fast jede Rechnungsmail hat zusaetzlich eine RTF-Textfassung.
+    # Eine Bedingung "RTF leer" haette nie gegriffen.
+    assert "RTF_WTXT_ID IS NULL" not in sql
     assert not any(s.startswith("DELETE") or s.startswith("UPDATE WTXT") for s in conn.log)
     assert res["pdf_removed"] is True and conn.commits == 1
 

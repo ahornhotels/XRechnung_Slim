@@ -244,8 +244,9 @@ an. Slim hängt in einer Transaktion die XML an (`WTXT` + `WMAA`) und setzt
   - `WMAI_ATTACHMENT_WTXT_ID = NULL` und `WMAI_ATTACHMENT_FILE_NAME = NULL`.
   - Bedingung: `WMAI_SENT=0` und `BLOCKSEND=1`, und der Dateiname endet auf `.pdf`
     (Groß-/Kleinschreibung egal).
-  - `WMAI_ATTACHMENT_RTF_WTXT_ID` wird mitgeprüft. Ist es gesetzt, wird es nicht
-    angefasst und die Mail mit Hinweis protokolliert.
+  - `WMAI_ATTACHMENT_RTF_WTXT_ID` (eigene RTF-Textfassung derselben Rechnung, in
+    fast jeder Rechnungsmail gesetzt) wird mit geleert, damit keine Fassung der
+    Rechnung außer der XML hinausgeht.
   - Der `WTXT`-Blob wird **nie** gelöscht.
   - Ist der Hauptanhang kein PDF oder ändert das Update 0 Zeilen, wird nur die XML
     angehängt und das PDF bleibt, mit Warnung im Protokoll. Die Rechnung wird deshalb

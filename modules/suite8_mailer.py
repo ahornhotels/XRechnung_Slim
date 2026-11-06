@@ -36,7 +36,8 @@ def attach_xml_to_wmai(
         filename: Anhang-Dateiname (z.B. '144853.xml')
         conn: oracledb-Connection mit Write-Rechten
         remove_pdf: Nur-XML-Versand. Leert den PDF-Hauptanhang der Mail
-            (WMAI_ATTACHMENT_WTXT_ID/_FILE_NAME) in derselben Transaktion.
+            (WMAI_ATTACHMENT_WTXT_ID/_FILE_NAME) und die RTF-Textfassung
+            (WMAI_ATTACHMENT_RTF_WTXT_ID) in derselben Transaktion.
             Geloescht wird nichts; WTXT bleibt stehen.
 
     Returns:
@@ -83,8 +84,9 @@ def attach_xml_to_wmai(
             },
         )
 
-        # 4b) Nur-XML: PDF-Hauptanhang aus der Mail nehmen. Nur ein PDF, nur
-        #     solange die Mail blockiert und ungesendet ist, nie bei RTF.
+        # 4b) Nur-XML: PDF-Hauptanhang und die RTF-Textfassung derselben
+        #     Rechnung (eigener WTXT) aus der Mail nehmen - nur bei einem PDF
+        #     und nur solange die Mail blockiert und ungesendet ist.
         #     0 Zeilen (kein PDF da) ist kein Fehler - die XML geht trotzdem.
         pdf_removed = False
         pdf_error = None
@@ -97,12 +99,12 @@ def attach_xml_to_wmai(
                 cur.execute(
                     """
                     UPDATE WMAI SET WMAI_ATTACHMENT_WTXT_ID = NULL,
-                                    WMAI_ATTACHMENT_FILE_NAME = NULL
+                                    WMAI_ATTACHMENT_FILE_NAME = NULL,
+                                    WMAI_ATTACHMENT_RTF_WTXT_ID = NULL
                      WHERE WMAI_ID=:wmai_id
                        AND WMAI_BLOCKSEND=1
                        AND WMAI_SENT=0
                        AND LOWER(WMAI_ATTACHMENT_FILE_NAME) LIKE '%.pdf'
-                       AND WMAI_ATTACHMENT_RTF_WTXT_ID IS NULL
                     """,
                     {"wmai_id": wmai_id},
                 )
