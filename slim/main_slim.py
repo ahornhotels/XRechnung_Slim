@@ -48,6 +48,7 @@ from slim.api_slim import trigger_sql as trigger_sql_module
 from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
+from slim.api_slim import auth_api as auth_api_module
 from slim.core_slim import access
 from slim.core_slim import audit_jsonl
 from slim.core_slim.clock import now_local
@@ -66,7 +67,7 @@ app_version = _VERSION_FILE.read_text(encoding="utf-8").strip() if _VERSION_FILE
 
 app = FastAPI(
     title="Suite8 XRechnung Slim",
-    description="Standalone Suite8-Anhang-Poller. Kein Login, kein DB.",
+    description="Standalone Suite8-Anhang-Poller mit Anmeldung (ansehen/verwalten).",
     version=app_version,
 )
 
@@ -84,6 +85,12 @@ if _lan_warn:
     logger.warning(_lan_warn)
 
 
+# Anmeldung (Sitzung + Rolle). VOR der IP-Freigabe registriert, damit die
+# IP-Freigabe als aeussere Schicht zuerst greift (Starlette: zuletzt
+# registriert = aeusserste Middleware).
+app.middleware("http")(auth_api_module.middleware)
+
+
 @app.middleware("http")
 async def _ip_allowlist(request, call_next):
     return await access.dispatch(request, call_next, _ALLOWED_IPS)
@@ -98,6 +105,7 @@ app.include_router(trigger_sql_module.router)
 app.include_router(run_now_module.router)
 app.include_router(update_api_module.router)
 app.include_router(archive_api_module.router)
+app.include_router(auth_api_module.router)
 
 
 def _setup_done() -> bool:
@@ -113,6 +121,11 @@ async def root():
     if not _setup_done():
         return RedirectResponse(url="/setup", status_code=307)
     return FileResponse(str(_SLIM_DIR / "frontend" / "index.html"))
+
+
+@app.get("/login")
+async def login_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "login.html"))
 
 
 @app.get("/setup")

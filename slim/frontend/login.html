@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmeldung – XRechnung Slim</title>
+<style>
+  :root { --bg:#f4f5f7; --fg:#1a1a1a; --accent:#2d7a3c; --accent-fg:#fff; --error:#b13a2c;
+          --panel:#fff; --border:#d8dce2; --muted:#6a7280; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111; --fg:#e8e8e8; --accent:#b6d100; --accent-fg:#000; --error:#e06a50;
+            --panel:#1c1c1c; --border:#2a2a2a; --muted:#999; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+         display:flex; min-height:100vh; align-items:center; justify-content:center; padding:16px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+          padding:28px; width:100%; max-width:380px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin:12px 0 4px; color:var(--muted); }
+  input { width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;
+          background:var(--bg); color:var(--fg); font-size:15px; }
+  button { margin-top:18px; width:100%; padding:10px; border:0; border-radius:6px;
+           background:var(--accent); color:var(--accent-fg); font-size:15px; cursor:pointer; }
+  .msg { margin-top:14px; font-size:14px; min-height:1.5em; }
+  .msg.err { color:var(--error); }
+  .hidden { display:none; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>XRechnung Slim</h1>
+  <p class="sub" id="sub">Bitte anmelden.</p>
+
+  <form id="f-login" class="hidden">
+    <label for="u">Benutzername</label><input id="u" autocomplete="username" required>
+    <label for="p">Passwort</label><input id="p" type="password" autocomplete="current-password" required>
+    <button type="submit">Anmelden</button>
+  </form>
+
+  <form id="f-boot" class="hidden">
+    <label for="bu">Benutzername des ersten Verwalters</label><input id="bu" value="admin" required>
+    <label for="bp">Passwort (mindestens 10 Zeichen)</label><input id="bp" type="password" minlength="10" autocomplete="new-password" required>
+    <label for="bp2">Passwort wiederholen</label><input id="bp2" type="password" minlength="10" autocomplete="new-password" required>
+    <button type="submit">Verwalter anlegen</button>
+  </form>
+
+  <form id="f-change" class="hidden">
+    <label for="co">Bisheriges Passwort</label><input id="co" type="password" autocomplete="current-password" required>
+    <label for="cn">Neues Passwort (mindestens 10 Zeichen)</label><input id="cn" type="password" minlength="10" autocomplete="new-password" required>
+    <label for="cn2">Neues Passwort wiederholen</label><input id="cn2" type="password" minlength="10" autocomplete="new-password" required>
+    <button type="submit">Passwort ändern</button>
+  </form>
+
+  <div id="msg" class="msg" role="status"></div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+function msg(text, err) { const m = $("msg"); m.textContent = text || ""; m.className = "msg" + (err ? " err" : ""); }
+function show(id, sub) { for (const f of ["f-login", "f-boot", "f-change"]) $(f).classList.toggle("hidden", f !== id); $("sub").textContent = sub; }
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(j.detail || ("Fehler " + r.status));
+  return j;
+}
+
+async function init() {
+  const s = await (await fetch("/api/auth/state")).json();
+  if (!s.setup_done) { $("sub").innerHTML = 'Slim ist noch nicht eingerichtet. <a href="/setup">Zur Einrichtung</a>'; return; }
+  if (!s.users_exist) {
+    if (s.local) return show("f-boot", "Es gibt noch keinen Benutzer. Legen Sie den ersten Verwalter an.");
+    $("sub").textContent = "Es gibt noch keinen Benutzer. Bitte am Server selbst (http://127.0.0.1) den ersten Verwalter anlegen.";
+    return;
+  }
+  if (s.logged_in && s.must_change) return show("f-change", "Bitte ändern Sie Ihr Passwort.");
+  if (s.logged_in) { location.href = "/"; return; }
+  show("f-login", "Bitte anmelden.");
+}
+
+$("f-login").addEventListener("submit", async (e) => {
+  e.preventDefault(); msg("");
+  try {
+    const r = await post("/api/auth/login", { username: $("u").value, password: $("p").value });
+    if (r.must_change) { $("co").value = $("p").value; return show("f-change", "Bitte ändern Sie Ihr Passwort."); }
+    location.href = "/";
+  } catch (err) { msg(err.message, true); }
+});
+
+$("f-boot").addEventListener("submit", async (e) => {
+  e.preventDefault(); msg("");
+  if ($("bp").value !== $("bp2").value) return msg("Die Passwörter stimmen nicht überein.", true);
+  try {
+    await post("/api/auth/bootstrap", { username: $("bu").value, password: $("bp").value });
+    await post("/api/auth/login", { username: $("bu").value, password: $("bp").value });
+    location.href = "/";
+  } catch (err) { msg(err.message, true); }
+});
+
+$("f-change").addEventListener("submit", async (e) => {
+  e.preventDefault(); msg("");
+  if ($("cn").value !== $("cn2").value) return msg("Die Passwörter stimmen nicht überein.", true);
+  try {
+    await post("/api/auth/password", { old: $("co").value, new: $("cn").value });
+    location.href = "/";
+  } catch (err) { msg(err.message, true); }
+});
+
+init().catch((e) => msg("Status nicht abrufbar: " + e.message, true));
+</script>
+</body>
+</html>

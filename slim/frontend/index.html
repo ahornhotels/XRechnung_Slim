@@ -188,11 +188,23 @@
 </style>
 </head>
 <body>
+<style>
+  .userbar { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .userbar a { color: var(--accent); }
+  /* Rolle 'ansehen': Aktionen sind serverseitig gesperrt (403); Knoepfe ausgrauen */
+  body.role-ansehen button:not([data-theme]) { opacity: .5; pointer-events: none; }
+</style>
 <header>
   <h1>Suite8 XRechnung Slim</h1>
   <div class="meta">
     <span id="hotel">…</span> · Port <span id="port">…</span> ·
     letzter Poll-Lauf: <span id="last_run">noch nicht</span>
+  </div>
+  <div class="userbar" id="userbar">
+    <span id="who">…</span> ·
+    <a href="/settings" id="link_settings">Einstellungen</a> ·
+    <a href="/users" id="link_users">Benutzer</a> ·
+    <a href="#" id="logout">Abmelden</a>
   </div>
   <div class="theme-switcher" id="theme_switcher" title="Theme wechseln">
     <button data-theme="light" onclick="setTheme('light')">Hell</button>
@@ -369,6 +381,34 @@ function setTheme(name) {
   let saved = "light";
   try { saved = localStorage.getItem("slim-theme") || "light"; } catch {}
   setTheme(saved);
+})();
+
+// Anmeldung: abgelaufene Sitzung (401) oder Pflicht zum Passwortwechsel
+// fuehren fuer JEDEN fetch zur Anmeldeseite.
+(function guardFetch() {
+  const orig = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const r = await orig(...args);
+    if (r.status === 401) { location.href = "/login"; }
+    return r;
+  };
+})();
+
+(async function initUser() {
+  try {
+    const s = await (await fetch("/api/auth/state")).json();
+    if (!s.logged_in || s.must_change) { location.href = "/login"; return; }
+    document.getElementById("who").textContent = s.user + " (" + s.role + ")";
+    if (s.role !== "verwalten") {
+      document.body.classList.add("role-ansehen");
+      for (const id of ["link_settings", "link_users"]) document.getElementById(id).style.display = "none";
+    }
+  } catch (e) {}
+  document.getElementById("logout").addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    await fetch("/api/auth/logout", { method: "POST" });
+    location.href = "/login";
+  });
 })();
 
 async function fetchJSON(url, opts) {
