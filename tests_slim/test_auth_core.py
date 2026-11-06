@@ -105,3 +105,22 @@ def test_kaputte_datei_wird_nicht_still_ueberschrieben(tmp_path):
     p.write_text("{kaputt", encoding="utf-8")
     with pytest.raises(auth.AuthError):
         auth.UserStore(p).count()
+
+
+def test_sperre_dauert_15_minuten_ab_fuenftem_fehlversuch():
+    now = [0.0]
+    g = auth.LoginGuard(clock=lambda: now[0])
+    for t in (0, 1, 2, 3, 800):
+        now[0] = t
+        g.fail("k")
+    now[0] = 800 + 14 * 60
+    assert g.blocked("k")
+    now[0] = 800 + 15 * 60 + 1
+    assert not g.blocked("k")
+
+
+def test_sperrliste_waechst_nicht_unbegrenzt():
+    g = auth.LoginGuard(max_keys=100)
+    for i in range(1000):
+        g.fail(f"name{i}")
+    assert len(g._fails) <= 100

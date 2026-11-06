@@ -13,7 +13,6 @@ Ersteinrichtung: Gibt es keinen Benutzer, kann nur ein Zugriff von localhost
 den ersten Verwalter anlegen (POST /api/auth/bootstrap). Der Poller laeuft
 davon unabhaengig weiter.
 """
-import ipaddress
 import logging
 from pathlib import Path
 
@@ -33,22 +32,33 @@ COOKIE = "slim_session"
 
 # Ohne Anmeldung erreichbar (Setup hat seinen eigenen Schutz: _require_setup_mode)
 _PUBLIC = {"/healthz", "/login", "/api/auth/login", "/api/auth/state",
-           "/api/auth/bootstrap", "/setup", "/favicon.ico"}
-_PUBLIC_PREFIXES = ("/api/setup/", "/static/login")
+           "/api/auth/bootstrap", "/favicon.ico"}
 # Fuer jeden angemeldeten Benutzer, auch bei must_change und mit Rolle ansehen
 _SELF = {"/api/auth/logout", "/api/auth/password"}
 # Auch lesend nur fuer 'verwalten'
-_ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/api/system")
+_ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/api/system",
+                   "/api/trigger-sql", "/api/overrides", "/api/wmai/", "/api/setup", "/setup")
+# Gleicher Aufwand wie eine echte Pruefung, damit unbekannte Benutzernamen
+# nicht an der Antwortzeit erkennbar sind.
+_DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _is_local(request: Request) -> bool:
+    from slim.core_slim.access import _parse_ip   # normalisiert ::ffff:a.b.c.d
     host = request.client.host if request.client else ""
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return host in ("localhost",)
+    ip = _parse_ip(host)
+    return bool(ip and ip.is_loopback) or host == "localhost"
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+def _needs_admin(method: str, path: str) -> bool:
+    return (method not in ("GET", "HEAD", "OPTIONS") and path not in _SELF) \
+        or path.startswith(_ADMIN_PREFIXES)
 
 
 def _audit(event: str, **details) -> None:
@@ -68,19 +78,20 @@ def _setup_done() -> bool:
 
 async def middleware(request: Request, call_next):
     path = request.url.path
-    if path in _PUBLIC or path.startswith(_PUBLIC_PREFIXES):
+    if path in _PUBLIC:
         return await call_next(request)
-    if path == "/" and not _setup_done():
-        return await call_next(request)   # leitet auf den Setup-Wizard um
+    if not _setup_done():
+        # Ersteinrichtung: Wizard (/setup, /api/setup/*, /api/config/pattern/*)
+        # braucht keine Anmeldung - es gibt noch keine Benutzer, und die
+        # IP-Freigabe laesst ohne Konfiguration nur localhost zu.
+        return await call_next(request)
     sess = SESSIONS.get(request.cookies.get(COOKIE))
     user = USERS.get(sess["user"]) if sess else None
     if not user:
         return _deny(request, 401, "Nicht angemeldet")
     if user.get("must_change") and path not in _SELF:
         return _deny(request, 403, "Passwort muss geaendert werden")
-    needs_admin = (request.method not in ("GET", "HEAD", "OPTIONS") and path not in _SELF) \
-        or path.startswith(_ADMIN_PREFIXES)
-    if needs_admin and user.get("role") != "verwalten":
+    if _needs_admin(request.method, path) and user.get("role") != "verwalten":
         return _deny(request, 403, "Keine Berechtigung (Rolle 'verwalten' noetig)")
     request.state.user = user["name"]
     request.state.role = user.get("role")
@@ -120,15 +131,21 @@ def state(request: Request):
 def login(payload: LoginPayload, request: Request):
     name = payload.username.strip()
     fail = HTTPException(401, "Anmeldung fehlgeschlagen")
-    if GUARD.blocked(name):
-        _audit("login_blocked", user=name)
+    # Sperre je Adresse UND Benutzer: ein Dritter im Netz kann den Verwalter
+    # nicht aussperren; am Server selbst (localhost) gibt es keine Sperre.
+    local = _is_local(request)
+    key = f"{_client_ip(request)}|{name}"
+    if not local and GUARD.blocked(key):
+        _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
     user = USERS.get(name)
-    if not user or not auth.verify_password(payload.password, user["hash"]):
-        GUARD.fail(name)
-        _audit("login_failed", user=name)
+    ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
+    if not user or not ok:
+        if not local:
+            GUARD.fail(key)
+        _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail
-    GUARD.ok(name)
+    GUARD.ok(key)
     token = SESSIONS.create(name)
     _audit("login_ok", user=name)
     resp = JSONResponse({"ok": True, "role": user.get("role"),
@@ -159,18 +176,28 @@ def change_password(payload: PasswordPayload, request: Request):
         USERS.set_password(user["name"], payload.new, must_change=False)
     except auth.AuthError as e:
         raise HTTPException(400, str(e))
+    # Alle Sitzungen des Benutzers beenden (z. B. eine fremde nach einem
+    # Passwort-Leck) und dieser Anfrage eine neue Sitzung geben.
+    SESSIONS.drop_user(user["name"])
+    token = SESSIONS.create(user["name"])
     _audit("password_changed", user=user["name"])
-    return {"ok": True}
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(COOKIE, token, httponly=True, samesite="strict", path="/")
+    return resp
 
 
 @router.post("/bootstrap")
 def bootstrap(payload: LoginPayload, request: Request):
     """Ersten Verwalter anlegen - nur ohne Benutzer und nur von localhost."""
+    forbidden = HTTPException(403, "Ersteinrichtung nur am Server und nur ohne Benutzer moeglich")
     if USERS.count() > 0 or not _is_local(request):
-        raise HTTPException(403, "Ersteinrichtung nur am Server und nur ohne Benutzer moeglich")
+        raise forbidden
     try:
-        USERS.create(payload.username, payload.password, "verwalten", must_change=False)
+        USERS.create(payload.username, payload.password, "verwalten", must_change=False,
+                     only_if_empty=True)
     except auth.AuthError as e:
+        if "bereits Benutzer" in str(e):
+            raise forbidden
         raise HTTPException(400, str(e))
     _audit("bootstrap_admin", user=payload.username.strip())
     return {"ok": True}

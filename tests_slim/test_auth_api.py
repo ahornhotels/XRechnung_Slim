@@ -215,3 +215,54 @@ def test_fehler_ohne_passwort_im_text(setup):
     _admin(client, users)
     r = client.post("/api/users", json={"name": "x", "password": "kurz", "role": "ansehen"})
     assert r.status_code == 400 and "kurz" not in r.text
+
+
+# --- Review/Security-Fixes ---
+
+def test_vor_einrichtung_wizard_api_erreichbar(setup):
+    client, _, mp = setup
+    mp.setattr(auth_api, "_setup_done", lambda: False)
+    assert client.get("/api/sql/templates").status_code == 200   # steht stellvertretend fuer /api/config/pattern/*
+
+
+def test_ansehen_sieht_kein_trigger_sql_und_keine_overrides(setup):
+    client, users, _ = setup
+    for p in ("/api/trigger-sql", "/api/overrides", "/api/wmai/5/override", "/api/setup/trigger-sql", "/setup"):
+        assert auth_api._needs_admin("GET", p), p
+    assert not auth_api._needs_admin("GET", "/api/pending")
+    assert not auth_api._needs_admin("GET", "/api/archive")
+
+
+def test_passwortwechsel_beendet_andere_sitzungen(setup):
+    client, users, _ = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    other = TestClient(client.app)
+    _login(other, "admin", "langes-passwort")
+    _login(client, "admin", "langes-passwort")
+    assert client.post("/api/auth/password", json={"old": "langes-passwort", "new": "neues-langes-pw"}).status_code == 200
+    assert other.get("/api/status").status_code == 401
+    assert client.get("/api/status").status_code == 200        # eigene Sitzung neu ausgestellt
+
+
+def test_sperre_je_adresse_localhost_frei(setup):
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    for _ in range(5):
+        _login(client, "admin", "falsches-passwort")
+    assert _login(client, "admin", "langes-passwort").status_code == 401     # gleiche Adresse gesperrt
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    assert _login(client, "admin", "langes-passwort").status_code == 200     # am Server immer moeglich
+
+
+def test_lokal_erkennt_ipv6_mapped():
+    class R:  # minimaler Request-Ersatz
+        class client:
+            host = "::ffff:127.0.0.1"
+    assert auth_api._is_local(R())
+
+
+def test_bootstrap_nur_einmal_auch_gleichzeitig(setup):
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    with __import__("pytest").raises(auth.AuthError):
+        users.create("zweiter", "langes-passwort", "verwalten", only_if_empty=True)

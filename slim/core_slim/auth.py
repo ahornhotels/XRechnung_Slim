@@ -55,17 +55,28 @@ class UserStore:
 
     def __init__(self, path: Path):
         self.path = Path(path)
-        self._lock = threading.Lock()
+        # RLock: Lesen und Schreiben laufen unter derselben Sperre, damit unter
+        # Windows os.replace nie auf eine gerade gelesene Datei trifft.
+        self._lock = threading.RLock()
+        self._cache: tuple = (None, {})
 
     def _load(self) -> dict:
+        with self._lock:
+            return self._load_locked()
+
+    def _load_locked(self) -> dict:
         if not self.path.exists():
             return {}
+        mtime = self.path.stat().st_mtime_ns
+        if self._cache[0] == mtime:
+            return json.loads(json.dumps(self._cache[1]))   # Kopie
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
             raise AuthError(f"Benutzerdatei {self.path} nicht lesbar: {e}") from e
         if not isinstance(data, dict):
             raise AuthError(f"Benutzerdatei {self.path} hat ein ungueltiges Format.")
+        self._cache = (mtime, json.loads(json.dumps(data)))
         return data
 
     def _save(self, data: dict) -> None:
@@ -88,7 +99,8 @@ class UserStore:
     def _admins(self, data: dict) -> int:
         return sum(1 for u in data.values() if u.get("role") == "verwalten")
 
-    def create(self, name: str, pw: str, role: str, must_change: bool = True) -> None:
+    def create(self, name: str, pw: str, role: str, must_change: bool = True,
+               only_if_empty: bool = False) -> None:
         name = (name or "").strip()
         if not name or len(name) > 64:
             raise AuthError("Benutzername fehlt oder ist zu lang.")
@@ -97,6 +109,8 @@ class UserStore:
         _check_password(pw)
         with self._lock:
             data = self._load()
+            if only_if_empty and data:
+                raise AuthError("Es gibt bereits Benutzer.")
             if name in data:
                 raise AuthError(f"Benutzer {name!r} gibt es schon.")
             data[name] = {"hash": hash_password(pw), "role": role, "must_change": must_change}
@@ -172,28 +186,42 @@ class SessionStore:
 
 
 class LoginGuard:
-    """Sperrt einen Benutzernamen nach `limit` Fehlversuchen in `window`
-    Sekunden fuer `window` Sekunden."""
+    """Sperrt einen Schluessel (z. B. 'IP|Benutzer') fuer `window` Sekunden,
+    sobald innerhalb von `window` Sekunden `limit` Fehlversuche auflaufen.
+    Die Zahl der gemerkten Schluessel ist begrenzt (`max_keys`)."""
 
-    def __init__(self, limit: int = 5, window: int = 15 * 60, clock: Callable[[], float] = time.monotonic):
-        self.limit, self.window, self.clock = limit, window, clock
+    def __init__(self, limit: int = 5, window: int = 15 * 60,
+                 clock: Callable[[], float] = time.monotonic, max_keys: int = 10_000):
+        self.limit, self.window, self.clock, self.max_keys = limit, window, clock, max_keys
         self._fails: dict[str, list[float]] = {}
+        self._until: dict[str, float] = {}
         self._lock = threading.Lock()
 
-    def _recent(self, name: str) -> list[float]:
-        now = self.clock()
-        fails = [t for t in self._fails.get(name, []) if now - t <= self.window]
-        self._fails[name] = fails
-        return fails
-
-    def blocked(self, name: str) -> bool:
+    def blocked(self, key: str) -> bool:
         with self._lock:
-            return len(self._recent(name)) >= self.limit
+            until = self._until.get(key)
+            if until is None:
+                return False
+            if self.clock() >= until:
+                del self._until[key]
+                return False
+            return True
 
-    def fail(self, name: str) -> None:
+    def fail(self, key: str) -> None:
         with self._lock:
-            self._recent(name).append(self.clock())
+            now = self.clock()
+            fails = [t for t in self._fails.get(key, []) if now - t <= self.window] + [now]
+            if len(fails) >= self.limit:
+                self._until[key] = now + self.window
+                self._fails.pop(key, None)
+            else:
+                self._fails[key] = fails
+            while len(self._fails) > self.max_keys:
+                self._fails.pop(next(iter(self._fails)))
+            while len(self._until) > self.max_keys:
+                self._until.pop(next(iter(self._until)))
 
-    def ok(self, name: str) -> None:
+    def ok(self, key: str) -> None:
         with self._lock:
-            self._fails.pop(name, None)
+            self._fails.pop(key, None)
+            self._until.pop(key, None)
