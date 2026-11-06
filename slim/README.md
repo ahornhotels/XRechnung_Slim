@@ -1,6 +1,6 @@
 # Suite8 XRechnung Slim
 
-Standalone-Variante der Suite8 XRechnung MiniApp: schlanker Hintergrund-Poller, der XRechnung-XML an in Suite8 vorbereitete Folio-Mails (WMAI mit `BLOCKSEND=1`) anhaengt. Kein Login, keine DB, kein Mail-Versand durch die App.
+Standalone-Variante der Suite8 XRechnung MiniApp: schlanker Hintergrund-Poller, der XRechnung-XML an in Suite8 vorbereitete Folio-Mails (WMAI mit `BLOCKSEND=1`) anhaengt. Mit Anmeldung (Rollen ansehen/verwalten), ohne eigene DB, kein Mail-Versand durch die App.
 
 ## Architektur in einem Satz
 
@@ -20,14 +20,18 @@ Bei Fehlern wird `WMAI_ERROR` auf die Fehlermeldung gesetzt (sichtbar in der Sui
 ## Was es NICHT macht
 
 - **Kein Versand**: der Suite8-Mailservice sendet die Mail. Diese App attached nur.
-- **Kein Auth**: Default-Bind `127.0.0.1`. Wer auf den Server kommt, sieht das UI.
-  Fuer LAN-Zugriff `"host": "0.0.0.0"` setzen **und** die erlaubten Adressen in
-  `"allowed_ips"` eintragen (exakte IPs oder CIDR wie `"192.168.10.0/24"`,
-  in `app_settings.json`, danach Dienst-Neustart). localhost ist immer erlaubt;
-  eine leere Liste blockt alle anderen. Achtung: die Allowlist ersetzt kein
-  Login — nur vertrauenswuerdige IPs freigeben.
+- **Anmeldung**: Benutzer mit den Rollen „ansehen“ und „verwalten“ (`slim/data/users.json`,
+  Passwörter nur als PBKDF2-Hash). Den ersten Verwalter legt man **am Server selbst**
+  unter http://127.0.0.1:8022/login an. Bis dahin läuft der Rechnungsversand normal
+  weiter. Default-Bind `127.0.0.1`. Für LAN-Zugriff in der Oberfläche unter
+  *Einstellungen → Server* die Adresse `0.0.0.0` und die erlaubten Adressen
+  (IPs oder Netze wie `192.168.10.0/24`) setzen, danach neu starten. localhost ist
+  immer erlaubt.
+- **Einstellungen**: Alles aus `connection.json`, `hotel.json`, `app_settings.json` und
+  `update.json` ist unter */settings* änderbar, nur mit der Rolle „verwalten“. Vor jedem
+  Speichern entsteht eine Sicherung `<datei>.<zeitstempel>.sicherung`. Verkäuferdaten
+  kommen aus Suite8 und können abweichend gesetzt werden. Slim schreibt nie nach WUSS.
 - **Keine DB-Persistenz**: alles im Filesystem.
-- **Kein Auto-Update**: per `git pull` + Service-Restart aktualisieren.
 
 ## Setup
 
