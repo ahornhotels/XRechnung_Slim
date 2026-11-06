@@ -14,6 +14,8 @@ den ersten Verwalter anlegen (POST /api/auth/bootstrap). Der Poller laeuft
 davon unabhaengig weiter.
 """
 import logging
+import threading
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -43,8 +45,10 @@ _ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/a
 _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 
 
+_LOCAL_LOGIN_LOCK = threading.Lock()
+
+
 def _LOCAL_FAIL_DELAY() -> None:
-    import time
     time.sleep(1.0)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -146,11 +150,18 @@ def login(payload: LoginPayload, request: Request):
         _audit("login_blocked", user=name, ip=_client_ip(request))
         raise fail
     user = USERS.get(name)
-    ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
+    if local:
+        # Lokale Versuche laufen nacheinander (eine gemeinsame Sperre), und ein
+        # Fehlversuch haelt sie 1 s: parallele Anfragen umgehen die Wartezeit
+        # nicht - hoechstens ein lokaler Fehlversuch pro Sekunde.
+        with _LOCAL_LOGIN_LOCK:
+            ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
+            if not user or not ok:
+                _LOCAL_FAIL_DELAY()
+    else:
+        ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
-        if local:
-            _LOCAL_FAIL_DELAY()
-        else:
+        if not local:
             GUARD.fail(key)
         _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail

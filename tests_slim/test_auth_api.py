@@ -288,3 +288,17 @@ def test_lokal_keine_sperre_aber_wartezeit(setup):
         _login(client, "admin", "falsches-passwort")
     assert len(waits) == 6
     assert _login(client, "admin", "langes-passwort").status_code == 200
+
+
+def test_lokale_fehlversuche_laufen_nacheinander(setup):
+    """Parallele lokale Fehlversuche umgehen die Wartezeit nicht."""
+    import threading, time
+    client, users, mp = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    mp.setattr(auth_api, "_is_local", lambda request: True)
+    mp.setattr(auth_api, "_LOCAL_FAIL_DELAY", lambda: time.sleep(0.2))
+    start = time.monotonic()
+    ts = [threading.Thread(target=lambda: _login(TestClient(client.app), "admin", "falsch-falsch-1")) for _ in range(4)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    assert time.monotonic() - start >= 0.75
