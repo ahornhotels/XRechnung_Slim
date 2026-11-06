@@ -397,7 +397,9 @@ zpil_zinv_id zinv_id,
 round(z.zpos_grossunitprice*z.zpos_quantity,2) LineExtensionAmount,
 (round(z.zpos_grossunitprice*z.zpos_quantity,2)) LineExtensionAmount_Number,
 TO_CHAR(round(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') LineExtensionAmountVat,
-(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)  ClassifiedTaxCategoryPercent,
+-- Ohne CDT-2-Partner (Auslage/durchlaufender Posten) ist der Satz 0 statt NULL.
+nvl((select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id),
+    (select 0 from dual where not exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2)))  ClassifiedTaxCategoryPercent,
 /*Change: TaxAmount je Steuercode statt je Prozentsatz gruppieren (BR-CO-14 Doppelzaehlung bei zwei ZTCDs mit gleichem Satz)*/
 (select Z3.zpos_ztcd_id from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2 and rownum=1)  ClassifiedTaxCategoryZtcdId
 from

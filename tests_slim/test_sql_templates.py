@@ -67,6 +67,8 @@ def test_zeilenlogik_synchron_ueber_drei_sql():
         ("(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) "
          "from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and "
          "Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)"),
+        ("(select 0 from dual where not exists (select 1 from zpos Z3 where "
+         "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2))"),
     )
     sqls = {name: _read(f"invoice_{name}.sql").replace(" ", "").replace("\n", "")
             for name in ("lines", "tax", "totals")}
