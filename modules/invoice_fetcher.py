@@ -70,7 +70,7 @@ select 1 from zinv, zwin, xmnr, xmty
    and zinv_zwin_id = zwin_id
    and xmnr_xmty_id = xmty_id
    and upper(xmty_shortdesc)=upper(:code)
-   and xmnr_xcms_id in (zwin_invoice_to_xcms_id, zinv_xcms_id)
+   and xmnr_xcms_id = nvl(zwin_invoice_to_xcms_id, zinv_xcms_id)
    and rownum = 1
 """
 
@@ -91,10 +91,14 @@ def _xml_only_reason(cur, zinv_id: int) -> Optional[str]:
         cur.execute(_XML_ONLY_SQL, {"zinv_id": zinv_id, "code": code.strip()})
         return "membership" if cur.fetchone() else None
     except Exception as e:
-        if not _warned_xml_only_query:
-            _warned_xml_only_query = True
-            logger.warning("Nur-XML-Pruefung (Membership %s) nicht moeglich - "
-                           "PDF wird mitgesendet (%s)", code, e)
+        # Fehlende Tabelle/Spalte: einmal warnen. Alles andere (Netz, Rechte)
+        # jedes Mal, sonst bliebe ein XML-only-Kunde unbemerkt mit PDF.
+        structural = any(c in str(e) for c in ("ORA-00942", "ORA-00904"))
+        if not structural or not _warned_xml_only_query:
+            if structural:
+                _warned_xml_only_query = True
+            logger.warning("Nur-XML-Pruefung (Membership %s) fuer ZINV %s nicht moeglich - "
+                           "PDF wird mitgesendet (%s)", code, zinv_id, e)
         return None
 
 

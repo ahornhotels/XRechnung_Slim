@@ -87,20 +87,30 @@ def attach_xml_to_wmai(
         #     solange die Mail blockiert und ungesendet ist, nie bei RTF.
         #     0 Zeilen (kein PDF da) ist kein Fehler - die XML geht trotzdem.
         pdf_removed = False
+        pdf_error = None
         if remove_pdf:
-            cur.execute(
-                """
-                UPDATE WMAI SET WMAI_ATTACHMENT_WTXT_ID = NULL,
-                                WMAI_ATTACHMENT_FILE_NAME = NULL
-                 WHERE WMAI_ID=:wmai_id
-                   AND WMAI_BLOCKSEND=1
-                   AND WMAI_SENT=0
-                   AND LOWER(WMAI_ATTACHMENT_FILE_NAME) LIKE '%.pdf'
-                   AND WMAI_ATTACHMENT_RTF_WTXT_ID IS NULL
-                """,
-                {"wmai_id": wmai_id},
-            )
-            pdf_removed = cur.rowcount == 1
+            # Oracle rollt bei einem Fehler nur DIESE Anweisung zurueck, die
+            # Transaktion (XML-Anhang) bleibt intakt. Scheitert das Leeren (z. B.
+            # Spalte fehlt in einer Suite8-Version), bleibt das PDF - die Mail
+            # wird trotzdem entblockt statt dauerhaft zu haengen.
+            try:
+                cur.execute(
+                    """
+                    UPDATE WMAI SET WMAI_ATTACHMENT_WTXT_ID = NULL,
+                                    WMAI_ATTACHMENT_FILE_NAME = NULL
+                     WHERE WMAI_ID=:wmai_id
+                       AND WMAI_BLOCKSEND=1
+                       AND WMAI_SENT=0
+                       AND LOWER(WMAI_ATTACHMENT_FILE_NAME) LIKE '%.pdf'
+                       AND WMAI_ATTACHMENT_RTF_WTXT_ID IS NULL
+                    """,
+                    {"wmai_id": wmai_id},
+                )
+                pdf_removed = cur.rowcount == 1
+            except Exception as e:
+                pdf_error = str(e)[:300]
+                logger.warning("PDF-Anhang von WMAI %s nicht entfernt (%s) - "
+                               "Mail geht mit PDF", wmai_id, pdf_error)
 
         # 5) WMAI entblocken (nur wenn vorher BLOCKSEND=1 und SENT=0)
         cur.execute(
@@ -130,7 +140,7 @@ def attach_xml_to_wmai(
             wmai_id, wmaa_id, wtxt_id, len(xml_bytes),
         )
         return {"wtxt_id": wtxt_id, "wmaa_id": wmaa_id, "wmai_id": wmai_id,
-                "pdf_removed": pdf_removed}
+                "pdf_removed": pdf_removed, "pdf_error": pdf_error}
     except Exception:
         conn.rollback()
         raise

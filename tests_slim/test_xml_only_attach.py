@@ -81,11 +81,15 @@ def test_remove_pdf_null_zeilen_kein_fehler():
     assert res["pdf_removed"] is False and conn.commits == 1
 
 
-def test_fehler_beim_leeren_rollback():
+def test_fehler_beim_leeren_pdf_bleibt_xml_geht():
+    """Z. B. ORA-00904 (RTF-Spalte fehlt in einer Suite8-Version): Das PDF
+    bleibt, die XML wird trotzdem angehaengt und die Mail entblockt - lieber
+    PDF mitsenden als die Mail dauerhaft blockieren."""
     conn = _Conn(fail_on="UPDATE WMAI SET WMAI_ATTACHMENT_WTXT_ID")
-    with pytest.raises(RuntimeError):
-        _attach(conn, remove_pdf=True)
-    assert conn.rollbacks == 1 and conn.commits == 0
+    res = _attach(conn, remove_pdf=True)
+    assert res["pdf_removed"] is False and "DB kaputt" in res["pdf_error"]
+    assert conn.commits == 1 and conn.rollbacks == 0
+    assert any(s.startswith("UPDATE WMAI SET WMAI_BLOCKSEND=0") for s in conn.log)
 
 
 # --- Poller reicht xml_only durch und protokolliert ---

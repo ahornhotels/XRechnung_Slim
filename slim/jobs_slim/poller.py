@@ -254,6 +254,8 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                     xml_only_details = {"xml_only": xml_only, "pdf_removed": removed}
                     if not removed:
                         xml_only_details["pdf_not_removed"] = True
+                        if result.get("pdf_error"):
+                            xml_only_details["pdf_error"] = result["pdf_error"]
                         logger.warning(
                             "Nur-XML (%s) fuer WMAI %s: kein PDF-Hauptanhang entfernt "
                             "(keiner da, kein .pdf oder RTF-Anhang) - Mail geht mit vorhandenen Anhaengen",
