@@ -228,3 +228,60 @@ def test_fetch_invoice_verteilt_strassenzeilen(monkeypatch):
     inv = invoice_fetcher.fetch_invoice(1)
     h = inv["header"]
     assert (h["customerstreetname"], h["customeradditionalstreetname"]) == ("Am Markt 5", "c/o Einkauf")
+
+
+# --- Nutzervorgabe: Adressen niemals splitten (eine XADR-Zeile fuer alles) ---
+
+def _both(adr, prim):
+    """adr/prim = (street1, street2, street3, city, zip, country)"""
+    h = {"customeradrid": 7 if adr else None}
+    for prefix, vals in (("customeradr", adr), ("customerprim", prim)):
+        vals = vals or (None,) * 6
+        for i in range(3):
+            h[f"{prefix}street{i + 1}"] = vals[i]
+        h[f"{prefix}city"], h[f"{prefix}zip"], h[f"{prefix}country"] = vals[3:]
+    # Werte wie bisher aus dem nvl()-SQL (gemischt) - muessen ueberschrieben werden
+    h.update(customerstreetname="X", customercityname="X", customerpostalzone="X",
+             customeridentificationcode="X")
+    return h
+
+
+def _addr(h):
+    return (h["customerstreetname"], h["customercityname"], h["customerpostalzone"],
+            h["customeridentificationcode"])
+
+
+def test_rechnungsadresse_mit_strasse_komplett():
+    h = _both(("Kundenweg 2", None, None, "Berlin", "10115", "DE"),
+              ("Primaerweg 9", None, None, "Muenchen", "80331", "DE"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == ("Kundenweg 2", "Berlin", "10115", "DE")
+
+
+def test_rechnungsadresse_ohne_strasse_primaeradresse_komplett():
+    h = _both((None, None, None, "Berlin", "10115", "DE"),
+              ("Primaerweg 9", "Haus B", None, "Muenchen", "80331", "AT"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == ("Primaerweg 9", "Muenchen", "80331", "AT")
+    assert h["customeradditionalstreetname"] == "Haus B"
+
+
+def test_keine_adresse_mit_strasse_bleibt_rechnungsadresse_ohne_mix():
+    h = _both((None, None, None, "Berlin", "10115", "DE"),
+              (None, None, None, "Muenchen", "80331", "DE"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == (None, "Berlin", "10115", "DE")
+
+
+def test_ohne_rechnungsadresse_primaeradresse_komplett():
+    h = _both(None, ("Primaerweg 9", None, None, "Muenchen", "80331", "DE"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == ("Primaerweg 9", "Muenchen", "80331", "DE")
+
+
+def test_header_sql_liefert_ort_plz_land_je_adresse():
+    from pathlib import Path
+    sql = (Path(__file__).resolve().parent.parent / "sql" / "invoice_header.sql").read_text(encoding="utf-8")
+    for col in ("CustomerAdrCity", "CustomerAdrZip", "CustomerAdrCountry",
+                "CustomerPrimCity", "CustomerPrimZip", "CustomerPrimCountry"):
+        assert col in sql

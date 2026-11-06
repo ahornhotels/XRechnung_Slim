@@ -21,14 +21,41 @@ def street_lines(*raw: Optional[str]) -> list[str]:
     return [str(v).strip() for v in raw if v is not None and str(v).strip()]
 
 
+def _apply_whole_address(header: dict) -> None:
+    """Adresse nie splitten: Strasse, Ort, PLZ und Land aus GENAU einer
+    XADR-Zeile. Rechnungsadresse mit Strasse > Primaeradresse mit Strasse >
+    Rechnungsadresse (ohne Strasse -> Validator meldet es) > Primaeradresse."""
+    adr = street_lines(*(header.get(k) for k in _ADR_KEYS))
+    prim = street_lines(*(header.get(k) for k in _PRIM_KEYS))
+    has_adr = not _blank(header.get("customeradrid"))
+    if has_adr and adr:
+        src, lines = "customeradr", adr
+    elif prim:
+        src, lines = "customerprim", prim
+    elif has_adr:
+        src, lines = "customeradr", []
+    else:
+        src, lines = "customerprim", []
+    lines = lines + [None, None, None]
+    header["customerstreetname"] = lines[0]
+    header["customeradditionalstreetname"] = lines[1]
+    header["customeraddressline"] = lines[2]
+    header["customercityname"] = header.get(f"{src}city")
+    header["customerpostalzone"] = header.get(f"{src}zip")
+    header["customeridentificationcode"] = header.get(f"{src}country")
+
+
 def apply_customer_address(header: dict) -> None:
     """Verteilt Strasse 1/2/3 auf StreetName, AdditionalStreetName, AddressLine.
 
     Quelle ist die Rechnungsadresse (ZINV_XADR_ID); hat sie keine Strasse,
-    die Primaeradresse. Liefert das SQL die Spalten nicht (alter
+    die Primaeradresse - immer die ganze Adresse (_apply_whole_address). Liefert das SQL die Spalten nicht (alter
     Override), bleibt der Kopf unveraendert.
     """
     if not any(k in header for k in _ADR_KEYS + _PRIM_KEYS):
+        return
+    if "customeradrcity" in header or "customerprimcity" in header:
+        _apply_whole_address(header)
         return
     # Strassenzeilen nie zwischen den Adressen mischen: entweder alle aus der
     # Rechnungsadresse oder - wenn diese keine Strasse hat - alle aus der
