@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Wie in Plan Schritt 1: öffentliches Repo ohne echte Daten, nur SELECT, Testbefehl `C:\FIDELIO\Suite8XRechnung\.venv\Scripts\python.exe -m pytest tests_slim -q`, KoSIT nur mit den Stammdatenbefunden R020/R010/BR-DE-6/7.
-- Befund aus SHT (Live, nur SELECT): Leistungszeilen ohne CDT-2 ergeben heute `ClassifiedTaxCategoryPercent` = NULL. Damit wird auch `LineExtensionAmountNet` NULL, und der Validator meldet „USt-Satz nicht ermittelbar“. Betroffen sind rund 5.300 Rechnungen pro Jahr.
+- Befund aus einem Haus (live, nur SELECT): Leistungszeilen ohne CDT-2 ergeben heute `ClassifiedTaxCategoryPercent` = NULL. Damit wird auch `LineExtensionAmountNet` NULL, und der Validator meldet „USt-Satz nicht ermittelbar“. Betroffen sind rund 5.300 Rechnungen pro Jahr.
 - Eine Zeile **mit** CDT-2-Partner, deren Satz sich nicht ermitteln lässt, bleibt NULL und blockiert. Das ist ein echter Datenfehler.
 - Nach `/code-review high` je Aufgabe werden die Befunde wie in Schritt 1 behandelt.
 
@@ -47,12 +47,12 @@ nvl((select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos
   - `test_negative_z_auslage_wird_abschlag_z`: Die negative Auslage erscheint als `AllowanceCharge` mit Kategorie Z und Percent 0.
 - [ ] **Step 2:** Die Tests laufen und schlagen fehl (SQL-Fragment fehlt). Der Render-Test darf schon grün sein, wenn der Builder das bereits kann. Das wird im Ledger vermerkt.
 - [ ] **Step 3:** SQL in allen drei Dateien ändern, Guard-Fragment ergänzen.
-- [ ] **Step 4:** Gesamtsuite grün. KoSIT-Gegenprobe mit einer Rechnung nach dem Muster der SHT-Rechnung „Auslage ohne Steuer“: Positionen zu 19 % und 7 % plus fünf Auslagen über zusammen 15,00 €. Erwartet: keine Befunde außer Stammdaten.
+- [ ] **Step 4:** Gesamtsuite grün. KoSIT-Gegenprobe mit einer Rechnung nach dem Muster einer echten Rechnung mit Auslagen ohne Steuer: Positionen zu 19 % und 7 % plus fünf Auslagen über zusammen 15,00 €. Erwartet: keine Befunde außer Stammdaten.
 - [ ] **Step 5:** Commit `fix(sql): Leistungen ohne Steuerzeile als Z 0 % statt Satz NULL`, danach `/code-review high`.
 
 ### Task 2: Paid-Out (CDT 5, `ZPOS_PAIDOUT=1`)
 
-**Befund in SHT:**
+**Befund aus einem Haus:**
 - Paid-Out ist eine negative CDT-5-Zeile, z. B. -7,65 € oder -25,00 € mit dem Artikel „Auslagen“.
 - `invoice_totals.sql` zählt sie ins Brutto: `-gross`, also +7,65 €.
 - Die Positionen (nur CDT 1) enthalten sie nicht. Brutto (BT-112) ≠ Netto + Steuer, das ergibt einen KoSIT-Fehler (BR-CO-15).
