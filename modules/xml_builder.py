@@ -38,11 +38,7 @@ class XmlBuildError(Exception):
     pass
 
 
-def _de_date(iso) -> str:
-    """'2026-02-06' -> '06.02.2026' (unveraendert, wenn nicht parsebar)."""
-    s = str(iso or "")[:10]
-    parts = s.split("-")
-    return f"{parts[2]}.{parts[1]}.{parts[0]}" if len(parts) == 3 else s
+from modules.invoice_enrich import de_date as _de_date  # noqa: E402
 
 
 def deposit_allowances(lines: list) -> tuple[list, list, list]:

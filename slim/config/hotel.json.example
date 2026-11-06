@@ -12,5 +12,6 @@
   "suite8_attachment_name_template": "{zinv_number}.xml",
   "seller_contact_name": "Buchhaltung",
   "seller_contact_phone": "",
-  "seller_contact_email": ""
+  "seller_contact_email": "",
+  "gastzeile": "Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"
 }

@@ -45,6 +45,15 @@ def _seller_contact_defaults() -> dict:
     }
 
 
+
+def _gastzeile_template() -> str:
+    """Vorlage der Gastzeile aus config/hotel.json ('gastzeile'). Fehlt der
+    Schluessel: Standard. Ein leerer String bedeutet 'keine Gastzeile'."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    value = hotel.get("gastzeile")
+    return invoice_enrich.GASTZEILE_STANDARD if value is None else str(value)
+
+
 # Marker, die im aktuellen Repo-Template vorkommen. Fehlen sie in einem
 # Operator-Override, ist der Override vor den zugehoerigen Fixes gespeichert
 # worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
@@ -194,6 +203,9 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
 
         # Strasse 1/2/3 -> BT-50/51/163 (leere Zeilen ueberspringen)
         invoice_enrich.apply_customer_address(header)
+        # Gastzeile BT-22 / Lieferempfaenger BT-70 (nur bei genau einem Gast)
+        invoice_enrich.apply_guest_info({"header": header, "lines": lines},
+                                        _gastzeile_template())
 
         # Waehrung: wenn Suite8 nichts liefert (WUSS.BaseCurrency nicht gepflegt),
         # nimm Default aus config/hotel.json (Default 'EUR'). XRechnung braucht
