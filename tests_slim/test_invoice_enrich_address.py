@@ -285,3 +285,56 @@ def test_header_sql_liefert_ort_plz_land_je_adresse():
     for col in ("CustomerAdrCity", "CustomerAdrZip", "CustomerAdrCountry",
                 "CustomerPrimCity", "CustomerPrimZip", "CustomerPrimCountry"):
         assert col in sql
+
+
+# --- Review: Vollstaendigkeit vor Rechnungsadresse, nie mischen ---
+
+def test_rechnungsadresse_ohne_ort_vollstaendige_primaer_komplett():
+    h = _both(("Kundenweg 2", None, None, None, None, "DE"),
+              ("Primaerweg 9", None, None, "Muenchen", "80331", "DE"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == ("Primaerweg 9", "Muenchen", "80331", "DE")
+
+
+def test_leere_rechnungsadresse_nimmt_primaer_mit_ort():
+    h = _both((None, None, None, None, None, None),
+              (None, None, None, "Muenchen", "80331", "DE"))
+    ie.apply_customer_address(h)
+    assert _addr(h) == (None, "Muenchen", "80331", "DE")
+
+
+def test_gewaehlte_adresse_wird_nie_aus_der_anderen_ergaenzt():
+    # Rechnungsadresse hat Strasse+Ort, keine PLZ; Primaer hat nur PLZ -> Rechnungsadresse,
+    # PLZ bleibt leer (kein Mischen), Validator meldet sie.
+    h = _both(("Kundenweg 2", None, None, "Berlin", None, "DE"),
+              (None, None, None, None, "80331", None))
+    ie.apply_customer_address(h)
+    assert _addr(h) == ("Kundenweg 2", "Berlin", None, "DE")
+
+
+def test_ort_plz_werden_getrimmt():
+    h = _both(("Kundenweg 2", None, None, " Berlin ", " ", "DE"), None)
+    ie.apply_customer_address(h)
+    assert h["customercityname"] == "Berlin" and h["customerpostalzone"] is None
+
+
+def test_unvollstaendige_neue_spalten_aendern_ort_nicht(caplog):
+    h = {"customeradrid": 7, "customeradrstreet1": None, "customeradrstreet2": None,
+         "customeradrstreet3": None, "customerprimstreet1": "Primaerweg 9",
+         "customerprimstreet2": None, "customerprimstreet3": None,
+         "customeradrcity": "Berlin",  # Zip/Country-Spalten fehlen im Override
+         "customerstreetname": "Primaerweg 9", "customercityname": "Muenchen",
+         "customerpostalzone": "80331", "customeridentificationcode": "DE"}
+    ie.apply_customer_address(h)
+    assert (h["customercityname"], h["customerpostalzone"]) == ("Muenchen", "80331")
+
+
+def test_alter_override_ohne_ortspalten_warnt(caplog, monkeypatch):
+    import logging
+    monkeypatch.setattr(ie, "_warned_old_address_sql", False)
+    h = {"customeradrstreet1": None, "customeradrstreet2": None, "customeradrstreet3": None,
+         "customerprimstreet1": "Primaerweg 9", "customerprimstreet2": None,
+         "customerprimstreet3": None}
+    with caplog.at_level(logging.WARNING):
+        ie.apply_customer_address(h)
+    assert "invoice_header.sql" in caplog.text

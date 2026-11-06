@@ -129,11 +129,13 @@ Straße. Das kommt in der Praxis vor.
 - Nirgends erscheint „None“. Allgemein gilt im Builder: None wird zu leer, wie
   `_leer_statt_none` bei OPERA.
 - **Adressen werden nie gesplittet** (Vorgabe des Nutzers): Straße, Ort, PLZ und Land
-  kommen immer aus genau einer XADR-Zeile. Rangfolge:
-  1. Rechnungsadresse mit Straße
-  2. Primäradresse mit Straße
-  3. Rechnungsadresse ohne Straße (der Validator meldet die fehlende Straße)
-  4. Primäradresse
+  kommen immer aus genau einer XADR-Zeile. Gewählt wird die vollständigere Adresse:
+  1. alle Felder gefüllt
+  2. Straße gefüllt
+  3. mehr gefüllte Felder
+
+  Bei Gleichstand gilt die Rechnungsadresse. Fehlende Felder der gewählten Adresse
+  werden nie aus der anderen ergänzt, der Validator meldet sie.
 - Gilt nur für den Käufer. Die Verkäuferadresse bleibt unverändert.
 
 ## 6. Datenquelle Gast und Zimmer je Buchung (für Schritte 1 und 4)

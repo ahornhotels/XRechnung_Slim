@@ -21,28 +21,41 @@ def street_lines(*raw: Optional[str]) -> list[str]:
     return [str(v).strip() for v in raw if v is not None and str(v).strip()]
 
 
-def _apply_whole_address(header: dict) -> None:
-    """Adresse nie splitten: Strasse, Ort, PLZ und Land aus GENAU einer
-    XADR-Zeile. Rechnungsadresse mit Strasse > Primaeradresse mit Strasse >
-    Rechnungsadresse (ohne Strasse -> Validator meldet es) > Primaeradresse."""
-    adr = street_lines(*(header.get(k) for k in _ADR_KEYS))
-    prim = street_lines(*(header.get(k) for k in _PRIM_KEYS))
-    has_adr = not _blank(header.get("customeradrid"))
-    if has_adr and adr:
-        src, lines = "customeradr", adr
-    elif prim:
-        src, lines = "customerprim", prim
-    elif has_adr:
-        src, lines = "customeradr", []
-    else:
-        src, lines = "customerprim", []
-    lines = lines + [None, None, None]
+_CITY_KEYS = tuple(f"{p}{f}" for p in ("customeradr", "customerprim")
+                   for f in ("city", "zip", "country"))
+_warned_old_address_sql = False
+
+
+def _clean(v) -> Optional[str]:
+    return None if v is None or not str(v).strip() else str(v).strip()
+
+
+def _set_street_lines(header: dict, lines: list) -> None:
+    lines = list(lines) + [None, None, None]
     header["customerstreetname"] = lines[0]
     header["customeradditionalstreetname"] = lines[1]
     header["customeraddressline"] = lines[2]
-    header["customercityname"] = header.get(f"{src}city")
-    header["customerpostalzone"] = header.get(f"{src}zip")
-    header["customeridentificationcode"] = header.get(f"{src}country")
+
+
+def _apply_whole_address(header: dict) -> None:
+    """Adresse nie splitten: Strasse, Ort, PLZ und Land aus GENAU einer
+    XADR-Zeile. Gewaehlt wird die vollstaendigere Adresse (alles da > Strasse
+    da > mehr Felder), bei Gleichstand die Rechnungsadresse. Fehlende Felder
+    der gewaehlten Adresse werden NICHT aus der anderen ergaenzt."""
+    candidates = []
+    for src, keys, is_billing in (("customeradr", _ADR_KEYS, 1), ("customerprim", _PRIM_KEYS, 0)):
+        if is_billing and _blank(header.get("customeradrid")):
+            continue
+        lines = street_lines(*(header.get(k) for k in keys))
+        fields = [_clean(header.get(f"{src}{f}")) for f in ("city", "zip", "country")]
+        n = sum(1 for v in fields if v)
+        score = (bool(lines) and n == 3, bool(lines), n, is_billing)
+        candidates.append((score, lines, fields))
+    _, lines, (city, zip_, country) = max(candidates, key=lambda c: c[0])
+    _set_street_lines(header, lines)
+    header["customercityname"] = city
+    header["customerpostalzone"] = zip_
+    header["customeridentificationcode"] = country
 
 
 def apply_customer_address(header: dict) -> None:
@@ -54,9 +67,15 @@ def apply_customer_address(header: dict) -> None:
     """
     if not any(k in header for k in _ADR_KEYS + _PRIM_KEYS):
         return
-    if "customeradrcity" in header or "customerprimcity" in header:
+    if all(k in header for k in _CITY_KEYS):
         _apply_whole_address(header)
         return
+    global _warned_old_address_sql
+    if not _warned_old_address_sql:
+        _warned_old_address_sql = True
+        logger.warning("invoice_header.sql (SQL-Override?) liefert Ort/PLZ/Land nicht je "
+                       "Adresse - Strasse und Ort koennen aus verschiedenen Adressen stammen. "
+                       "Override aus sql/invoice_header.sql neu ableiten.")
     # Strassenzeilen nie zwischen den Adressen mischen: entweder alle aus der
     # Rechnungsadresse oder - wenn diese keine Strasse hat - alle aus der
     # Primaeradresse. Letzteres entspricht dem bisherigen nvl() im SQL; viele
@@ -65,10 +84,7 @@ def apply_customer_address(header: dict) -> None:
              or street_lines(*(header.get(k) for k in _PRIM_KEYS)))
     if not lines:
         return
-    lines += [None, None]
-    header["customerstreetname"] = lines[0]
-    header["customeradditionalstreetname"] = lines[1]
-    header["customeraddressline"] = lines[2]
+    _set_street_lines(header, lines)
 
 
 # --- Gast (BT-22 Gastzeile, BT-70 Lieferempfaenger) -------------------------
