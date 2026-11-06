@@ -20,11 +20,17 @@ DepositZinvId DepositZinvId,
 DepositInvoiceNumber DepositInvoiceNumber,
 DepositInvoiceDate DepositInvoiceDate,
 OriginYresId OriginYresId,
-OriginXcmsId OriginXcmsId,
-OriginGuestName OriginGuestName,
-OriginRoom OriginRoom,
-OriginArrival OriginArrival,
-OriginDeparture OriginDeparture,
+nvl(OriginXcmsRaw, (select y.yres_xcms_id from yres y where y.yres_id=OriginYresId)) OriginXcmsId,
+(select n.name2 from v8_rep_name n where n.xcms_id=nvl(OriginXcmsRaw, (select y.yres_xcms_id from yres y where y.yres_id=OriginYresId))) OriginGuestName,
+-- Zimmer am Buchungstag (sonst letzter Tag davor, z. B. Abreisetag; vor der
+-- Anreise das erste Zimmer). Aggregiert: mehrere YDET-Zeilen je Tag sind
+-- kein ORA-01427.
+nvl((select max(r.yrms_shortdesc) keep (dense_rank last order by t.ydet_date) from ydet t, yrms r
+      where r.yrms_id=t.ydet_yrms_id and t.ydet_yres_id=OriginYresId and t.ydet_date<=OriginPostDate),
+    (select max(r.yrms_shortdesc) keep (dense_rank first order by t.ydet_date) from ydet t, yrms r
+      where r.yrms_id=t.ydet_yrms_id and t.ydet_yres_id=OriginYresId)) OriginRoom,
+(select to_char(trunc(y.yres_exparrtime),'YYYY-MM-DD') from yres y where y.yres_id=OriginYresId) OriginArrival,
+(select to_char(trunc(y.yres_expdeptime),'YYYY-MM-DD') from yres y where y.yres_id=OriginYresId) OriginDeparture,
 TO_CHAR(LineExtensionAmount_Number-round(LineExtensionAmount_Number*ClassifiedTaxCategoryPercent/(100+ClassifiedTaxCategoryPercent),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 (
@@ -48,18 +54,16 @@ z.zpos_deposit_zinv_id DepositZinvId,
 (select d.zinv_number from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceNumber,
 (select to_char(d.zinv_date,'YYYY-MM-DD') from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceDate,
 -- Herkunft je Buchung (Gast/Zimmer fuer Gastzeile und Gruppenrechnung).
--- Gast = ZPOS_ORIGINATED_XCMS_ID, Reservierung = ZPOS_ORIGINATED_YRES_ID
--- (Fallback ZPOS_YRES_ID). Zimmer = YDET am Buchungstag, sonst letzter Tag
--- davor (Buchung am Abreisetag). YRES_YRMS_ID ist nach Check-out leer.
-nvl(z.zpos_originated_yres_id, z.zpos_yres_id) OriginYresId,
-nvl(z.zpos_originated_xcms_id, (select y.yres_xcms_id from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id))) OriginXcmsId,
-(select n.name2 from v8_rep_name n where n.xcms_id=nvl(z.zpos_originated_xcms_id, (select y.yres_xcms_id from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)))) OriginGuestName,
-nvl((select r.yrms_shortdesc from ydet t, yrms r where r.yrms_id=t.ydet_yrms_id
-      and t.ydet_yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id) and t.ydet_date=trunc(z.zpos_postdate)),
-    (select max(r.yrms_shortdesc) keep (dense_rank last order by t.ydet_date) from ydet t, yrms r
-      where r.yrms_id=t.ydet_yrms_id and t.ydet_yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id) and t.ydet_date<=trunc(z.zpos_postdate))) OriginRoom,
-(select to_char(trunc(y.yres_exparrtime),'YYYY-MM-DD') from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)) OriginArrival,
-(select to_char(trunc(y.yres_expdeptime),'YYYY-MM-DD') from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)) OriginDeparture,
+-- Reservierung = ZPOS_ORIGINATED_YRES_ID (Fallback ZPOS_YRES_ID), Gast =
+-- ZPOS_ORIGINATED_XCMS_ID. Auf einem Finanzkonto entstandene Buchungen
+-- (ZPOS_ORIGINATED_ZFAC_ID) haben weder Gast noch Zimmer. Aufgeloest wird
+-- im aeusseren SELECT, damit die Ausdruecke nicht je Spalte wiederholt werden.
+z.zpos_id ZposId,
+case when z.zpos_originated_zfac_id is not null then to_number(null)
+     else nvl(z.zpos_originated_yres_id, z.zpos_yres_id) end OriginYresId,
+case when z.zpos_originated_zfac_id is not null then to_number(null)
+     else z.zpos_originated_xcms_id end OriginXcmsRaw,
+trunc(z.zpos_postdate) OriginPostDate,
 to_char(round(z.zpos_unitprice,2),'999999990D99','NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 zpil,zpos z
@@ -69,3 +73,4 @@ and z.zpos_cdt=1
 and zpil_zinv_id = :zinv_id
 and nvl(round(z.zpos_grossunitprice*z.zpos_quantity,2),0)<>0
 )
+order by ZposId

@@ -7,7 +7,10 @@ Laeuft in invoice_fetcher.fetch_invoice, VOR dem Validator.
 - Kaeuferadresse aus Strasse 1/2/3 (BT-50, BT-51, BT-163)
 - Gastzeile (BT-22) und Lieferempfaenger (BT-70) bei genau einem Gast
 """
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 _ADR_KEYS = ("customeradrstreet1", "customeradrstreet2", "customeradrstreet3")
 _PRIM_KEYS = ("customerprimstreet1", "customerprimstreet2", "customerprimstreet3")
@@ -94,11 +97,16 @@ def guest_line(template: str, guest: dict) -> Optional[str]:
         return None
     values = {k: ("" if v is None else str(v).strip()) for k, v in guest.items()}
     out = []
-    for seg in template.split(", "):
-        names = [f for _, f, _, _ in string.Formatter().parse(seg) if f]
-        if any(not values.get(n) for n in names):
-            continue
-        out.append(seg.format(**{n: values[n] for n in names}))
+    try:
+        for seg in template.split(", "):
+            names = [f for _, f, _, _ in string.Formatter().parse(seg) if f is not None]
+            if any(not values.get(n) for n in names):
+                continue
+            out.append(seg.format(**{n: values[n] for n in names}))
+    except (ValueError, IndexError, KeyError) as e:
+        # Tippfehler in der Vorlage darf keine Rechnung blockieren.
+        logger.warning("Gastzeilen-Vorlage %r ungueltig (%s) - keine Gastzeile", template, e)
+        return None
     return ", ".join(out) or None
 
 
@@ -108,11 +116,10 @@ def apply_guest_info(invoice: dict, template: str) -> None:
     header = invoice.setdefault("header", {})
     header["deliverypartyname"] = None
     gs = guests(invoice.get("lines") or [])
-    if len(gs) != 1:
+    if len(gs) != 1 or _blank(gs[0].get("gast")):
         return
-    line = guest_line(template, gs[0])
-    if not line:
-        return
-    note = header.get("note")
-    header["note"] = f"{note}{_HINWEIS_TRENNER}{line}" if not _blank(note) else line
     header["deliverypartyname"] = str(gs[0]["gast"]).strip()
+    line = guest_line(template, gs[0])
+    if line:
+        note = header.get("note")
+        header["note"] = f"{note}{_HINWEIS_TRENNER}{line}" if not _blank(note) else line

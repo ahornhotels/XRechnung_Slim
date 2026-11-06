@@ -50,8 +50,16 @@ def _gastzeile_template() -> str:
     """Vorlage der Gastzeile aus config/hotel.json ('gastzeile'). Fehlt der
     Schluessel: Standard. Ein leerer String bedeutet 'keine Gastzeile'."""
     hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    if "gastzeile" not in hotel:
+        return invoice_enrich.GASTZEILE_STANDARD
     value = hotel.get("gastzeile")
-    return invoice_enrich.GASTZEILE_STANDARD if value is None else str(value)
+    return value if isinstance(value, str) else ""  # null/false/0 = aus
+
+
+def _guest_info_available() -> bool:
+    """Ohne ZPOS_ORIGINATED_YRES_ID waere die Herkunft die Folio-Reservierung:
+    ein Gruppen-Master saehe dann wie EIN Gast aus. Dann keine Gastangaben."""
+    return "ZPOS_ORIGINATED_YRES_ID" not in _missing_line_columns
 
 
 # Marker, die im aktuellen Repo-Template vorkommen. Fehlen sie in einem
@@ -124,12 +132,13 @@ _OPTIONAL_LINE_COLUMNS: tuple[str, ...] = (
     "ZPOS_DEPOSIT_ZINV_ID",
     "ZPOS_ORIGINATED_YRES_ID",
     "ZPOS_ORIGINATED_XCMS_ID",
+    "ZPOS_ORIGINATED_ZFAC_ID",
 )
 _missing_line_columns: set[str] = set()
 
 
 def _lines_sql_without(sql: str, columns: set[str]) -> str:
-    for col in columns:
+    for col in tuple(columns):  # Schnappschuss: Set kann parallel wachsen
         sql = re.sub(rf"z\.{col}\b", "to_number(null)", sql, flags=re.IGNORECASE)
     return sql
 
@@ -204,8 +213,9 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         # Strasse 1/2/3 -> BT-50/51/163 (leere Zeilen ueberspringen)
         invoice_enrich.apply_customer_address(header)
         # Gastzeile BT-22 / Lieferempfaenger BT-70 (nur bei genau einem Gast)
-        invoice_enrich.apply_guest_info({"header": header, "lines": lines},
-                                        _gastzeile_template())
+        if _guest_info_available():
+            invoice_enrich.apply_guest_info({"header": header, "lines": lines},
+                                            _gastzeile_template())
 
         # Waehrung: wenn Suite8 nichts liefert (WUSS.BaseCurrency nicht gepflegt),
         # nimm Default aus config/hotel.json (Default 'EUR'). XRechnung braucht
