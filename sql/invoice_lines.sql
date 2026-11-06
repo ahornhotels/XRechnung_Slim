@@ -19,6 +19,12 @@ TaxSchemeID TaxSchemeID,
 DepositZinvId DepositZinvId,
 DepositInvoiceNumber DepositInvoiceNumber,
 DepositInvoiceDate DepositInvoiceDate,
+OriginYresId OriginYresId,
+OriginXcmsId OriginXcmsId,
+OriginGuestName OriginGuestName,
+OriginRoom OriginRoom,
+OriginArrival OriginArrival,
+OriginDeparture OriginDeparture,
 TO_CHAR(LineExtensionAmount_Number-round(LineExtensionAmount_Number*ClassifiedTaxCategoryPercent/(100+ClassifiedTaxCategoryPercent),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 (
@@ -41,6 +47,19 @@ decode(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.
 z.zpos_deposit_zinv_id DepositZinvId,
 (select d.zinv_number from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceNumber,
 (select to_char(d.zinv_date,'YYYY-MM-DD') from zinv d where d.zinv_id=z.zpos_deposit_zinv_id) DepositInvoiceDate,
+-- Herkunft je Buchung (Gast/Zimmer fuer Gastzeile und Gruppenrechnung).
+-- Gast = ZPOS_ORIGINATED_XCMS_ID, Reservierung = ZPOS_ORIGINATED_YRES_ID
+-- (Fallback ZPOS_YRES_ID). Zimmer = YDET am Buchungstag, sonst letzter Tag
+-- davor (Buchung am Abreisetag). YRES_YRMS_ID ist nach Check-out leer.
+nvl(z.zpos_originated_yres_id, z.zpos_yres_id) OriginYresId,
+nvl(z.zpos_originated_xcms_id, (select y.yres_xcms_id from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id))) OriginXcmsId,
+(select n.name2 from v8_rep_name n where n.xcms_id=nvl(z.zpos_originated_xcms_id, (select y.yres_xcms_id from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)))) OriginGuestName,
+nvl((select r.yrms_shortdesc from ydet t, yrms r where r.yrms_id=t.ydet_yrms_id
+      and t.ydet_yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id) and t.ydet_date=trunc(z.zpos_postdate)),
+    (select max(r.yrms_shortdesc) keep (dense_rank last order by t.ydet_date) from ydet t, yrms r
+      where r.yrms_id=t.ydet_yrms_id and t.ydet_yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id) and t.ydet_date<=trunc(z.zpos_postdate))) OriginRoom,
+(select to_char(trunc(y.yres_exparrtime),'YYYY-MM-DD') from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)) OriginArrival,
+(select to_char(trunc(y.yres_expdeptime),'YYYY-MM-DD') from yres y where y.yres_id=nvl(z.zpos_originated_yres_id, z.zpos_yres_id)) OriginDeparture,
 to_char(round(z.zpos_unitprice,2),'999999990D99','NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 zpil,zpos z

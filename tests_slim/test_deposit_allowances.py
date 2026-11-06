@@ -258,7 +258,7 @@ class _Cursor:
 
 def test_positions_sql_faellt_ohne_anzahlungsspalte_zurueck(monkeypatch):
     from modules import invoice_fetcher
-    monkeypatch.setattr(invoice_fetcher, "_deposit_column_missing", False)
+    monkeypatch.setattr(invoice_fetcher, "_missing_line_columns", set())
     cur = _Cursor()
     lines = invoice_fetcher._fetch_lines(cur, 1)
     assert lines == [{"itemname": "Uebernachtung"}]
@@ -272,7 +272,7 @@ def test_positions_sql_faellt_ohne_anzahlungsspalte_zurueck(monkeypatch):
 def test_andere_datenbankfehler_werden_nicht_verschluckt(monkeypatch):
     import pytest
     from modules import invoice_fetcher
-    monkeypatch.setattr(invoice_fetcher, "_deposit_column_missing", False)
+    monkeypatch.setattr(invoice_fetcher, "_missing_line_columns", set())
 
     class _Kaputt(_Cursor):
         def execute(self, sql, params=None):

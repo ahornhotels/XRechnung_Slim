@@ -52,7 +52,7 @@ _EXPECTED_OVERRIDE_MARKERS = {
     "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId",),
     "invoice_totals.sql": ("LineExtensionAmountVat_number",),
-    "invoice_lines.sql": ("DepositZinvId",),
+    "invoice_lines.sql": ("DepositZinvId", "OriginYresId"),
 }
 _warned_stale_overrides: set[str] = set()
 
@@ -108,32 +108,39 @@ def _rows_to_dicts(cursor) -> list[dict]:
     return result
 
 
-# Aeltere Suite8-Versionen kennen ZPOS.ZPOS_DEPOSIT_ZINV_ID evtl. nicht. Dann
-# laeuft die Positions-SQL ohne Anzahlungsbezug (Spalte -> NULL), statt fuer
-# ALLE Rechnungen mit ORA-00904 zu scheitern. Merkt sich das pro Prozess.
-_deposit_column_missing = False
+# Optionale ZPOS-Spalten, die aeltere Suite8-Versionen evtl. nicht kennen.
+# Fehlt eine (ORA-00904), laeuft die Positions-SQL ohne sie weiter (Spalte ->
+# NULL), statt fuer ALLE Rechnungen zu scheitern. Merkt sich das pro Prozess.
+_OPTIONAL_LINE_COLUMNS: tuple[str, ...] = (
+    "ZPOS_DEPOSIT_ZINV_ID",
+    "ZPOS_ORIGINATED_YRES_ID",
+    "ZPOS_ORIGINATED_XCMS_ID",
+)
+_missing_line_columns: set[str] = set()
 
 
-def _lines_sql_without_deposit(sql: str) -> str:
-    return re.sub(r"z\.zpos_deposit_zinv_id", "to_number(null)", sql, flags=re.IGNORECASE)
+def _lines_sql_without(sql: str, columns: set[str]) -> str:
+    for col in columns:
+        sql = re.sub(rf"z\.{col}\b", "to_number(null)", sql, flags=re.IGNORECASE)
+    return sql
 
 
 def _fetch_lines(cur, zinv_id: int) -> list[dict]:
-    global _deposit_column_missing
-    sql = _read_sql("invoice_lines.sql")
-    if _deposit_column_missing:
-        sql = _lines_sql_without_deposit(sql)
-    try:
-        cur.execute(sql, {"zinv_id": zinv_id})
-    except Exception as e:
-        if _deposit_column_missing or "ZPOS_DEPOSIT_ZINV_ID" not in str(e).upper():
-            raise
-        _deposit_column_missing = True
-        logger.warning(
-            "Spalte ZPOS.ZPOS_DEPOSIT_ZINV_ID fehlt in dieser Suite8-Version - "
-            "Positionen ohne Anzahlungsbezug (%s)", e)
-        cur.execute(_lines_sql_without_deposit(sql), {"zinv_id": zinv_id})
-    return _rows_to_dicts(cur)
+    base = _read_sql("invoice_lines.sql")
+    for _ in range(len(_OPTIONAL_LINE_COLUMNS) + 1):
+        try:
+            cur.execute(_lines_sql_without(base, _missing_line_columns), {"zinv_id": zinv_id})
+            return _rows_to_dicts(cur)
+        except Exception as e:
+            msg = str(e).upper()
+            col = next((c for c in _OPTIONAL_LINE_COLUMNS
+                        if c in msg and c not in _missing_line_columns), None)
+            if col is None:
+                raise
+            _missing_line_columns.add(col)
+            logger.warning("Spalte ZPOS.%s fehlt in dieser Suite8-Version - "
+                           "Positionen ohne diese Angabe (%s)", col, e)
+    raise RuntimeError("invoice_lines.sql: Rueckfall ohne optionale Spalten erschoepft")
 
 
 def is_deposit_line(line: dict) -> bool:
