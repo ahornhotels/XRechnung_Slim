@@ -22,6 +22,9 @@ DepositInvoiceDate DepositInvoiceDate,
 TaxLineCount TaxLineCount,
 IsPaidOut IsPaidOut,
 ItemShortDesc ItemShortDesc,
+Quantity Quantity,
+GrossUnitPrice GrossUnitPrice,
+PostDate PostDate,
 OriginYresId OriginYresId,
 nvl(OriginXcmsRaw, (select y.yres_xcms_id from yres y where y.yres_id=OriginYresId)) OriginXcmsId,
 (select n.name2 from v8_rep_name n where n.xcms_id=nvl(OriginXcmsRaw, (select y.yres_xcms_id from yres y where y.yres_id=OriginYresId))) OriginGuestName,
@@ -76,6 +79,10 @@ trunc(z.zpos_postdate) OriginPostDate,
 (select count(*) from zpos Z4 where Z4.zpos_taxlink_id=z.zpos_taxlink_id and Z4.zpos_cdt=2) TaxLineCount,
 decode(z.zpos_cdt,5,1,0) IsPaidOut,
 (select zdco.zdco_shortdesc from zdco where zdco.zdco_id=z.zpos_zdco_id) ItemShortDesc,
+-- Fuer das Zusammenfassen (invoice_enrich.group_lines): Menge, Einzelpreis, Buchungstag
+z.zpos_quantity*decode(z.zpos_cdt,5,-1,1) Quantity,
+round(z.zpos_grossunitprice,4) GrossUnitPrice,
+to_char(trunc(z.zpos_postdate),'YYYY-MM-DD') PostDate,
 to_char(round(z.zpos_unitprice,2),'999999990D99','NLS_NUMERIC_CHARACTERS=''.,''') PriceAmount
 from
 zpil,zpos z

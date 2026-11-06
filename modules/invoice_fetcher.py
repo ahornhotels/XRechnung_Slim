@@ -125,7 +125,7 @@ _EXPECTED_OVERRIDE_MARKERS = {
     "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId", "decode(z.zpos_cdt,5,-1,1)"),
     "invoice_totals.sql": ("LineExtensionAmountVat_number", "decode(z.zpos_cdt,5,-1,1)"),
-    "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "decode(z.zpos_cdt,5,-1,1)", "ItemShortDesc"),
+    "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "decode(z.zpos_cdt,5,-1,1)", "ItemShortDesc", "GrossUnitPrice"),
 }
 _warned_stale_overrides: set[str] = set()
 
