@@ -187,3 +187,34 @@ def test_ohne_taxlink_nur_der_allgemeine_fehler():
     issues = invoice_validator.validate(inv)
     assert [i for i in issues if i["field"].endswith("tax_percent")]
     assert not [i for i in issues if i["field"].endswith("tax_missing")]
+
+
+# --- Review zur Freigabeliste ---
+
+def test_stornierte_fehlbuchung_ohne_steuer_blockt_nicht():
+    """+9,80 / -9,80 RE1 ohne Steuer: netto nichts uebrig -> kein Block."""
+    from modules import invoice_enrich as ie
+    a, b = _ohne_steuer("RE1"), _ohne_steuer("RE1")
+    b["lineextensionamount"] = b["lineextensionamountnet"] = "-9.80"
+    ie.apply_auslagen_freigabe([a, b], ["AUS"])
+    assert not a.get("taxmissing") and not b.get("taxmissing")
+
+
+def test_freigabeliste_als_text(monkeypatch):
+    from modules import invoice_fetcher
+    monkeypatch.setattr(invoice_fetcher, "load_json", lambda p, default=None: {"auslagen_artikel": "AUS, DUR"})
+    assert invoice_fetcher._auslagen_artikel() == ["AUS", "DUR"]
+
+
+def test_meldung_nennt_artikel_zuerst():
+    from modules import invoice_enrich as ie
+    inv = _auslagen_rechnung()
+    inv["lines"].append(_ohne_steuer("RE1"))
+    ie.apply_auslagen_freigabe(inv["lines"], ["AUS"])
+    msg = next(i["message"] for i in invoice_validator.validate(inv) if i["field"] == "lines.tax_missing")
+    assert "RE1" in msg[:40]
+
+
+def test_marker_fuer_artikelkurzname():
+    from modules.invoice_fetcher import _EXPECTED_OVERRIDE_MARKERS
+    assert "ItemShortDesc" in _EXPECTED_OVERRIDE_MARKERS["invoice_lines.sql"]

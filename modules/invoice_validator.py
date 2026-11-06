@@ -78,15 +78,15 @@ def validate(invoice: dict) -> list[dict]:
 
     # Leistung ohne Steuerbuchung in Suite8, Artikel nicht als Auslage
     # freigegeben (invoice_enrich.apply_auslagen_freigabe): blockieren.
-    ohne_steuer = sorted({f"{ln.get('itemname') or '?'} ({ln.get('itemshortdesc') or '?'})"
+    ohne_steuer = sorted({f"{ln.get('itemshortdesc') or '?'} {ln.get('itemname') or '?'}"
                           for ln in lines if ln.get("taxmissing")})
     if ohne_steuer:
         issues.append({
             "field": "lines.tax_missing",
             "severity": "error",
-            "message": ("Position(en) ohne Steuerbuchung in Suite8: " + ", ".join(ohne_steuer)
-                        + ". Steuerpflichtige Leistung -> Steuer in Suite8 nachbuchen; echte "
-                          "Auslage -> Artikel in hotel.json 'auslagen_artikel' freigeben."),
+            "message": (", ".join(ohne_steuer) + ": ohne Steuerbuchung in Suite8. "
+                        "Steuerpflichtig -> Steuer in Suite8 nachbuchen; echte Auslage -> "
+                        "Artikel in hotel.json 'auslagen_artikel' freigeben."),
         })
 
     totals = invoice.get("totals") or {}

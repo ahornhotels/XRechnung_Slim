@@ -173,7 +173,9 @@ def apply_auslagen_freigabe(lines: list[dict], allowed: list[str]) -> None:
     freigegeben, wird der Satz wieder unbestimmt und die Rechnung blockiert -
     eine steuerpflichtige Leistung ohne Steuerbuchung ist ein Suite8-Fehler.
     Paid-Out (CDT 5) ist immer eine Auslage."""
+    from decimal import Decimal, InvalidOperation
     ok = {str(a).strip().upper() for a in (allowed or []) if str(a).strip()}
+    candidates: dict[str, list[dict]] = {}
     for ln in lines or []:
         try:
             no_tax = int(ln.get("taxlinecount")) == 0
@@ -182,6 +184,17 @@ def apply_auslagen_freigabe(lines: list[dict], allowed: list[str]) -> None:
             continue
         if not no_tax or paidout or ln.get("classifiedtaxcategorypercent") is None:
             continue
-        if str(ln.get("itemshortdesc") or "").strip().upper() not in ok:
+        code = str(ln.get("itemshortdesc") or "").strip().upper()
+        if code not in ok:
+            candidates.setdefault(code, []).append(ln)
+    for group in candidates.values():
+        # Fehlbuchung samt Storno (+x / -x) laesst nichts Steuerpflichtiges uebrig.
+        try:
+            total = sum(Decimal(str(ln.get("lineextensionamount") or 0)) for ln in group)
+        except InvalidOperation:
+            total = Decimal(1)
+        if total == 0:
+            continue
+        for ln in group:
             ln["classifiedtaxcategorypercent"] = None
             ln["taxmissing"] = True

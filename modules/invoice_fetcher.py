@@ -71,7 +71,12 @@ def _auslagen_artikel() -> list[str]:
     value = hotel.get("auslagen_artikel")
     if value is None:
         return list(invoice_enrich.AUSLAGEN_ARTIKEL_STANDARD)
-    return [str(v) for v in value] if isinstance(value, list) else []
+    if isinstance(value, str):  # "AUS, DUR" ist auch erlaubt
+        value = value.split(",")
+    if not isinstance(value, list):
+        logger.warning("hotel.json 'auslagen_artikel' ist weder Liste noch Text - keine Freigabe")
+        return []
+    return [str(v).strip() for v in value if str(v).strip()]
 
 
 _warned_xml_only_query = False
@@ -120,7 +125,7 @@ _EXPECTED_OVERRIDE_MARKERS = {
     "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId", "decode(z.zpos_cdt,5,-1,1)"),
     "invoice_totals.sql": ("LineExtensionAmountVat_number", "decode(z.zpos_cdt,5,-1,1)"),
-    "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "decode(z.zpos_cdt,5,-1,1)"),
+    "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "decode(z.zpos_cdt,5,-1,1)", "ItemShortDesc"),
 }
 _warned_stale_overrides: set[str] = set()
 
