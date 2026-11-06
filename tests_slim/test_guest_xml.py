@@ -58,3 +58,10 @@ def test_sonderzeichen_bleiben_wohlgeformt(role, xsd):
     assert doc.findtext("cbc:Note", namespaces=NS) == note
     assert doc.findtext("cac:Delivery/cac:DeliveryParty/cac:PartyName/cbc:Name", namespaces=NS) == name
     _assert_xsd_valid(xml, xsd)
+
+
+def test_lieferempfaenger_per_override_korrigierbar(tmp_path):
+    from slim.core_slim import overrides
+    overrides.save(tmp_path, 9, {"deliverypartyname": "Max Beispiel"})
+    out = overrides.apply_to_invoice(tmp_path, 9, {"header": {"deliverypartyname": "Erika Muster"}})
+    assert out["header"]["deliverypartyname"] == "Max Beispiel"

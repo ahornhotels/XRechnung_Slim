@@ -127,15 +127,24 @@ def test_header_sql_liefert_drei_strassenzeilen_und_marker():
 
 # --- Review-Fixes: eine Adressquelle je Adresse, Overrides, echte Integration ---
 
-def test_vorhandene_rechnungsadresse_nur_leerzeichen_kein_primaer_mix():
-    """Existiert die Rechnungsadresse, kommt die Strasse NUR aus ihr. Sonst
-    entstuende 'Primaerweg 9' mit Ort/PLZ der Rechnungsadresse."""
+def test_rechnungsadresse_ohne_strasse_nimmt_primaerstrasse_wie_bisher():
+    """Live-Befund: tausende Rechnungsadressen haben keine Strasse. Bisher fuellte
+    das SQL (nvl) die Strasse aus der Primaeradresse - das darf nicht wegfallen,
+    sonst werden diese Rechnungen geblockt."""
     h = {"customeradrid": 7, "customeradrstreet1": "  ", "customeradrstreet2": None,
          "customeradrstreet3": None, "customerprimstreet1": "Primaerweg 9",
          "customerprimstreet2": None, "customerprimstreet3": None,
-         "customerstreetname": "  "}
+         "customerstreetname": "Primaerweg 9"}
     ie.apply_customer_address(h)
-    assert not (h["customerstreetname"] or "").strip()
+    assert h["customerstreetname"] == "Primaerweg 9"
+
+
+def test_rechnungsadresse_mit_strasse_mischt_keine_primaerzeilen():
+    h = {"customeradrid": 7, "customeradrstreet1": "Kundenweg 2", "customeradrstreet2": None,
+         "customeradrstreet3": None, "customerprimstreet1": "Primaerweg 9",
+         "customerprimstreet2": "Haus B", "customerprimstreet3": None}
+    ie.apply_customer_address(h)
+    assert (h["customerstreetname"], h["customeradditionalstreetname"]) == ("Kundenweg 2", None)
 
 
 def test_rechnungsadresse_fehlt_ganz_nimmt_primaer():

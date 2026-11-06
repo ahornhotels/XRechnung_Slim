@@ -44,6 +44,7 @@ ALLOWED_KEYS = frozenset({
     "customerstreetname",
     "customeradditionalstreetname",
     "customeraddressline",
+    "deliverypartyname",
     "customercityname",
     "customerpostalzone",
     "customeridentificationcode",
