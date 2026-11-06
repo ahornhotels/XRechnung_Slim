@@ -15,5 +15,9 @@
   "seller_contact_email": "",
   "gastzeile": "Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}",
   "xml_only_all": false,
-  "xml_only_membership": "PDF"
+  "xml_only_membership": "PDF",
+  "auslagen_artikel": [
+    "AUS",
+    "DUR"
+  ]
 }

@@ -63,6 +63,17 @@ def _guest_info_available() -> bool:
 
 
 
+
+def _auslagen_artikel() -> list[str]:
+    """ZDCO-Kurznamen, die ohne Steuerbuchung als Auslage (Z 0 %) gelten
+    (hotel.json 'auslagen_artikel', Standard AUS und DUR)."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    value = hotel.get("auslagen_artikel")
+    if value is None:
+        return list(invoice_enrich.AUSLAGEN_ARTIKEL_STANDARD)
+    return [str(v) for v in value] if isinstance(value, list) else []
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -222,6 +233,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         header = header_rows[0]
 
         lines = _fetch_lines(cur, zinv_id)
+        # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel
+        invoice_enrich.apply_auslagen_freigabe(lines, _auslagen_artikel())
 
         cur.execute(_read_sql("invoice_tax.sql"), {"zinv_id": zinv_id})
         tax_breakdown = _rows_to_dicts(cur)

@@ -105,19 +105,56 @@ def test_override_marker_fuer_neue_satzlogik():
         assert "decode(z.zpos_cdt,5,-1,1)" in _EXPECTED_OVERRIDE_MARKERS[name], name
 
 
-def test_lines_sql_meldet_fehlende_steuerbuchung():
-    assert "taxlinecount" in _flat("lines")
+def test_lines_sql_liefert_steuerzeilen_und_artikelkurzname():
+    sql = _flat("lines")
+    assert "taxlinecount" in sql and "itemshortdesc" in sql
 
 
-def test_position_ohne_steuerbuchung_gibt_warnung_kein_fehler():
+def _ohne_steuer(shortdesc, name="Getraenke Spaet"):
+    ln = _z(name, 9.80)
+    ln.update(taxlinecount=0, itemshortdesc=shortdesc, ispaidout=0)
+    return ln
+
+
+def test_freigegebene_auslage_bleibt_null_prozent():
+    from modules import invoice_enrich as ie
+    lines = [_ohne_steuer("AUS", "Auslagen Gastronomie"), _ohne_steuer("dur", "Kurtaxe alt")]
+    ie.apply_auslagen_freigabe(lines, ["AUS", "DUR"])
+    assert [ln["classifiedtaxcategorypercent"] for ln in lines] == ["0", "0"]
+
+
+def test_nicht_freigegebener_artikel_ohne_steuer_blockt():
+    """Live-Befund: Getraenke (RE1) ohne Steuerbuchung duerfen nicht als 0 % raus."""
+    from modules import invoice_enrich as ie
     inv = _auslagen_rechnung()
-    for ln in inv["lines"]:
-        ln["taxlinecount"] = 0 if ln["classifiedtaxcategoryid"] == "Z" else 1
+    inv["lines"].append(_ohne_steuer("RE1"))
+    ie.apply_auslagen_freigabe(inv["lines"], ["AUS", "DUR"])
     issues = invoice_validator.validate(inv)
-    warn = [i for i in issues if i["field"] == "lines.tax_missing"]
-    assert len(warn) == 1 and warn[0]["severity"] == "warning"
-    assert "Auslagen Gastronomie" in warn[0]["message"]
+    err = [i for i in issues if i["field"].endswith("tax_missing")]
+    assert len(err) == 1 and err[0]["severity"] == "error"
+    assert "RE1" in err[0]["message"] and "Getraenke Spaet" in err[0]["message"]
     assert not [i for i in issues if i["field"].endswith("tax_percent")]
+
+
+def test_paidout_braucht_keine_freigabe():
+    from modules import invoice_enrich as ie
+    ln = _ohne_steuer("AUS"); ln["ispaidout"] = 1; ln["itemshortdesc"] = "XYZ"
+    ie.apply_auslagen_freigabe([ln], [])
+    assert ln["classifiedtaxcategorypercent"] == "0"
+
+
+def test_freigabeliste_aus_hotel_json(monkeypatch):
+    from modules import invoice_fetcher
+    monkeypatch.setattr(invoice_fetcher, "load_json", lambda p, default=None: {})
+    assert invoice_fetcher._auslagen_artikel() == ["AUS", "DUR"]
+    monkeypatch.setattr(invoice_fetcher, "load_json", lambda p, default=None: {"auslagen_artikel": ["AUS"]})
+    assert invoice_fetcher._auslagen_artikel() == ["AUS"]
+
+
+def test_fetch_invoice_wendet_freigabe_an():
+    import inspect
+    from modules import invoice_fetcher
+    assert "apply_auslagen_freigabe(lines, _auslagen_artikel())" in inspect.getsource(invoice_fetcher.fetch_invoice)
 
 
 # --- Review zu Paid-Out ---
@@ -142,11 +179,11 @@ def test_alter_override_ohne_paidout_gilt_als_veraltet():
         assert _stale_override_markers(name, alt), name
 
 
-def test_keine_warnung_wenn_satz_ohnehin_fehlt():
+def test_ohne_taxlink_nur_der_allgemeine_fehler():
     inv = _auslagen_rechnung()
     ln = inv["lines"][2]
     ln["taxlinecount"] = 0
-    ln["classifiedtaxcategorypercent"] = None   # ohne TAXLINK -> Fehler, keine "0 %"-Warnung
+    ln["classifiedtaxcategorypercent"] = None   # ohne TAXLINK -> Fehler
     issues = invoice_validator.validate(inv)
     assert [i for i in issues if i["field"].endswith("tax_percent")]
-    assert not [i for i in issues if i["field"] == "lines.tax_missing"]
+    assert not [i for i in issues if i["field"].endswith("tax_missing")]

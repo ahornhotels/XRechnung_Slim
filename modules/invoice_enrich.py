@@ -160,3 +160,28 @@ def apply_guest_info(invoice: dict, template: str) -> None:
     if line:
         note = header.get("note")
         header["note"] = f"{note}{_HINWEIS_TRENNER}{line}" if not _blank(note) else line
+
+
+# --- Auslagen ohne Steuerbuchung (Freigabeliste) ----------------------------
+
+AUSLAGEN_ARTIKEL_STANDARD = ["AUS", "DUR"]
+
+
+def apply_auslagen_freigabe(lines: list[dict], allowed: list[str]) -> None:
+    """Leistungen ohne Steuerbuchung in Suite8 liefert das SQL mit 0 %. Das ist
+    nur fuer echte Auslagen richtig. Ist der Artikel (ZDCO-Kurzname) nicht
+    freigegeben, wird der Satz wieder unbestimmt und die Rechnung blockiert -
+    eine steuerpflichtige Leistung ohne Steuerbuchung ist ein Suite8-Fehler.
+    Paid-Out (CDT 5) ist immer eine Auslage."""
+    ok = {str(a).strip().upper() for a in (allowed or []) if str(a).strip()}
+    for ln in lines or []:
+        try:
+            no_tax = int(ln.get("taxlinecount")) == 0
+            paidout = int(ln.get("ispaidout") or 0) == 1
+        except (TypeError, ValueError):
+            continue
+        if not no_tax or paidout or ln.get("classifiedtaxcategorypercent") is None:
+            continue
+        if str(ln.get("itemshortdesc") or "").strip().upper() not in ok:
+            ln["classifiedtaxcategorypercent"] = None
+            ln["taxmissing"] = True

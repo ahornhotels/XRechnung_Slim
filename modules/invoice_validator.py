@@ -69,32 +69,24 @@ def validate(invoice: dict) -> list[dict]:
         })
 
     for idx, line in enumerate(lines):
-        if line.get("classifiedtaxcategorypercent") is None:
+        if line.get("classifiedtaxcategorypercent") is None and not line.get("taxmissing"):
             issues.append({
                 "field": f"lines[{idx}].tax_percent",
                 "severity": "error",
                 "message": f"Position {idx+1} ({line.get('itemname', '?')}): USt-Satz nicht ermittelbar"
             })
 
-    # Leistung ohne Steuerbuchung in Suite8 (kein CDT-2-Partner): wird als
-    # Z 0 % uebernommen. Bei echten Auslagen richtig, bei einer steuerpflichtigen
-    # Leistung ein Buchungsfehler in Suite8 - daher Hinweis, kein Block.
-    ohne_steuer = []
-    for line in lines:
-        try:
-            missing = (int(line.get("taxlinecount")) == 0 and not int(line.get("ispaidout") or 0)
-                       and line.get("classifiedtaxcategorypercent") is not None)
-        except (TypeError, ValueError):
-            missing = False
-        if missing:
-            ohne_steuer.append(str(line.get("itemname") or "?"))
+    # Leistung ohne Steuerbuchung in Suite8, Artikel nicht als Auslage
+    # freigegeben (invoice_enrich.apply_auslagen_freigabe): blockieren.
+    ohne_steuer = sorted({f"{ln.get('itemname') or '?'} ({ln.get('itemshortdesc') or '?'})"
+                          for ln in lines if ln.get("taxmissing")})
     if ohne_steuer:
-        names = ", ".join(sorted(set(ohne_steuer)))
         issues.append({
             "field": "lines.tax_missing",
-            "severity": "warning",
-            "message": (f"Position(en) ohne Steuerbuchung in Suite8, als 0 % (Z) uebernommen: "
-                        f"{names}. Bei Auslagen korrekt, sonst Steuerbuchung in Suite8 pruefen."),
+            "severity": "error",
+            "message": ("Position(en) ohne Steuerbuchung in Suite8: " + ", ".join(ohne_steuer)
+                        + ". Steuerpflichtige Leistung -> Steuer in Suite8 nachbuchen; echte "
+                          "Auslage -> Artikel in hotel.json 'auslagen_artikel' freigeben."),
         })
 
     totals = invoice.get("totals") or {}
