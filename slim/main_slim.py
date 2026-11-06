@@ -106,6 +106,7 @@ app.include_router(run_now_module.router)
 app.include_router(update_api_module.router)
 app.include_router(archive_api_module.router)
 app.include_router(auth_api_module.router)
+app.include_router(auth_api_module.users_router)
 
 
 def _setup_done() -> bool:
@@ -126,6 +127,16 @@ async def root():
 @app.get("/login")
 async def login_page():
     return FileResponse(str(_SLIM_DIR / "frontend" / "login.html"))
+
+
+@app.get("/users")
+async def users_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "users.html"))
+
+
+@app.get("/settings")
+async def settings_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "settings.html"))
 
 
 @app.get("/setup")

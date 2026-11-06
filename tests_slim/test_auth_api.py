@@ -20,6 +20,7 @@ def setup(tmp_path, monkeypatch):
     app = FastAPI()
     app.middleware("http")(auth_api.middleware)
     app.include_router(auth_api.router)
+    app.include_router(auth_api.users_router)
 
     @app.get("/api/status")
     def status():
@@ -144,3 +145,73 @@ def test_main_app_bindet_anmeldung_ein():
     src = inspect.getsource(m)
     assert src.index("auth_api_module.middleware") < src.index("async def _ip_allowlist")
     assert '@app.get("/login")' in src
+
+
+# --- Benutzerverwaltung (/api/users) ---
+
+def _admin(client, users):
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    _login(client, "admin", "langes-passwort")
+
+
+def test_benutzer_auflisten_ohne_hash(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    r = client.get("/api/users")
+    assert r.status_code == 200 and r.json() == [{"name": "admin", "role": "verwalten", "must_change": False}]
+
+
+def test_benutzer_anlegen_rolle_aendern_loeschen(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    assert client.post("/api/users", json={"name": "leser", "password": "langes-passwort", "role": "ansehen"}).status_code == 200
+    assert users.get("leser")["must_change"] is True
+    assert client.put("/api/users/leser", json={"role": "verwalten"}).status_code == 200
+    assert users.get("leser")["role"] == "verwalten"
+    assert client.delete("/api/users/leser").status_code == 200
+    assert users.get("leser") is None
+
+
+def test_letzter_verwalter_409(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    assert client.delete("/api/users/admin").status_code == 409
+    assert client.put("/api/users/admin", json={"role": "ansehen"}).status_code == 409
+
+
+def test_neues_passwort_erzwingt_wechsel_und_beendet_sitzungen(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    client.post("/api/users", json={"name": "leser", "password": "langes-passwort", "role": "ansehen"})
+    other = TestClient(client.app)
+    users.set_password("leser", "langes-passwort", must_change=False)
+    _login(other, "leser", "langes-passwort")
+    assert other.get("/api/status").status_code == 200
+    assert client.put("/api/users/leser", json={"password": "anderes-langes-pw"}).status_code == 200
+    assert users.get("leser")["must_change"] is True
+    assert other.get("/api/status").status_code == 401
+
+
+def test_loeschen_beendet_sitzungen(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    users.create("leser", "langes-passwort", "ansehen", must_change=False)
+    other = TestClient(client.app)
+    _login(other, "leser", "langes-passwort")
+    client.delete("/api/users/leser")
+    assert other.get("/api/status").status_code == 401
+
+
+def test_ansehen_darf_benutzer_nicht_sehen(setup):
+    client, users, _ = setup
+    users.create("admin", "langes-passwort", "verwalten", must_change=False)
+    users.create("leser", "langes-passwort", "ansehen", must_change=False)
+    _login(client, "leser", "langes-passwort")
+    assert client.get("/api/users").status_code == 403
+
+
+def test_fehler_ohne_passwort_im_text(setup):
+    client, users, _ = setup
+    _admin(client, users)
+    r = client.post("/api/users", json={"name": "x", "password": "kurz", "role": "ansehen"})
+    assert r.status_code == 400 and "kurz" not in r.text

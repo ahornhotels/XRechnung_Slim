@@ -174,3 +174,72 @@ def bootstrap(payload: LoginPayload, request: Request):
         raise HTTPException(400, str(e))
     _audit("bootstrap_admin", user=payload.username.strip())
     return {"ok": True}
+
+
+# --- Benutzerverwaltung (nur 'verwalten', siehe _ADMIN_PREFIXES) ------------
+
+users_router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+class NewUser(BaseModel):
+    name: str
+    password: str
+    role: str = "ansehen"
+
+
+class UserChange(BaseModel):
+    role: str | None = None
+    password: str | None = None
+
+
+def _actor(request: Request) -> str:
+    return getattr(request.state, "user", None) or "?"
+
+
+@users_router.get("")
+def list_users():
+    return USERS.list()
+
+
+@users_router.post("")
+def create_user(payload: NewUser, request: Request):
+    try:
+        USERS.create(payload.name, payload.password, payload.role, must_change=True)
+    except auth.AuthError as e:
+        raise HTTPException(400, str(e))
+    _audit("user_created", user=payload.name.strip(), role=payload.role, by=_actor(request))
+    return {"ok": True}
+
+
+@users_router.put("/{name}")
+def change_user(name: str, payload: UserChange, request: Request):
+    if USERS.get(name) is None:
+        raise HTTPException(404, "Benutzer unbekannt")
+    try:
+        if payload.role is not None:
+            USERS.set_role(name, payload.role)
+        if payload.password:
+            # Vom Verwalter gesetzt: der Benutzer muss es bei der naechsten
+            # Anmeldung aendern; laufende Sitzungen enden.
+            USERS.set_password(name, payload.password, must_change=True)
+            SESSIONS.drop_user(name)
+    except auth.AuthError as e:
+        status = 409 if "letzte Verwalter" in str(e) else 400
+        raise HTTPException(status, str(e))
+    # Eine Rollenaenderung wirkt sofort: die Middleware liest die Rolle bei
+    # jeder Anfrage neu aus der Benutzerdatei.
+    _audit("user_changed", user=name, role=payload.role,
+           password_reset=bool(payload.password), by=_actor(request))
+    return {"ok": True}
+
+
+@users_router.delete("/{name}")
+def delete_user(name: str, request: Request):
+    try:
+        USERS.delete(name)
+    except auth.AuthError as e:
+        status = 409 if "letzte Verwalter" in str(e) else 404
+        raise HTTPException(status, str(e))
+    SESSIONS.drop_user(name)
+    _audit("user_deleted", user=name, by=_actor(request))
+    return {"ok": True}
