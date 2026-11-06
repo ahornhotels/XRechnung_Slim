@@ -324,3 +324,21 @@ def test_lokal_erfolg_gibt_platz_sofort_frei(setup):
     mp.setattr(auth_api, "_LOCAL_NEXT", {})
     assert _login(client, "admin", "langes-passwort").status_code == 200
     assert _login(client, "admin", "langes-passwort").status_code == 200
+
+
+def test_lokal_wartezeit_waechst_nach_fehlversuchen(setup, monkeypatch):
+    _, _, mp = setup
+    now = [100.0]
+    mp.setattr(auth_api.time, "monotonic", lambda: now[0])
+    mp.setattr(auth_api, "_LOCAL_NEXT", {})
+    mp.setattr(auth_api, "_LOCAL_FAILS", {})
+    waits = []
+    for _ in range(8):
+        auth_api._local_failed("admin")
+        waits.append(auth_api._LOCAL_NEXT["admin"] - now[0])
+    assert waits[:4] == [1.0, 1.0, 1.0, 1.0] and waits[4:] == [2.0, 4.0, 8.0, 16.0]
+    for _ in range(20):
+        auth_api._local_failed("admin")
+    assert auth_api._LOCAL_NEXT["admin"] - now[0] == 60.0
+    auth_api._local_slot_release("admin")
+    assert "admin" not in auth_api._LOCAL_FAILS

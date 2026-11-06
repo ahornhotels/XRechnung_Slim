@@ -52,7 +52,10 @@ _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
 # (z. B. unbekannten) Namen beruehren den Platz eines echten Kontos nicht.
 _LOCAL_RATE_LOCK = threading.Lock()
 _LOCAL_NEXT: dict[str, float] = {}
+_LOCAL_FAILS: dict[str, int] = {}
 _LOCAL_INTERVAL = 1.0
+_LOCAL_BACKOFF_AFTER = 5       # ab dem 5. Fehlversuch je Name verdoppeln ...
+_LOCAL_BACKOFF_MAX = 60.0      # ... bis hoechstens 60 s
 _LOCAL_MAX_KEYS = 10_000
 
 
@@ -70,8 +73,23 @@ def _local_slot_free(name: str) -> bool:
 
 
 def _local_slot_release(name: str) -> None:
+    """Erfolg: Platz und Fehlerzaehler zuruecksetzen."""
     with _LOCAL_RATE_LOCK:
         _LOCAL_NEXT.pop(name, None)
+        _LOCAL_FAILS.pop(name, None)
+
+
+def _local_failed(name: str) -> None:
+    """Fehlversuch: ab dem 5. waechst die Wartezeit (1, 2, 4 ... max. 60 s)."""
+    with _LOCAL_RATE_LOCK:
+        n = _LOCAL_FAILS.get(name, 0) + 1
+        if len(_LOCAL_FAILS) >= _LOCAL_MAX_KEYS and name not in _LOCAL_FAILS:
+            _LOCAL_FAILS.pop(next(iter(_LOCAL_FAILS)))
+        _LOCAL_FAILS[name] = n
+        wait = _LOCAL_INTERVAL
+        if n >= _LOCAL_BACKOFF_AFTER:
+            wait = min(_LOCAL_BACKOFF_MAX, _LOCAL_INTERVAL * 2 ** (n - _LOCAL_BACKOFF_AFTER + 1))
+        _LOCAL_NEXT[name] = time.monotonic() + wait
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -177,7 +195,9 @@ def login(payload: LoginPayload, request: Request):
     user = USERS.get(name)
     ok = auth.verify_password(payload.password, user["hash"] if user else _DUMMY_HASH)
     if not user or not ok:
-        if not local:
+        if local:
+            _local_failed(name[:64])
+        else:
             GUARD.fail(key)
         _audit("login_failed", user=name, ip=_client_ip(request))
         raise fail
