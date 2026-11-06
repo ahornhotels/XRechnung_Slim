@@ -78,10 +78,22 @@
         <cac:Country><cbc:IdentificationCode>{{ header.customeridentificationcode }}</cbc:IdentificationCode></cac:Country>
       </cac:PostalAddress>
       <cac:PartyLegalEntity>
-        <cbc:RegistrationName>{{ (header.customerregistrationname or header.customername)|e }}</cbc:RegistrationName>
+        {# BT-44 = rechtlicher Name des Rechnungsempfaengers, nie der Gast (der steht in BT-22/BT-70). #}
+        <cbc:RegistrationName>{{ header.customername|e }}</cbc:RegistrationName>
       </cac:PartyLegalEntity>
     </cac:Party>
   </cac:AccountingCustomerParty>
+
+  {# BG-13/BT-70: Gast als Lieferempfaenger, nur bei genau einem Gast
+     (invoice_enrich.apply_guest_info). UBL-Reihenfolge: nach den Parteien,
+     vor PaymentMeans. #}
+  {% if header.deliverypartyname %}
+  <cac:Delivery>
+    <cac:DeliveryParty>
+      <cac:PartyName><cbc:Name>{{ header.deliverypartyname|e }}</cbc:Name></cac:PartyName>
+    </cac:DeliveryParty>
+  </cac:Delivery>
+  {% endif %}
 
   <cac:PaymentMeans>
     <cbc:PaymentMeansCode>30</cbc:PaymentMeansCode>
