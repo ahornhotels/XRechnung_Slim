@@ -82,7 +82,8 @@ def validate(invoice: dict) -> list[dict]:
     ohne_steuer = []
     for line in lines:
         try:
-            missing = int(line.get("taxlinecount")) == 0 and not int(line.get("ispaidout") or 0)
+            missing = (int(line.get("taxlinecount")) == 0 and not int(line.get("ispaidout") or 0)
+                       and line.get("classifiedtaxcategorypercent") is not None)
         except (TypeError, ValueError):
             missing = False
         if missing:

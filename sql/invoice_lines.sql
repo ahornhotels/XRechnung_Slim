@@ -46,13 +46,13 @@ round(z.zpos_unitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2) LineExtensio
 TO_CHAR(round(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),2), '99999990D99', 'NLS_NUMERIC_CHARACTERS=''.,''') LineExtensionAmountVat,
 (select zdco.zdco_numericdesc from zdco where zdco.zdco_id=z.zpos_zdco_id)  ItemCode,
 z.zpos_descript  ItemName,
-decode(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),0,'Z','S') ClassifiedTaxCategoryID,
+decode(z.zpos_cdt,5,'Z',decode(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1,(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY),(ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY))),ZPOS.ZPOS_UNITPRICE*ZPOS.ZPOS_QUANTITY)) FROM ZPOS WHERE ZPOS.ZPOS_CDT=2 AND ZPOS.ZPOS_TAXLINK_ID=z.ZPOS_TAXLINK_ID GROUP BY ZPOS.ZPOS_TAXLINK_ID),0),0,'Z','S')) ClassifiedTaxCategoryID,
 -- Satz: Paid-Out (CDT 5) und Leistung ohne CDT-2-Partner (Auslage/durch-
 -- laufender Posten) = 0. Ohne TAXLINK bleibt er NULL (Validator blockt).
 case when z.zpos_cdt=5 then 0
      when exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2)
      then (select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)
-     when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0
+     when z.zpos_taxlink_id is not null then 0
 end  ClassifiedTaxCategoryPercent,
 'VAT' TaxSchemeID,
 -- Anzahlungsabbuchung beim Check-in: negatives DEx/MSx-Paar mit Verweis auf die
@@ -80,7 +80,7 @@ zpil,zpos z
 where
 z.zpos_id=zpil_zpos_id
 -- Paid-Out (CDT 5, PAIDOUT 1) ist eine Auslage-Position (Nutzerentscheidung, wie OPERA)
-and (z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))
+and (z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1 and nvl(z.zpos_hidden,0)=0 and nvl(z.zpos_zall_id,0)=0))
 and zpil_zinv_id = :zinv_id
 and nvl(round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2),0)<>0
 )

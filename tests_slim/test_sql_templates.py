@@ -64,12 +64,11 @@ def test_zeilenlogik_synchron_ueber_drei_sql():
     (BR-CO-*), genau der Fehlerklasse, die der 03.07.-Fix beseitigt hat."""
     fragments = (
         "round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2)",
-        "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))",
+        "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1 and nvl(z.zpos_hidden,0)=0 and nvl(z.zpos_zall_id,0)=0))",
         ("(select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) "
          "from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and "
          "Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)"),
-        ("when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where "
-         "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0"),
+        "when z.zpos_taxlink_id is not null then 0",
     )
     sqls = {name: _read(f"invoice_{name}.sql").replace(" ", "").replace("\n", "")
             for name in ("lines", "tax", "totals")}

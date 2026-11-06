@@ -402,16 +402,16 @@ TO_CHAR(round(NVL((SELECT SUM(DECODE(ZPOS.ZPOS_CDT,5,(DECODE(ZPOS.ZPOS_PAIDOUT,1
 case when z.zpos_cdt=5 then 0
      when exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2)
      then (select evaluatemath(replace((replace(ztcd_udf,'x',100)),';',',')) from zpos Z2,ztcd where Z2.zpos_taxlink_id=z.zpos_taxlink_id and Z2.zpos_cdt=2 and Z2.zpos_ztcd_id=ztcd.ztcd_id)
-     when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0
+     when z.zpos_taxlink_id is not null then 0
 end  ClassifiedTaxCategoryPercent,
 /*Change: TaxAmount je Steuercode statt je Prozentsatz gruppieren (BR-CO-14 Doppelzaehlung bei zwei ZTCDs mit gleichem Satz)*/
-(select Z3.zpos_ztcd_id from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2 and rownum=1)  ClassifiedTaxCategoryZtcdId
+decode(z.zpos_cdt,5,to_number(null),(select Z3.zpos_ztcd_id from zpos Z3 where Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2 and rownum=1))  ClassifiedTaxCategoryZtcdId
 from
 zpil,zpos z
 where
 z.zpos_id=zpil_zpos_id
 -- Paid-Out (CDT 5, PAIDOUT 1) ist eine Auslage-Position (Nutzerentscheidung, wie OPERA)
-and (z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))
+and (z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1 and nvl(z.zpos_hidden,0)=0 and nvl(z.zpos_zall_id,0)=0))
 and zpil_zinv_id = :zinv_id
 and nvl(round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2),0)<>0
 )

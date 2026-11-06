@@ -18,9 +18,8 @@ NS = {
     "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
     "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
 }
-FRAG = ("when z.zpos_taxlink_id is not null and not exists (select 1 from zpos Z3 where "
-        "Z3.zpos_taxlink_id=z.zpos_taxlink_id and Z3.zpos_cdt=2) then 0")
-PAIDOUT_WHERE = "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1))"
+FRAG = "when z.zpos_taxlink_id is not null then 0"
+PAIDOUT_WHERE = "(z.zpos_cdt=1 or (z.zpos_cdt=5 and z.zpos_paidout=1"
 SIGN = "round(z.zpos_grossunitprice*z.zpos_quantity*decode(z.zpos_cdt,5,-1,1),2)"
 
 
@@ -87,7 +86,7 @@ def _flat(name):
 def test_ohne_taxlink_bleibt_satz_unbestimmt():
     """TAXLINK NULL: Satz nicht ermittelbar -> weiter Fehler, nicht still 0 %."""
     for name in ("lines", "tax", "totals"):
-        assert "z.zpos_taxlink_idisnotnullandnotexists" in _flat(name), name
+        assert "whenz.zpos_taxlink_idisnotnullthen0" in _flat(name), name
 
 
 def test_paidout_ist_position_in_allen_drei_sql():
@@ -103,7 +102,7 @@ def test_paidout_ist_position_in_allen_drei_sql():
 def test_override_marker_fuer_neue_satzlogik():
     from modules.invoice_fetcher import _EXPECTED_OVERRIDE_MARKERS
     for name in ("invoice_lines.sql", "invoice_tax.sql", "invoice_totals.sql"):
-        assert "Z3.zpos_cdt=2" in _EXPECTED_OVERRIDE_MARKERS[name], name
+        assert "decode(z.zpos_cdt,5,-1,1)" in _EXPECTED_OVERRIDE_MARKERS[name], name
 
 
 def test_lines_sql_meldet_fehlende_steuerbuchung():
@@ -119,3 +118,35 @@ def test_position_ohne_steuerbuchung_gibt_warnung_kein_fehler():
     assert len(warn) == 1 and warn[0]["severity"] == "warning"
     assert "Auslagen Gastronomie" in warn[0]["message"]
     assert not [i for i in issues if i["field"].endswith("tax_percent")]
+
+
+# --- Review zu Paid-Out ---
+
+def test_paidout_kategorie_immer_z():
+    """Paid-Out mit TAXLINK auf eine Steuerzeile darf nicht 'S' mit 0 % werden."""
+    for name in ("lines", "totals"):
+        assert "decode(z.zpos_cdt,5,'z',decode(" in _flat(name), name
+    # invoice_tax.sql gruppiert nach Steuercode: Paid-Out erbt keinen
+    assert "decode(z.zpos_cdt,5,to_number(null),(selectz3.zpos_ztcd_id" in _flat("tax")
+
+
+def test_paidout_nur_sichtbar_und_unverteilt():
+    for name in ("lines", "tax", "totals"):
+        assert ("z.zpos_paidout=1andnvl(z.zpos_hidden,0)=0andnvl(z.zpos_zall_id,0)=0" in _flat(name)), name
+
+
+def test_alter_override_ohne_paidout_gilt_als_veraltet():
+    from modules.invoice_fetcher import _stale_override_markers
+    alt = "... Z3.zpos_cdt=2 ... DepositZinvId OriginYresId LineExtensionAmountVat_number ClassifiedTaxCategoryZtcdId"
+    for name in ("invoice_lines.sql", "invoice_tax.sql", "invoice_totals.sql"):
+        assert _stale_override_markers(name, alt), name
+
+
+def test_keine_warnung_wenn_satz_ohnehin_fehlt():
+    inv = _auslagen_rechnung()
+    ln = inv["lines"][2]
+    ln["taxlinecount"] = 0
+    ln["classifiedtaxcategorypercent"] = None   # ohne TAXLINK -> Fehler, keine "0 %"-Warnung
+    issues = invoice_validator.validate(inv)
+    assert [i for i in issues if i["field"].endswith("tax_percent")]
+    assert not [i for i in issues if i["field"] == "lines.tax_missing"]
