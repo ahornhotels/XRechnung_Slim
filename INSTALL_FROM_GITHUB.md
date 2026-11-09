@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.c
 Optionen:
 ```powershell
 # anderes Zielverzeichnis / bestimmte Version / ohne KoSIT
-.\install_online.ps1 -InstallDir "D:\Apps\XRechnung_Slim" -Ref v1.9.0 -SkipKosit
+.\install_online.ps1 -InstallDir "D:\Apps\XRechnung_Slim" -Ref v2.0.0 -SkipKosit
 
 # ohne Instant-Client-Download (z.B. abgeschotteter Server oder eigener x64-Client)
 .\install_online.ps1 -SkipOracle
@@ -54,15 +54,25 @@ und meldet einen 32-bit-Fund ausdrücklich als unbrauchbar.
 2. Wizard im Browser auf `http://127.0.0.1:8022/`:
    - Oracle-Verbindung (TNS/User/Passwort — wird verschlüsselt gespeichert).
    - Hoteldaten + Rechnungsnummer-Pattern.
-   - Wizard zeigt das **Trigger-SQL** → der **DBA** führt es einmalig in
-     Oracle (V8LIVE) aus.
+   - Wizard zeigt das **Trigger-SQL** → der **DBA** führt es einmalig in der
+     Suite8-Datenbank aus.
 3. Der Dienst `Suite8XRechnungSlim` wird installiert (Autostart, Port 8022).
+4. **Ersten Verwalter anlegen:** am Server `http://127.0.0.1:8022/login` öffnen,
+   Name und Passwort (mindestens 10 Zeichen) vergeben. Das geht nur am Server
+   selbst und nur, solange es noch keinen Benutzer gibt. Weitere Benutzer legt
+   der Verwalter unter **Benutzer** an (Rollen „ansehen“ und „verwalten“).
+5. Alles Weitere (Nur-XML, Gastzeile, Auslage-Artikel, Netzwerkzugriff …) unter
+   **Einstellungen**. Schritt-für-Schritt-Anleitung: [`slim/INSTALL.md`](slim/INSTALL.md).
 
 ## 3. Updates
 
-Später im UI **„Update prüfen / anwenden"** → der inkrementelle Updater holt
-aus `ahornhotels/XRechnung_Slim` nur die geänderten Dateien. Konfiguration und
-Daten bleiben erhalten.
+Die Startseite meldet neue Versionen, ein Verwalter klickt **„Jetzt
+aktualisieren“** → der inkrementelle Updater holt aus `ahornhotels/XRechnung_Slim`
+nur die geänderten Dateien. Konfiguration und Daten bleiben erhalten.
+
+**Update von 1.x auf 2.0:** Danach gibt es noch keinen Benutzer — einmal am
+Server `http://127.0.0.1:8022/login` öffnen und den ersten Verwalter anlegen
+(Schritt 2.4). Der Rechnungsversand läuft bis dahin weiter.
 
 ---
 

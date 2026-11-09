@@ -28,8 +28,8 @@ Schrittfolge, um eine neue Version zu veröffentlichen. `X.Y.Z` jeweils ersetzen
 
 ## 5. Verifizieren
 - [ ] Release-Seite zeigt Tag `vX.Y.Z`.
-- [ ] Auf einer Test-/Hotel-Instanz im UI **„Update prüfen"** → bietet `X.Y.Z` an.
-- [ ] **„Update anwenden"** → nur geänderte Dateien werden geladen, Dienst startet
+- [ ] Auf einer Test-/Hotel-Instanz zeigt die Startseite **„Update verfügbar“** mit `X.Y.Z`.
+- [ ] **„Jetzt aktualisieren“** (als Verwalter) → nur geänderte Dateien werden geladen, Dienst startet
       neu, `VERSION` zeigt danach `X.Y.Z`. Config/Daten unverändert.
 
 ## 6. Erstinstallation prüfen (nur bei Bedarf / größeren Releases)

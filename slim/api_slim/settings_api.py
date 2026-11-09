@@ -190,7 +190,7 @@ def put_seller(payload: Values, request: Request):
             if k == "payeefinancialaccountid":
                 v = _iban(v)                # wie das Kopf-SQL
             if len(v) > 300:
-                raise HTTPException(422, {k: "hoechstens 300 Zeichen"})
+                raise HTTPException(422, {k: "höchstens 300 Zeichen"})
             if v:
                 current[k] = v
             else:

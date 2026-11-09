@@ -247,7 +247,7 @@ def change_password(payload: PasswordPayload, request: Request):
 @router.post("/bootstrap")
 def bootstrap(payload: LoginPayload, request: Request):
     """Ersten Verwalter anlegen - nur ohne Benutzer und nur von localhost."""
-    forbidden = HTTPException(403, "Ersteinrichtung nur am Server und nur ohne Benutzer moeglich")
+    forbidden = HTTPException(403, "Ersteinrichtung nur am Server und nur ohne Benutzer möglich")
     if USERS.count() > 0 or not _is_local(request):
         raise forbidden
     try:

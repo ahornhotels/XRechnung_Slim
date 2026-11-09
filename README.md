@@ -7,11 +7,20 @@ Sie läuft als Windows-Dienst (NSSM) und pollt die Suite8-DB: für jede zum Vers
 markierte Mail (WMAI mit `BLOCKSEND=1`) liest sie die Rechnungsdaten über
 vorgefertigte Oracle-Views, baut die XRechnung-XML (EN16931 / XRechnung 3.0),
 validiert sie gegen den KoSIT-Validator, hängt sie an die Mail und gibt den
-Versand frei. Konfiguration und Status über eine Browser-Oberfläche auf
-`127.0.0.1`.
+Versand frei. Status und sämtliche Einstellungen über eine Browser-Oberfläche
+(Standard `http://127.0.0.1:8022/`) mit Anmeldung.
 
 **Eigenschaften**
 - Kein eigener Mailversand — nutzt den Suite8-Mailservice (XML wird nur angehängt).
+- **Anmeldung** mit den Rollen „ansehen“ und „verwalten“; alle Einstellungen
+  (Datenbank, Hotel, Versand, Rechnungsinhalt, Prüfung, Server, Update) mit
+  Erklärtext in der Oberfläche.
+- **Gast und Gruppenrechnung:** Gast im Rechnungshinweis (BT-22) und als
+  Lieferempfänger (BT-70); bei Gruppenrechnungen Zimmer und Gast je Position,
+  gleiche Buchungen zusammengefasst.
+- **Nur-XML-Versand** je Kunde (Membership „PDF“) oder für alle: PDF und RTF
+  werden aus der Suite8-Mail genommen.
+- **Auslagen und Paid-Out** mit 0 % statt Blockade (Artikelliste einstellbar).
 - Datums-robuste Rechnungsnummer-Erkennung (mehrsprachige Betreffe, „Nummer eintippen").
 - DB-Trigger mit Idempotenz-Guard (kein Doppel-Anhängen).
 - Eingebauter **inkrementeller Auto-Updater** (lädt nur geänderte Dateien aus GitHub).
@@ -27,21 +36,32 @@ powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.c
 ```
 
 Danach `slim\setup_slim.cmd` als Administrator → Wizard auf
-`http://127.0.0.1:8022/`. Voraussetzungen und der DBA-Trigger-Schritt:
-siehe **[INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md)**.
+`http://127.0.0.1:8022/`. Anschließend **am Server** unter
+`http://127.0.0.1:8022/login` den ersten Verwalter anlegen. Voraussetzungen und
+der DBA-Trigger-Schritt: siehe **[INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md)**,
+Bedienung: **[slim/INSTALL.md](slim/INSTALL.md)**.
 
 ## Updates
 
-Im UI **„Update prüfen / anwenden"** — der inkrementelle Updater holt aus diesem
-Repo nur die seit der laufenden Version geänderten Dateien und startet den Dienst
-neu. Konfiguration und Daten bleiben erhalten. Versionspflege:
+Die Startseite meldet neue Versionen („Update verfügbar“), ein Verwalter klickt
+**„Jetzt aktualisieren“**. Der inkrementelle Updater holt aus diesem Repo nur die
+seit der laufenden Version geänderten Dateien und startet den Dienst neu.
+Konfiguration und Daten bleiben erhalten. Versionspflege:
 **[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)**.
+
+> **Update von 1.x auf 2.0:** Danach gibt es noch keinen Benutzer. Einmal am
+> Server selbst `http://127.0.0.1:8022/login` öffnen und den ersten Verwalter
+> anlegen (von anderen Rechnern aus nicht möglich). Der Rechnungsversand läuft
+> bis dahin unverändert weiter.
 
 ## Struktur
 
 - `slim/` — die App (FastAPI-API, Poller, Frontend, Setup-Wizard, Install-Skripte)
 - `core/` — Basis (Config, Crypto, Oracle-Verbindung, Logging) — vendored
-- `modules/` — Pattern-Erkennung, KoSIT-Validator, WMAI-Mailer, XML-Builder
+- `modules/` — Pattern-Erkennung, Rechnungsdaten (Fetcher, Adresse/Gast/
+  Zusammenfassen), Validator, KoSIT, WMAI-Mailer, XML-Builder
+- `sql/` — Abfragen auf die Suite8-Tabellen
+- `templates/` — UBL-Vorlagen für Rechnung und Gutschrift
 - `validation/` — KoSIT-XRechnung-Validierungsartefakte (Jar git-ignoriert)
 - `install/` — Laufzeit-Bundle: portable Python, JRE, NSSM, Oracle Instant
   Client (alles git-ignoriert, wird vom Installer befüllt).
@@ -57,8 +77,9 @@ python -m pytest tests_slim/      # Tests
 python -m slim.main_slim          # App lokal starten (Config in slim/config/)
 ```
 
-Konfiguration liegt unter `slim/config/` (siehe `*.example`-Dateien).
-Echte Hotel-Konfigurationen und Secrets sind git-ignoriert.
+Konfiguration liegt unter `slim/config/` (siehe `*.example`-Dateien), Benutzer
+unter `slim/data/users.json`. Echte Hotel-Konfigurationen, Benutzer und Secrets
+sind git-ignoriert.
 
 ## Lizenz
 
