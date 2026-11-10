@@ -64,6 +64,7 @@ setup_logging(load_app_settings().get("log_level", "INFO"))
 logger = logging.getLogger(__name__)
 
 _VERSION_FILE = _REPO_ROOT / "VERSION"
+_STARTED = __import__("datetime").datetime.now().isoformat(timespec="microseconds")
 app_version = _VERSION_FILE.read_text(encoding="utf-8").strip() if _VERSION_FILE.exists() else "?"
 
 app = FastAPI(
@@ -149,7 +150,9 @@ async def setup_page():
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True, "version": app_version}
+    # started: aendert sich bei jedem Neustart - daran erkennt die Oberflaeche,
+    # dass der Dienst wirklich neu gestartet wurde.
+    return {"ok": True, "version": app_version, "started": _STARTED}
 
 
 # --- Scheduler ---

@@ -137,9 +137,22 @@ document.addEventListener("click", async (e) => {
   }
   if (e.target.id === "restart") {
     if (!confirm("Dienst jetzt neu starten? Die Oberfläche ist danach kurz nicht erreichbar.")) return;
+    let before = null;
+    try { before = (await (await fetch("/healthz", {cache: "no-store"})).json()).started; } catch (err) {}
     try { await api("/api/system/restart", "POST"); } catch (err) {}
-    $("restart-banner").textContent = "Neustart läuft … Die Seite lädt in 15 Sekunden neu.";
-    setTimeout(() => location.reload(), 15000);
+    $("restart-banner").textContent = "Neustart läuft … Die Seite lädt neu, sobald der Dienst wieder antwortet.";
+    // Warten, bis ein NEU gestarteter Dienst antwortet (anderer Startzeitpunkt).
+    const t0 = Date.now();
+    const poll = setInterval(async () => {
+      try {
+        const h = await (await fetch("/healthz", {cache: "no-store"})).json();
+        if (h.started && h.started !== before) { clearInterval(poll); location.reload(); return; }
+      } catch (err) {}
+      if (Date.now() - t0 > 120000) {
+        clearInterval(poll);
+        $("restart-banner").textContent = "Der Dienst wurde nicht neu gestartet. Bitte den Windows-Dienst Suite8XRechnungSlim neu starten.";
+      }
+    }, 2000);
   }
 });
 

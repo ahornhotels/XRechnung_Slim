@@ -41,3 +41,40 @@ def test_login_bei_neueinrichtung_mit_benutzern():
 def test_login_leitet_nur_verwalter_zum_wizard():
     src = (FRONT / "login.html").read_text(encoding="utf-8")
     assert 's.role === "verwalten" ? "/setup" : "/"' in src
+
+
+def test_startseite_erkennt_alten_dienst_nach_update():
+    """Update eingespielt, Dienst aber nicht neu gestartet: der alte Dienst kennt
+    /api/auth/state nicht (404). Dann nicht nach /login (ebenfalls 404 ->
+    {"detail":"Not Found"}) weiterleiten, sondern einen Hinweis zeigen."""
+    src = (FRONT / "index.html").read_text(encoding="utf-8")
+    assert "r.status === 404" in src
+    assert "noch mit der alten Version" in src
+    assert 'getElementById("restart_banner").innerHTML' in src   # eigenes Element, checkUpdate leert update_banner
+
+
+def test_nach_update_warten_bis_neue_version_antwortet():
+    """Kein fester 10-s-Reload: warten, bis /healthz die neue Version meldet;
+    bleibt der Neustart aus, klarer Hinweis statt Fehlerseite."""
+    src = (FRONT / "index.html").read_text(encoding="utf-8")
+    assert "location.reload(); }, 10000)" not in src
+    assert "h.version === want" in src
+    assert "nicht neu gestartet" in src
+
+
+def test_einstellungen_neustart_wartet_auf_dienst():
+    src = (FRONT / "settings.html").read_text(encoding="utf-8")
+    assert "setTimeout(() => location.reload(), 15000)" not in src
+    assert "/healthz" in src
+
+
+def test_healthz_meldet_startzeitpunkt():
+    from fastapi.testclient import TestClient
+    from slim import main_slim
+    j = TestClient(main_slim.app).get("/healthz").json()
+    assert j["ok"] is True and j.get("started")
+
+
+def test_einstellungen_erkennt_neustart_am_startzeitpunkt():
+    src = (FRONT / "settings.html").read_text(encoding="utf-8")
+    assert "h.started !== before" in src

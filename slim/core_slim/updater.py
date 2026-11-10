@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -406,9 +408,47 @@ def apply_incremental_update(files: list, head_ref: str, cfg: dict,
 
 # ─────────────────────────── Service-Restart ───────────────────────────
 
+# Exit-Code fuer den Selbst-Neustart. NSSM startet die App bei JEDEM Ende neu
+# (AppExit Default = Restart, install_slim.cmd aendert das nicht).
+_RESTART_EXIT_CODE = 3
+_RESTART_DELAY_S = 3.0
+
+
+def _running_as_service() -> bool:
+    """True, wenn der Prozess als Windows-Dienst laeuft (Sitzung 0). Der
+    Setup-Assistent im Konsolenfenster laeuft in einer Benutzersitzung."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        sid = wintypes.DWORD()
+        ok = ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(sid))
+        return bool(ok) and sid.value == 0
+    except Exception:
+        return False
+
+
 def restart_service_detached() -> None:
-    """NSSM-Restart in einem detached cmd-Wrapper, ~4s Delay damit der
-    HTTP-Request des Apply noch zustellt."""
+    """Neustart nach Update oder Einstellungsaenderung.
+
+    Als Dienst: der Prozess beendet sich nach kurzer Wartezeit selbst (die
+    HTTP-Antwort geht vorher noch raus), NSSM startet ihn neu. Der fruehere
+    Weg ueber einen abgekoppelten 'nssm restart' blieb im Feld aus - der
+    alte Dienst lief mit den neuen Dateien weiter.
+
+    Ohne Dienst (Setup-Assistent): wie bisher 'nssm restart' versuchen."""
+    if _running_as_service():
+        logger.info("Neustart: Dienst beendet sich in %.0f s, NSSM startet ihn neu",
+                    _RESTART_DELAY_S)
+
+        def _exit():
+            logging.shutdown()
+            os._exit(_RESTART_EXIT_CODE)
+
+        timer = threading.Timer(_RESTART_DELAY_S, _exit)
+        timer.daemon = True
+        timer.start()
+        return
+
     if not NSSM_EXE.exists():
         logger.info("NSSM nicht gefunden — kein automatischer Restart")
         return

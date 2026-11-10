@@ -271,3 +271,44 @@ def test_state_corrupt_file_returns_empty(tmp_path, monkeypatch):
     state_file.write_text("not json", encoding="utf-8")
     monkeypatch.setattr(updater, "STATE_FILE", state_file)
     assert updater.load_state()["last_version"] is None
+
+
+# --- Neustart nach Update: als Dienst selbst beenden, NSSM startet neu ---
+
+def test_neustart_als_dienst_beendet_prozess_selbst(monkeypatch):
+    """Im Feld blieb der Neustart ueber 'nssm restart' aus (alter Dienst lief
+    mit neuen Dateien weiter -> {"detail":"Not Found"}). Als Dienst beendet
+    sich die App jetzt selbst; NSSM (AppExit=Restart) startet sie neu."""
+    timers, exits, spawned = [], [], []
+
+    class FakeTimer:
+        def __init__(self, delay, fn):
+            timers.append(delay)
+            self.fn = fn
+            self.daemon = False
+
+        def start(self):
+            self.fn()
+
+    monkeypatch.setattr(updater, "_running_as_service", lambda: True)
+    monkeypatch.setattr(updater.threading, "Timer", FakeTimer)
+    monkeypatch.setattr(updater.os, "_exit", lambda code: exits.append(code))
+    monkeypatch.setattr(updater.subprocess, "Popen", lambda *a, **k: spawned.append(a))
+    updater.restart_service_detached()
+    assert exits and exits[0] != 0          # Exit-Code != 0: NSSM startet neu
+    assert timers and timers[0] >= 2        # Antwort an den Browser geht noch raus
+    assert not spawned                      # kein nssm-Umweg mehr
+
+
+def test_neustart_ohne_dienst_beendet_nicht(monkeypatch):
+    """Setup-Assistent im Konsolenfenster: sich selbst beenden waere fatal."""
+    exits = []
+    monkeypatch.setattr(updater, "_running_as_service", lambda: False)
+    monkeypatch.setattr(updater.os, "_exit", lambda code: exits.append(code))
+    monkeypatch.setattr(updater, "NSSM_EXE", updater.APP_ROOT / "gibt-es-nicht.exe")
+    updater.restart_service_detached()
+    assert not exits
+
+
+def test_dienst_erkennung_liefert_bool():
+    assert updater._running_as_service() in (True, False)

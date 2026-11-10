@@ -214,6 +214,7 @@
 <main>
 
   <div id="warnings_banner"></div>
+  <div id="restart_banner"></div>
   <div id="update_banner"></div>
 
   <section>
@@ -395,7 +396,23 @@ function setTheme(name) {
 
 (async function initUser() {
   try {
-    const s = await (await fetch("/api/auth/state")).json();
+    const r = await fetch("/api/auth/state");
+    if (r.status === 404) {
+      // Neue Dateien liegen schon auf der Platte, aber der Dienst laeuft noch
+      // mit dem alten Code (Neustart nach dem Update ausgeblieben). /login gibt
+      // es dort nicht - also nicht weiterleiten, sondern Hinweis zeigen und
+      // warten, bis der neue Dienst antwortet.
+      document.getElementById("restart_banner").innerHTML =
+        `<div class="alert-banner"><strong>Update eingespielt, aber der Dienst läuft noch mit der alten Version.</strong><br>`
+        + `Bitte den Windows-Dienst <code>Suite8XRechnungSlim</code> neu starten (Dienste-Verwaltung oder `
+        + `<code>install\\nssm.exe restart Suite8XRechnungSlim</code> als Administrator). `
+        + `Die Seite lädt danach von selbst neu.</div>`;
+      setInterval(async () => {
+        try { if ((await fetch("/api/auth/state")).ok) location.reload(); } catch (e) {}
+      }, 5000);
+      return;
+    }
+    const s = await r.json();
     if (!s.logged_in || s.must_change) { location.href = "/login"; return; }
     document.getElementById("who").textContent = s.user + " (" + s.role + ")";
     if (s.role !== "verwalten") {
@@ -814,8 +831,20 @@ async function applyUpdate(btn) {
                        + `Kopiert: <code>${(r.copied || []).join(", ")}</code><br>`
                        + (r.failed && r.failed.length ? `<span class="bad">Fehler: ${r.failed.join(", ")}</span><br>` : "")
                        + `${escapeHtml(r.message)}</div>`;
-      // Nach 10 s neu laden
-      setTimeout(() => { location.reload(); }, 10000);
+      // Warten, bis der neu gestartete Dienst die neue Version meldet
+      // (ein fester Reload zeigte bei langsamem Neustart eine Fehlerseite).
+      const want = r.to_version, t0 = Date.now();
+      const poll = setInterval(async () => {
+        try {
+          const h = await (await fetch("/healthz", {cache: "no-store"})).json();
+          if (!want || h.version === want) { clearInterval(poll); location.reload(); return; }
+        } catch (e) {}
+        if (Date.now() - t0 > 120000) {
+          clearInterval(poll);
+          banner.innerHTML += `<div class="alert-banner"><strong>Der Dienst wurde nicht neu gestartet.</strong> `
+            + `Bitte den Windows-Dienst <code>Suite8XRechnungSlim</code> neu starten und die Seite neu laden.</div>`;
+        }
+      }, 2000);
     } else {
       banner.innerHTML = `<div class="alert-banner">${escapeHtml(r.message)}</div>`;
       btn.disabled = false; btn.textContent = "Jetzt aktualisieren";
