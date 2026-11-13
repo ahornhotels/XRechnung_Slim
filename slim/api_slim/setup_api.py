@@ -378,10 +378,6 @@ async def hotel_save(payload: HotelSavePayload):
     hotel_path = CONFIG_DIR / "hotel.json"
     cfg = load_json(hotel_path, default={}) or {}
     cfg.update(payload.model_dump())
-    cfg.setdefault(
-        "xrechnung_profile_id",
-        "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0",
-    )
     cfg["mail_strategy"] = "suite8"  # hart - kein setdefault
     cfg.setdefault("suite8_poll_interval_seconds", 30)
     save_json(hotel_path, cfg)

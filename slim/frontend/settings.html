@@ -35,6 +35,21 @@
   .seller { display:grid; grid-template-columns: minmax(160px, 220px) 1fr 1fr; gap:6px 12px; align-items:center; padding:6px 0; border-top:1px solid var(--border); }
   .seller.head { color:var(--muted); font-size:13px; border-top:0; }
   .muted { color:var(--muted); }
+  button.info { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0;
+                margin-left:8px; border-radius:50%; background:#d11a1a; color:#fff; font-weight:800; font-size:19px;
+                line-height:1; vertical-align:middle; box-shadow:0 0 0 2px rgba(209,26,26,.25); }
+  button.info:hover, button.info:focus-visible { background:#a50f0f; outline:none; box-shadow:0 0 0 3px rgba(209,26,26,.45); }
+  dialog.info-dlg { max-width:900px; width:calc(100% - 32px); max-height:calc(100vh - 48px); border:1px solid var(--border);
+                    border-radius:12px; background:var(--panel); color:var(--fg); padding:0; }
+  dialog.info-dlg::backdrop { background:rgba(0,0,0,.45); }
+  .info-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 18px;
+               border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel); }
+  .info-head h2 { margin:0; font-size:18px; }
+  .info-body { padding:4px 18px 18px; font-size:14px; }
+  .info-body h3 { font-size:15px; margin:18px 0 6px; }
+  .info-body table { border-collapse:collapse; width:100%; font-size:13px; display:block; overflow-x:auto; }
+  .info-body th, .info-body td { border:1px solid var(--border); padding:6px 8px; text-align:left; vertical-align:top; }
+  .info-body tr:first-child th { background:var(--bg); }
   @media (max-width: 640px) {
     .field { grid-template-columns: 1fr; } .field .help, .err { grid-column:1; }
     .seller { grid-template-columns: 1fr; }
@@ -50,6 +65,11 @@
     <button id="restart">Jetzt neu starten</button>
   </div>
   <div id="sections"><p class="muted">Lädt …</p></div>
+
+  <dialog class="info-dlg" id="info-dlg" aria-labelledby="info-title">
+    <div class="info-head"><h2 id="info-title"></h2><button class="secondary" id="info-close">Schließen</button></div>
+    <div class="info-body" id="info-body"></div>
+  </dialog>
 
   <div class="card">
     <h2>Verkäuferdaten</h2>
@@ -75,7 +95,11 @@ async function api(url, method, body) {
 function input(f) {
   const id = "f-" + f.key;
   if (f.type === "bool") return `<select id="${id}"><option value="true"${f.value ? " selected" : ""}>ja</option><option value="false"${!f.value ? " selected" : ""}>nein</option></select>`;
-  if (f.type === "select") return `<select id="${id}">${f.choices.map(c => `<option${c === f.value ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
+  if (f.type === "select") {
+    // Ein Altwert ausserhalb der Auswahl bleibt waehlbar, sonst sprang er beim Speichern still auf die erste Option.
+    const opts = (f.value == null || f.choices.includes(f.value)) ? f.choices : [f.value, ...f.choices];
+    return `<select id="${id}">${opts.map(c => `<option${c === f.value ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
+  }
   if (f.type === "int") return `<input type="number" id="${id}" value="${esc(f.value)}">`;
   if (f.type === "list") return `<textarea id="${id}" placeholder="durch Komma getrennt">${esc((f.value || []).join(", "))}</textarea>`;
   if (f.type === "secret") return `<input type="password" id="${id}" autocomplete="new-password" placeholder="${f.gesetzt ? "gesetzt – leer lassen = unverändert" : "nicht gesetzt"}">`;
@@ -88,7 +112,7 @@ function render(sections) {
       <h2>${esc(sec.label)}${sec.id === "datenbank" ? '<button class="secondary" id="dbtest">Verbindung testen</button>' : ""}</h2>
       ${sec.fields.map(f => `
         <div class="field">
-          <label class="lbl" for="f-${esc(f.key)}">${esc(f.label)}${f.restart ? '<span class="tag">Neustart</span>' : ""}</label>
+          <div class="lbl"><label for="f-${esc(f.key)}">${esc(f.label)}</label>${f.restart ? '<span class="tag">Neustart</span>' : ""}${f.info ? `<button type="button" class="info" data-key="${esc(f.key)}" title="Erklärung anzeigen" aria-label="Erklärung zu ${esc(f.label)}">!</button>` : ""}</div>
           <div>${input(f)}</div>
           <div class="help">${esc(f.help)}</div>
           <div class="err" id="e-${esc(f.key)}"></div>
@@ -108,7 +132,20 @@ function collect(sec) {
   return values;
 }
 
+function showInfo(key) {
+  for (const sec of window._sections || []) {
+    const f = sec.fields.find(x => x.key === key);
+    if (!f) continue;
+    $("info-title").textContent = f.label;
+    $("info-body").innerHTML = f.info;     // fester Text aus settings_schema.py, keine Benutzereingabe
+    $("info-dlg").showModal();
+    return;
+  }
+}
+
 document.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("info")) { showInfo(e.target.dataset.key); return; }
+  if (e.target.id === "info-close") { $("info-dlg").close(); return; }
   if (e.target.classList.contains("save")) {
     const card = e.target.closest(".card");
     const sec = window._sections.find(s => s.id === card.dataset.section);

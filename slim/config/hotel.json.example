@@ -4,7 +4,6 @@
   "absender_email": "invoice@my-hotel.com",
   "default_payment_terms_days": 14,
   "currency": "EUR",
-  "xrechnung_profile_id": "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0",
   "mail_strategy": "suite8",
   "suite8_recognize_subject_pattern": "Rechnung\\s+Nr\\.?\\s*(?P<zinv_number>\\d+)",
   "suite8_recognize_filename_pattern": "",

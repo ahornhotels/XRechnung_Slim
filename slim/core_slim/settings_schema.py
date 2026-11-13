@@ -30,6 +30,7 @@ class Setting:
     maximum: Optional[int] = None
     check: Optional[Callable[[Any], None]] = None
     default: Any = None
+    info: str = ""               # ausfuehrliche Erklaerung (HTML aus diesem Modul) hinter dem (!)-Knopf
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,69 @@ def _email(value: str) -> None:
 
 C, H, A, U = "connection.json", "hotel.json", "app_settings.json", "update.json"
 
+_INFO_RUNDUNGSAUSGLEICH = """
+<h3>Warum es den Rundungsausgleich gibt</h3>
+<p><b>So rechnet Suite8:</b> Die Preise sind Bruttopreise. Zu jeder einzelnen
+Buchung bucht Suite8 eine eigene Steuerbuchung und rundet sie auf den Cent –
+jede Buchung ist für Journal und Tagesabschluss in sich abgeschlossen.</p>
+<p><b>Beispiel:</b> 67 × Frühstück zu 3,85 € brutto mit 19 %. Genau wären es je
+Buchung 0,6147 € Steuer, gerundet 0,61 € (netto 3,24 €). Zusammen
+<b>40,87 € Steuer</b>. Rechnet man die Steuer einmal auf die Summe
+(257,95 € × 19 / 119), sind es <b>41,19 €</b>. Die 0,32 € entstehen nur durch
+das Runden je Buchung.</p>
+<p><b>Was die XRechnung verlangt:</b> Je Steuersatz muss die
+Bemessungsgrundlage genau der Summe der Positionen entsprechen (Regel BR-S-08)
+und die Steuer genau Bemessungsgrundlage × Steuersatz sein (BR-CO-17). Der
+KoSIT-Validator lässt bis zu 1 € Abweichung durch und meldet deshalb
+„gültig“. Strenge Empfänger wie <b>SAP</b> prüfen auf den Cent und lehnen die
+Rechnung ab.</p>
+
+<h3>Die drei Einstellungen</h3>
+<ul>
+<li><b>aus</b> – die XRechnung übernimmt die Werte aus Suite8 wie bisher. Kann
+bei strengen Empfängern abgelehnt werden.</li>
+<li><b>position</b> – je Steuersatz rechnet Slim vom Brutto aus: Steuer =
+Brutto × Satz / (100 + Satz), einmal gerundet; Bemessungsgrundlage = Brutto −
+Steuer. Den Rest von wenigen Cent bekommt die <b>größte Position</b> des
+Steuersatzes (ihr Einzelpreis wird 4-stellig angepasst). Im Beispiel:
+Frühstück 216,76 € statt 217,08 €.</li>
+<li><b>abschlag</b> – dieselbe Rechnung, aber alle Positionen bleiben wie in
+Suite8. Der Rest steht als eigener <b>Abschlag bzw. Zuschlag
+„Rundungsausgleich“</b> mit dem Steuersatz in der Rechnung. Im Beispiel:
+Frühstück 217,08 € und Abschlag 0,32 €.</li>
+</ul>
+<p><b>position oder abschlag?</b> Beide liefern dieselbe Steuer und denselben
+Endbetrag. „position“ ist unauffälliger, ändert aber eine Position um Cent.
+„abschlag“ lässt alle Positionen unverändert und zeigt die Differenz offen als
+eigene Zeile.</p>
+
+<h3>Ergebnis: Datenbank, PDF und XML im Vergleich</h3>
+<table>
+<tr><th></th><th>Datenbank (Suite8)</th><th>PDF-Rechnung</th><th>XML „aus“</th><th>XML „position“</th><th>XML „abschlag“</th></tr>
+<tr><th>Endbetrag</th><td>Suite8</td><td>wie Suite8</td><td>wie Suite8</td><td>wie Suite8</td><td>wie Suite8</td></tr>
+<tr><th>Steuer</th><td>Summe der Steuerbuchungen</td><td>wie Suite8</td><td>je Buchung gerundet</td><td>je Satz neu berechnet, weicht um Cent ab</td><td>je Satz neu berechnet, weicht um Cent ab</td></tr>
+<tr><th>Positionen netto</th><td>Suite8</td><td>wie Suite8</td><td>wie Suite8</td><td>eine Position je Satz um Cent geändert</td><td>wie Suite8</td></tr>
+<tr><th>Zusätzliche Zeile</th><td>–</td><td>–</td><td>–</td><td>–</td><td>„Rundungsausgleich“ je Satz</td></tr>
+<tr><th>Strenge Prüfung (z. B. SAP)</th><td>–</td><td>–</td><td>Ablehnung möglich</td><td>angenommen</td><td>angenommen</td></tr>
+</table>
+
+<h3>Was das für die Buchhaltung heißt</h3>
+<ul>
+<li>Slim ändert <b>nichts in Suite8</b>: Buchungen, Journal und PDF bleiben,
+wie sie sind. Nur die XRechnung wird anders gerechnet.</li>
+<li>Die Steuer in der XRechnung kann daher je Rechnung um einige Cent von den
+Suite8-Steuerbuchungen abweichen, mal nach oben, mal nach unten.</li>
+<li>Bei einer E-Rechnung ist die XRechnung das maßgebliche Dokument. Weist sie
+mehr Steuer aus als gebucht, wird der ausgewiesene Betrag geschuldet
+(§ 14c UStG). Es geht um Cent, sollte aber vor dem Einschalten mit
+Buchhaltung bzw. Steuerberatung abgestimmt werden.</li>
+<li>Die saubere Lösung an der Quelle wäre, dass Suite8 die Steuer je Rechnung
+und Steuersatz statt je Buchung rechnet. Das ist eine Frage an den
+Suite8-Support.</li>
+</ul>
+"""
+
+
 SECTIONS: tuple[Section, ...] = (
     Section("datenbank", "Datenbank (Suite8)", (
         Setting("tns_alias", C, "TNS-Alias", "Name der Suite8-Datenbank aus der tnsnames.ora, z. B. V8.", restart=True),
@@ -107,6 +171,7 @@ SECTIONS: tuple[Section, ...] = (
     )),
     Section("hotel", "Hotel", (
         Setting("hotel_code", H, "Hauskürzel", "Kurzname des Hauses, erscheint in Protokoll und Archiv."),
+        Setting("hotel_long_name", H, "Hausname", "Ausgeschriebener Name des Hauses, erscheint in der Statusanzeige, wenn kein Hauskürzel gesetzt ist."),
         Setting("currency", H, "Währung", "Ersatzwährung, wenn Suite8 keine Basiswährung liefert (ISO, z. B. EUR).", default="EUR"),
         Setting("default_payment_terms_days", H, "Zahlungsziel (Tage)", "Tage bis zur Fälligkeit, falls Suite8 kein Zahlungsziel liefert.", type="int", minimum=0, maximum=365, default=14),
         Setting("seller_contact_name", H, "Ansprechpartner", "Name im Verkäuferkontakt (BT-41), wenn Suite8 keinen liefert.", default="Buchhaltung"),
@@ -114,6 +179,7 @@ SECTIONS: tuple[Section, ...] = (
         Setting("seller_contact_email", H, "E-Mail Ansprechpartner", "E-Mail im Verkäuferkontakt (BT-43), wenn Suite8 keine liefert.", check=_email),
     )),
     Section("versand", "Versand", (
+        Setting("mail_strategy", H, "Verarbeitung", "suite8 = Slim hängt die XRechnung an die vorbereiteten Suite8-Mails an (Normalbetrieb). aus = Slim verarbeitet keine Mails, die Mails bleiben in Suite8 gesperrt stehen. Wirkt ab dem nächsten Abruf.", type="select", choices=("suite8", "aus"), default="suite8"),
         Setting("absender_email", H, "Absender-E-Mail", "Absenderadresse der Rechnungsmails.", check=_email),
         Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
         Setting("suite8_recognize_filename_pattern", H, "Erkennung im Dateinamen", "Regulärer Ausdruck für den PDF-Dateinamen, mit (?P<zinv_number>...) oder (?P<zinv_id>...). Leer = nicht verwendet.", check=_regex_with_group, default=""),
@@ -126,7 +192,7 @@ SECTIONS: tuple[Section, ...] = (
         Setting("gastzeile", H, "Gastzeile (BT-22)", "Hinweis bei genau einem Gast. Platzhalter {gast}, {zimmer}, {anreise}, {abreise}. Leer = keine Gastzeile.", check=_gastzeile, default="Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"),
         Setting("positionen_zusammenfassen", H, "Positionen zusammenfassen", "Gleiche Buchungen (gleicher Gast, Zimmer, Artikel, Preis) als eine Position mit Menge ausweisen.", type="bool", default=True),
         Setting("auslagen_artikel", H, "Auslage-Artikel", "Suite8-Artikel (Kurzname), die ohne Steuerbuchung als Auslage mit 0 % gelten. Andere Artikel ohne Steuerbuchung blockieren die Rechnung.", type="list", default=["AUS", "DUR"]),
-        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). aus = Werte wie aus Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. abschlag = Rest als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="aus"),
+        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). aus = Werte wie aus Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. abschlag = Rest als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="aus", info=_INFO_RUNDUNGSAUSGLEICH),
     )),
     Section("pruefung", "Prüfung", (
         Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),

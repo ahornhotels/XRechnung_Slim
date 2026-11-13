@@ -109,7 +109,7 @@ def _actor(request: Request) -> str:
 
 def _field_view(s: schema.Setting, data: dict) -> dict:
     view = {"key": s.key, "label": s.label, "help": s.help, "type": s.type,
-            "restart": s.restart, "choices": list(s.choices)}
+            "restart": s.restart, "choices": list(s.choices), "info": s.info}
     if s.type == "secret":
         view["gesetzt"] = bool(data.get(s.key))
     else:

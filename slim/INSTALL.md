@@ -105,8 +105,8 @@ jede mit Erklärtext:
 | Bereich | Inhalt |
 |---|---|
 | Datenbank | TNS-Alias, Benutzer, Passwort, Oracle-Client, Verbindung testen |
-| Hotel | Hauskürzel, Währung, Zahlungsziel, Ansprechpartner; Verkäuferdaten aus Suite8, abweichend festlegbar |
-| Versand | Absender, Erkennung im Betreff/Dateinamen, Abrufintervall, Name des XML-Anhangs, **Nur-XML** |
+| Hotel | Hauskürzel, Hausname, Währung, Zahlungsziel, Ansprechpartner; Verkäuferdaten aus Suite8, abweichend festlegbar |
+| Versand | Verarbeitung (Normalbetrieb oder Pause), Absender, Erkennung im Betreff/Dateinamen, Abrufintervall, Name des XML-Anhangs, **Nur-XML** |
 | Rechnungsinhalt | Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich |
 | Prüfung | KoSIT-Prüfung, XRechnung-Version |
 | Server | Adresse, Port, erlaubte Adressen, Protokoll |
@@ -132,7 +132,8 @@ Suite8 rundet die Steuer je Buchung. Bei vielen kleinen Buchungen (z. B.
 Frühstück im Paket) passen Bemessungsgrundlage und Steuer dann um einige Cent
 nicht zu den Positionen. Der KoSIT-Validator toleriert das, strenge
 Empfänger wie SAP lehnen die Rechnung ab. Unter **Einstellungen →
-Rechnungsinhalt → Rundungsausgleich**:
+Rechnungsinhalt → Rundungsausgleich** (das rote **!** daneben erklärt
+ausführlich, wie Suite8 rechnet und was in Datenbank, PDF und XML herauskommt):
 
 - **aus** – Werte wie aus Suite8 (Standard)
 - **position** – Steuer je Satz vom Brutto neu berechnet, der Rest von wenigen

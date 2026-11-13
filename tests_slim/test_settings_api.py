@@ -1,5 +1,6 @@
 """Tests: Einstellungen in der Oberflaeche (Schema, Lesen, Schreiben)."""
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -273,3 +274,45 @@ def test_atomares_schreiben_versucht_erneut_bei_windows_sperre(tmp_path, monkeyp
     config_loader.atomic_write_json(tmp_path / "a.json", {"x": 1})
     assert json.loads((tmp_path / "a.json").read_text(encoding="utf-8")) == {"x": 1}
     assert len(tries) == 3 and not list(tmp_path.glob("*.tmp"))
+
+
+# ───────────── Vollstaendigkeit und Erklaerung (Info-Knopf) ─────────────
+
+_NICHT_IM_SCHEMA = {"seller_overrides"}     # eigene Karte "Verkaeuferdaten"
+
+
+def test_jeder_json_schluessel_in_der_oberflaeche():
+    """Alle Einstellungen aus den *.json.example sind in der Oberflaeche."""
+    cfg = Path(settings_schema.__file__).resolve().parent.parent / "config"
+    im_schema = {(s.file, s.key) for sec in settings_schema.SECTIONS for s in sec.settings}
+    fehlend = []
+    for ex in sorted(cfg.glob("*.json.example")):
+        name = ex.name[:-len(".example")]
+        for key in json.loads(ex.read_text(encoding="utf-8")):
+            if key.startswith("_") or key in _NICHT_IM_SCHEMA:
+                continue
+            if (name, key) not in im_schema:
+                fehlend.append(f"{name}:{key}")
+    assert fehlend == []
+
+
+def test_toter_schluessel_profil_id_entfernt():
+    cfg = Path(settings_schema.__file__).resolve().parent.parent / "config"
+    assert "xrechnung_profile_id" not in json.loads((cfg / "hotel.json.example").read_text(encoding="utf-8"))
+    from slim.api_slim import setup_api
+    assert "xrechnung_profile_id" not in Path(setup_api.__file__).read_text(encoding="utf-8")
+
+
+def test_verarbeitung_pausierbar():
+    s = next(x for x in settings_schema.section("versand").settings if x.key == "mail_strategy")
+    assert s.type == "select" and s.choices == ("suite8", "aus") and s.default == "suite8"
+
+
+def test_rundungsausgleich_hat_erklaerung(env):
+    client, _, _ = env
+    f = _field(client.get("/api/settings").json(), "inhalt", "rundungsausgleich")
+    info = f["info"]
+    for wort in ("Suite8", "PDF", "XML", "Datenbank", "position", "abschlag", "Endbetrag", "SAP"):
+        assert wort in info, wort
+    # Felder ohne Erklaerung liefern einen leeren Text
+    assert _field(client.get("/api/settings").json(), "hotel", "hotel_code")["info"] == ""

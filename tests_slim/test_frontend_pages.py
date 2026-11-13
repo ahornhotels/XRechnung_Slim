@@ -78,3 +78,16 @@ def test_healthz_meldet_startzeitpunkt():
 def test_einstellungen_erkennt_neustart_am_startzeitpunkt():
     src = (FRONT / "settings.html").read_text(encoding="utf-8")
     assert "h.started !== before" in src
+
+
+def test_einstellungen_info_knopf_mit_dialog():
+    src = (FRONT / "settings.html").read_text(encoding="utf-8")
+    assert 'class="info"' in src and "<dialog" in src and "showModal" in src
+    assert "f.info" in src
+
+
+def test_einstellungen_unbekannter_auswahlwert_bleibt_erhalten():
+    """Ein Wert ausserhalb der Auswahl (z. B. alt 'auto') darf beim Speichern
+    nicht still auf die erste Option springen."""
+    src = (FRONT / "settings.html").read_text(encoding="utf-8")
+    assert "f.choices.includes(f.value)" in src
