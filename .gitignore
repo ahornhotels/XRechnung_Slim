@@ -49,3 +49,9 @@ slim/logs/
 # Bleiben lokal liegen und werden privat weitergefuehrt.
 STATUS.md
 docs/handbuch/
+
+# Echte Rechnungen/Belege aus Haeusern (Kunden-, Bank- und Hausdaten) - nie ins oeffentliche Repo
+docs/**/*.xml
+docs/**/*.pdf
+docs/*.xml
+docs/*.pdf

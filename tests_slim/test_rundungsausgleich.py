@@ -1,6 +1,6 @@
 """Tests: Rundungsausgleich je Steuersatz (hotel.json 'rundungsausgleich').
 
-Befund (Rechnung eines Hauses, 11/2026): SAP lehnt die XRechnung ab, KoSIT
+Befund (Feldrechnung 11/2026): SAP lehnt die XRechnung ab, KoSIT
 meldet OK. Suite8 rundet die Steuer je Buchung (67 x Fruehstueck 3,85 brutto
 -> je 0,61 Steuer, 3,24 netto). In BG-23 standen dann
   19 %: Bemessung 216,95 (Positionen 217,08), Steuer 40,87 (216,95 x 19 % = 41,22)
@@ -43,7 +43,7 @@ def _line(name, qty, price, pct):
     }
 
 
-def _vorbach(mode=None):
+def _beispiel(mode=None):
     """Betraege wie in der abgelehnten Rechnung (zusammengefasste Positionen)."""
     inv = _base_invoice(0, billingreferenceid=None, billingreferenceissuedate=None,
                         prepaidamount="0.00", payableamount="9181.34")
@@ -130,7 +130,7 @@ def _assert_strict_en16931(doc):
 
 def test_aus_laesst_suite8_werte_stehen():
     for mode in (None, "aus"):
-        doc = _doc(_vorbach(mode))
+        doc = _doc(_beispiel(mode))
         assert _groups(doc)[D("19.00")] == (D("216.95"), D("40.87"))
         assert _ac(doc) == []
 
@@ -138,7 +138,7 @@ def test_aus_laesst_suite8_werte_stehen():
 # ─────────────────────────── abschlag ──────────────────────────
 
 def test_abschlag_rechnet_je_satz_vom_brutto():
-    doc = _doc(_vorbach("abschlag"))
+    doc = _doc(_beispiel("abschlag"))
     assert _groups(doc) == {
         D("19.00"): (D("216.76"), D("41.19")),
         D("7.00"): (D("8339.62"), D("583.77")),
@@ -146,7 +146,7 @@ def test_abschlag_rechnet_je_satz_vom_brutto():
 
 
 def test_abschlag_weist_rest_als_zu_und_abschlag_aus():
-    doc = _doc(_vorbach("abschlag"))
+    doc = _doc(_beispiel("abschlag"))
     assert sorted(_ac(doc)) == [
         (False, D("0.32"), D("19.00"), "Rundungsausgleich"),
         (True, D("0.08"), D("7.00"), "Rundungsausgleich"),
@@ -155,24 +155,24 @@ def test_abschlag_weist_rest_als_zu_und_abschlag_aus():
 
 
 def test_abschlag_endbetrag_bleibt_wie_suite8():
-    doc = _doc(_vorbach("abschlag"))
+    doc = _doc(_beispiel("abschlag"))
     assert _total(doc, "TaxInclusiveAmount") == D("9181.34")
     assert _total(doc, "PayableAmount") == D("9181.34")
     assert _amt(doc, "cac:TaxTotal/cbc:TaxAmount") == D("624.96")
 
 
 def test_abschlag_erfuellt_en16931_ohne_toleranz():
-    _assert_strict_en16931(_doc(_vorbach("abschlag")))
+    _assert_strict_en16931(_doc(_beispiel("abschlag")))
 
 
 def test_abschlag_ist_xsd_gueltig():
-    xml_builder.validate_xsd(xml_builder.render(_vorbach("abschlag")))
+    xml_builder.validate_xsd(xml_builder.render(_beispiel("abschlag")))
 
 
 # ─────────────────────────── position ──────────────────────────
 
 def test_position_traegt_rest_in_groesster_position():
-    doc = _doc(_vorbach("position"))
+    doc = _doc(_beispiel("position"))
     assert _ac(doc) == []
     assert _line_sums(doc) == {D("19.00"): D("216.76"), D("7.00"): D("8339.62")}
     nets = [_amt(ln, "cbc:LineExtensionAmount") for ln in doc.findall("cac:InvoiceLine", NS)]
@@ -181,7 +181,7 @@ def test_position_traegt_rest_in_groesster_position():
 
 
 def test_position_preis_passt_zur_menge():
-    doc = _doc(_vorbach("position"))
+    doc = _doc(_beispiel("position"))
     for ln in doc.findall("cac:InvoiceLine", NS):
         qty = _amt(ln, "cbc:InvoicedQuantity")
         price = _amt(ln, "cac:Price/cbc:PriceAmount")
@@ -189,7 +189,7 @@ def test_position_preis_passt_zur_menge():
 
 
 def test_position_erfuellt_en16931_ohne_toleranz():
-    doc = _doc(_vorbach("position"))
+    doc = _doc(_beispiel("position"))
     _assert_strict_en16931(doc)
     assert _total(doc, "TaxInclusiveAmount") == D("9181.34")
     assert _total(doc, "PayableAmount") == D("9181.34")
@@ -199,7 +199,7 @@ def test_position_erfuellt_en16931_ohne_toleranz():
 
 @pytest.mark.parametrize("mode", ["position", "abschlag"])
 def test_stimmige_rechnung_bleibt_unveraendert(mode):
-    inv = _vorbach(mode)
+    inv = _beispiel(mode)
     inv["lines"] = [_line("Uebernachtung", 1, "100.00", 7)]
     inv["tax_breakdown"] = [{"taxcategoryid": "S", "taxcategorypercent": "7.00",
                              "taxableamount": "100.00", "taxamount": "7.00"}]
@@ -214,7 +214,7 @@ def test_stimmige_rechnung_bleibt_unveraendert(mode):
 
 @pytest.mark.parametrize("mode", ["position", "abschlag"])
 def test_vorausbezahlt_bleibt_zahlbetrag_null(mode):
-    inv = _vorbach(mode)
+    inv = _beispiel(mode)
     inv["header"]["prepaidamount"] = "9181.34"
     inv["header"]["payableamount"] = "0.00"
     doc = _doc(inv)
@@ -224,7 +224,7 @@ def test_vorausbezahlt_bleibt_zahlbetrag_null(mode):
 
 @pytest.mark.parametrize("mode", ["position", "abschlag"])
 def test_nullsteuer_gruppe_bleibt_unberuehrt(mode):
-    inv = _vorbach(mode)
+    inv = _beispiel(mode)
     city = _line("City Tax", 1, "12.50", 0)
     city["classifiedtaxcategoryid"] = "Z"
     inv["lines"].append(city)
@@ -239,7 +239,7 @@ def test_nullsteuer_gruppe_bleibt_unberuehrt(mode):
 @pytest.mark.parametrize("mode", ["position", "abschlag"])
 def test_mit_storno_abschlag(mode):
     """Negative Zeile wird zum Abschlag (Split-Pfad); Ausgleich rechnet ihn mit."""
-    inv = _vorbach(mode)
+    inv = _beispiel(mode)
     storno = _line("Storno Fruehstueck", 1, "-3.24", 19)
     storno["vatparts"] = "-0.61"
     inv["lines"].append(storno)
@@ -275,7 +275,7 @@ def test_gutschrift(mode):
 
 
 def test_unbekannter_modus_wirkt_wie_aus():
-    doc = _doc(_vorbach("quatsch"))
+    doc = _doc(_beispiel("quatsch"))
     assert _groups(doc)[D("19.00")] == (D("216.95"), D("40.87"))
 
 
@@ -285,7 +285,7 @@ def test_unbekannter_modus_wirkt_wie_aus():
 def test_kosit_ohne_steuer_und_summenfehler(mode):
     from modules import kosit_validator
     try:
-        kosit_validator.validate(xml_builder.render(_vorbach(mode)))
+        kosit_validator.validate(xml_builder.render(_beispiel(mode)))
     except FileNotFoundError:
         pytest.skip("KoSIT nicht installiert")
     except kosit_validator.KositValidationError as e:
