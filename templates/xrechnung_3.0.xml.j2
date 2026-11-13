@@ -125,6 +125,20 @@
   </cac:AllowanceCharge>
   {% endfor %}
 
+  {# BG-21: Zuschlaege auf Dokumentebene (Rundungsausgleich, xml_builder._apply_rundungsausgleich). #}
+  {% for ch in (charges or []) %}
+  <cac:AllowanceCharge>
+    <cbc:ChargeIndicator>true</cbc:ChargeIndicator>
+    <cbc:AllowanceChargeReason>{{ ch.reason|e }}</cbc:AllowanceChargeReason>
+    <cbc:Amount currencyID="{{ header.documentcurrencycode }}">{{ ch.amount|fmt }}</cbc:Amount>
+    <cac:TaxCategory>
+      <cbc:ID>{{ ch.category }}</cbc:ID>
+      <cbc:Percent>{{ ch.percent|fmt }}</cbc:Percent>
+      <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+    </cac:TaxCategory>
+  </cac:AllowanceCharge>
+  {% endfor %}
+
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.invoicetaxtotal|fmt }}</cbc:TaxAmount>
     {% for t in tax_breakdown %}
@@ -152,6 +166,9 @@
        siehe BR-CO-11). Nur wenn > 0 emittieren. #}
     {% if totals.allowancetotalamount is defined and (totals.allowancetotalamount|float) > 0 %}
     <cbc:AllowanceTotalAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.allowancetotalamount|fmt }}</cbc:AllowanceTotalAmount>
+    {% endif %}
+    {% if totals.chargetotalamount is defined and (totals.chargetotalamount|float) > 0 %}
+    <cbc:ChargeTotalAmount currencyID="{{ header.documentcurrencycode }}">{{ totals.chargetotalamount|fmt }}</cbc:ChargeTotalAmount>
     {% endif %}
     {% set _gross = totals.invoicegross|float %}
     {% set _spay = (totals.spay_cl|default(0))|float %}

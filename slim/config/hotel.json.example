@@ -20,5 +20,6 @@
     "AUS",
     "DUR"
   ],
-  "positionen_zusammenfassen": true
+  "positionen_zusammenfassen": true,
+  "rundungsausgleich": "aus"
 }

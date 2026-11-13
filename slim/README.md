@@ -46,6 +46,7 @@ Wichtige Schalter in `hotel.json` (Standardwerte in `config/hotel.json.example`)
 | `auslagen_artikel` | `["AUS", "DUR"]` | Artikel-Kurznamen, die ohne Steuerbuchung mit 0 % gelten |
 | `xml_only_membership` | `PDF` | Membership-Kurzbezeichnung für Nur-XML; leer = aus |
 | `xml_only_all` | `false` | Nur-XML für alle Rechnungen |
+| `rundungsausgleich` | `aus` | `position` oder `abschlag`: Steuer je Satz vom Brutto neu (Bemessung = Positionen exakt, für strenge Empfänger wie SAP); Rest in der größten Position bzw. als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt gleich |
 
 ## Was es NICHT macht
 

@@ -5,7 +5,7 @@ Rendert XRechnung-XML aus Rohdaten via Jinja2.
 Validiert gegen UBL-XSD (wenn vorhanden) - KoSIT-Validierung erfolgt in separater Modul-Datei.
 """
 from pathlib import Path
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from lxml import etree
 
@@ -521,6 +521,114 @@ def _reconcile_vat_breakdown(invoice: dict) -> dict:
     return out
 
 
+RUNDUNGSAUSGLEICH_MODI = ("aus", "position", "abschlag")
+_RUNDUNGSAUSGLEICH_GRUND = "Rundungsausgleich"
+
+
+def _apply_rundungsausgleich(invoice: dict, mode: str) -> dict:
+    """Steueraufschluesselung (BG-23) exakt zu den Positionen passend machen.
+
+    Suite8 rundet die Steuer je Buchung. Bei vielen kleinen Bruttobuchungen
+    weicht die Summe davon deutlich von Bemessung x Satz ab, und die
+    Bemessung aus den Suite8-Steuerbuchungen passt nicht zur Positionssumme.
+    KoSIT toleriert bei BR-S-08/BR-CO-17 +-1 EUR, Empfaenger wie SAP pruefen
+    exakt.
+
+    Je Standard-Steuersatz (S, Satz > 0):
+      Brutto    = Bemessung der Positionen/Zu-/Abschlaege + bisherige Steuer
+                  (also der Endbetrag, den die Rechnung ohne Ausgleich haette)
+      Steuer    = Brutto x Satz / (100 + Satz), einmal kaufmaennisch gerundet
+      Bemessung = Brutto - Steuer
+    Den Rest zwischen Positionssumme und neuer Bemessung traegt
+      "position": die betragsgroesste Position des Satzes (Preis 4-stellig neu),
+      "abschlag": ein Abschlag bzw. Zuschlag "Rundungsausgleich" (BG-20/21).
+    Endbetrag, Vorauszahlung und Zahlbetrag bleiben gleich.
+
+    Gibt ein NEUES Invoice-Dict zurueck (Original unangetastet).
+    """
+    if mode not in ("position", "abschlag"):
+        return invoice
+    cent = Decimal("0.01")
+
+    def _dec(v) -> Decimal:
+        try:
+            return Decimal(str(v if v not in (None, "") else 0))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+
+    def _net(ln) -> Decimal:
+        return _dec(ln.get("lineextensionamountnet") or ln.get("lineextensionamount"))
+
+    lines = [dict(ln) for ln in invoice.get("lines") or []]
+    allowances = [dict(a) for a in invoice.get("allowances") or []]
+    charges = [dict(c) for c in invoice.get("charges") or []]
+    breakdown = [dict(b) for b in invoice.get("tax_breakdown") or []]
+
+    changed = False
+    for b in breakdown:
+        key = _cat_key(b.get("taxcategoryid"), b.get("taxcategorypercent"))
+        cat, pct = key
+        if cat != "S" or pct <= 0:
+            continue
+        group = [ln for ln in lines
+                 if _cat_key(ln.get("classifiedtaxcategoryid"),
+                             ln.get("classifiedtaxcategorypercent")) == key]
+        basis = (sum((_net(ln) for ln in group), Decimal(0))
+                 - sum((_dec(a.get("amount")) for a in allowances
+                        if _cat_key(a.get("category"), a.get("percent")) == key), Decimal(0))
+                 + sum((_dec(c.get("amount")) for c in charges
+                        if _cat_key(c.get("category"), c.get("percent")) == key), Decimal(0)))
+        gross = basis + _dec(b.get("taxamount"))
+        tax = (gross * pct / (Decimal(100) + pct)).quantize(cent, rounding=ROUND_HALF_UP)
+        taxable = gross - tax
+        rest = taxable - basis
+        if rest == 0 and _dec(b.get("taxableamount")) == taxable and _dec(b.get("taxamount")) == tax:
+            continue
+        changed = True
+        b["taxableamount"] = str(taxable)
+        b["taxamount"] = str(tax)
+        if rest == 0:
+            continue
+        if mode == "position" and group:
+            target = max(group, key=_net)
+            new_net = _net(target) + rest
+            target["lineextensionamountnet"] = str(new_net)
+            qty = _dec(target.get("invoicedquantity")) or Decimal(1)
+            target["priceamount"] = str(abs(new_net / qty).quantize(Decimal("0.0001"),
+                                                                    rounding=ROUND_HALF_UP))
+            target.pop("vatparts", None)
+        else:
+            entry = {"amount": str(abs(rest)), "category": cat, "percent": pct,
+                     "reason": _RUNDUNGSAUSGLEICH_GRUND}
+            (charges if rest > 0 else allowances).append(entry)
+
+    if not changed:
+        return invoice
+
+    sum_lines = sum((_net(ln) for ln in lines), Decimal(0)).quantize(cent)
+    sum_allow = sum((_dec(a.get("amount")) for a in allowances), Decimal(0)).quantize(cent)
+    sum_charge = sum((_dec(c.get("amount")) for c in charges), Decimal(0)).quantize(cent)
+    tax_total = sum((_dec(b.get("taxamount")) for b in breakdown), Decimal(0)).quantize(cent)
+    tax_excl = sum_lines - sum_allow + sum_charge
+    tax_incl = tax_excl + tax_total
+
+    out = dict(invoice)
+    out["lines"] = lines
+    out["allowances"] = allowances
+    out["charges"] = charges
+    out["tax_breakdown"] = breakdown
+    out["totals"] = dict(invoice.get("totals") or {})
+    out["totals"]["invoicenet"] = str(sum_lines)
+    out["totals"]["allowancetotalamount"] = str(sum_allow)
+    out["totals"]["chargetotalamount"] = str(sum_charge)
+    out["totals"]["taxexclusiveamount"] = str(tax_excl)
+    out["totals"]["invoicetaxtotal"] = str(tax_total)
+    # Brutto je Satz ist unveraendert, also auch Endbetrag, Vorauszahlung und
+    # Zahlbetrag im Kopf - die bleiben, wie sie sind.
+    out["totals"]["invoicegross"] = str(tax_incl)
+    return out
+
+
 def _make_positive_for_credit_note(invoice: dict) -> dict:
     """UBL CreditNote verlangt POSITIVE Werte im Body. Suite8 liefert sie
     bei Gutschriften aber negativ (Sum<0). Diese Funktion wandelt alle
@@ -630,6 +738,9 @@ def render(invoice: dict, version: str = "3.0") -> bytes:
     # Muss NACH Split/Positivierung laufen: erst dann stehen die endgueltigen
     # Positions- und Allowance-Kategorien fest, gegen die BG-23 abgeglichen wird.
     prepared = _reconcile_vat_breakdown(prepared)
+    # Nach dem Abgleich: erst jetzt stehen alle BG-23-Gruppen fest.
+    prepared = _apply_rundungsausgleich(
+        prepared, str(invoice.get("rundungsausgleich") or "aus").strip().lower())
     prepared = _ensure_duedate(prepared, is_credit_note=is_cn)
     template = _env.get_template(tmpl_name)
     return template.render(**prepared).encode("utf-8")

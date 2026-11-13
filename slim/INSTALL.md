@@ -107,7 +107,7 @@ jede mit Erklärtext:
 | Datenbank | TNS-Alias, Benutzer, Passwort, Oracle-Client, Verbindung testen |
 | Hotel | Hauskürzel, Währung, Zahlungsziel, Ansprechpartner; Verkäuferdaten aus Suite8, abweichend festlegbar |
 | Versand | Absender, Erkennung im Betreff/Dateinamen, Abrufintervall, Name des XML-Anhangs, **Nur-XML** |
-| Rechnungsinhalt | Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel |
+| Rechnungsinhalt | Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich |
 | Prüfung | KoSIT-Prüfung, XRechnung-Version |
 | Server | Adresse, Port, erlaubte Adressen, Protokoll |
 | Update | automatische Updates, GitHub-Repository |
@@ -125,6 +125,25 @@ XRechnung – die App nimmt PDF und RTF aus der Suite8-Mail, gelöscht wird
 nichts. Alternativ gilt der Schalter „Nur XML für alle“. Den Membership-Typ
 legen Sie in Suite8 selbst an. **Bitte zuerst mit einem Testkunden
 ausprobieren.**
+
+### Rundungsausgleich (wenn ein Empfänger die Steuer ablehnt)
+
+Suite8 rundet die Steuer je Buchung. Bei vielen kleinen Buchungen (z. B.
+Frühstück im Paket) passen Bemessungsgrundlage und Steuer dann um einige Cent
+nicht zu den Positionen. Der KoSIT-Validator toleriert das, strenge
+Empfänger wie SAP lehnen die Rechnung ab. Unter **Einstellungen →
+Rechnungsinhalt → Rundungsausgleich**:
+
+- **aus** – Werte wie aus Suite8 (Standard)
+- **position** – Steuer je Satz vom Brutto neu berechnet, der Rest von wenigen
+  Cent steckt in der größten Position
+- **abschlag** – wie „position“, der Rest steht aber als Abschlag bzw.
+  Zuschlag „Rundungsausgleich“ in der Rechnung, alle Positionen bleiben wie in
+  Suite8
+
+Der Endbetrag ändert sich nie. Die Steuer in der XRechnung kann um einige Cent
+von den Suite8-Steuerbuchungen (und damit vom PDF) abweichen – bitte mit der
+Buchhaltung abstimmen.
 
 ### Optional: Zugriff aus dem Netzwerk (andere PCs)
 

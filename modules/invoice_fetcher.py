@@ -118,6 +118,21 @@ def _positionen_zusammenfassen() -> bool:
     return True
 
 
+def _rundungsausgleich() -> str:
+    """hotel.json 'rundungsausgleich': aus | position | abschlag (Standard aus),
+    siehe xml_builder._apply_rundungsausgleich."""
+    from modules.xml_builder import RUNDUNGSAUSGLEICH_MODI
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    value = hotel.get("rundungsausgleich")
+    if value is None:
+        return "aus"
+    mode = str(value).strip().lower() if isinstance(value, str) else ""
+    if mode not in RUNDUNGSAUSGLEICH_MODI:
+        logger.warning("hotel.json 'rundungsausgleich'=%r unbekannt - Ausgleich bleibt aus", value)
+        return "aus"
+    return mode
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -357,6 +372,7 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             "tax_breakdown": tax_breakdown,
             "totals": totals,
             "xml_only": _xml_only_reason(cur, zinv_id),
+            "rundungsausgleich": _rundungsausgleich(),
         }
 
 
