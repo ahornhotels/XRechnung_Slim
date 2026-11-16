@@ -104,9 +104,11 @@ XMTY „DXR“ existiert in V8LIVE nicht, kein Trigger an WMAI.
   DBA (wie im Einrichtungsassistenten). Kein automatisches Anlegen.
 - **C2** Bedienen darf den Schalter nur die Rolle „verwalten“; „ansehen“ sieht den Zustand.
 - **C3** Die Datenbank ist die einzige Wahrheit, der Schalter speichert keinen eigenen
-  Zustand. Der Poller verarbeitet Mails nur, wenn der Trigger `ENABLED` ist; bei
-  `DISABLED`, fehlendem oder nicht lesbarem Trigger macht er nichts (gesperrte Mails
-  bleiben gesperrt). Damit kann „Trigger aktiv, Slim aus“ nicht entstehen, auch nicht, wenn
+  Zustand. Ist der Trigger `DISABLED`, verarbeitet der Poller nichts (gesperrte Mails
+  bleiben gesperrt). Bei „fehlt“ oder „nicht prüfbar“ arbeitet der Poller wie heute
+  weiter – sonst stünde in Häusern, deren Slim-Benutzer den Trigger nicht sehen darf, nach
+  dem Update die Verarbeitung still (bei fehlendem Trigger gibt es ohnehin keine
+  gesperrten Mails). Damit kann „Trigger aktiv, Slim aus“ nicht entstehen, auch nicht, wenn
   der DBA den Trigger von Hand schaltet oder neu anlegt. Schlägt `ALTER TRIGGER` fehl
   (z. B. fehlendes Recht), bleibt der Zustand, die Oracle-Meldung wird angezeigt.
 - **C3a** Zustand wird über `ALL_TRIGGERS` (Name `WMAI_XRECHNUNG_BLOCK`, Tabelle `WMAI`)
