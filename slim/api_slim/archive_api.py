@@ -111,9 +111,9 @@ def list_archive(
     for p in root.rglob("*.xml"):
         if not p.is_file() or p.name.endswith(".kosit-report.xml"):
             continue
-        if not archive_fs.meta_path(p).exists() and index is None:
+        if index is None:
             index = archive_fs.sent_index(Path(state["data_dir"]))
-        meta = archive_fs.ensure_meta(p, index or {})
+        meta = archive_fs.ensure_meta(p, index)
         nr = str(meta.get("rechnung") or "")
         if needle and needle not in p.name.lower() and needle not in nr.lower():
             continue

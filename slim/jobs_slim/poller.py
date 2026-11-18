@@ -292,6 +292,14 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                     filename=filename, conn=conn,
                     remove_pdf=bool(xml_only),
                 )
+                # Archiv-Status sofort nach dem Anhängen; scheitert das Schreiben,
+                # korrigiert die Archivliste es später über attach_ok + Prüfwert.
+                try:
+                    archive_fs.mark_sent(arch["xml_path"], wmai_id, row.get("to") or "")
+                except Exception as e:
+                    logger.exception("Archiv-Status nicht schreibbar (wmai=%s)", wmai_id)
+                    audit_jsonl.record_safe(data_dir, "archiv_status_fehler", wmai_id=wmai_id,
+                                            zinv_number=zinv_number, details={"error": str(e)[:300]})
                 xml_only_details = {}
                 if xml_only:
                     removed = bool(result.get("pdf_removed"))
@@ -309,10 +317,6 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 # hat ihren Zweck erfüllt, und sollte nicht versehentlich
                 # bei einer Folge-WMAI mit gleicher ID nochmal angewandt werden.
                 had_override = overrides.delete(data_dir, wmai_id)
-                try:
-                    archive_fs.mark_sent(arch["xml_path"], wmai_id, row.get("to") or "")
-                except Exception:
-                    logger.exception("Archiv-Status nicht schreibbar (wmai=%s)", wmai_id)
                 audit_jsonl.record_safe(
                     data_dir, "attach_ok",
                     wmai_id=wmai_id, zinv_number=zinv_number,

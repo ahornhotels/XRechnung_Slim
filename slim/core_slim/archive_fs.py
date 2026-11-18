@@ -197,11 +197,26 @@ def norm_path(p) -> str:
     return os.path.normcase(os.path.abspath(str(p)))
 
 
+_SENT_CACHE: dict = {}
+
+
 def sent_index(data_dir: Path) -> dict:
-    """attach_ok-Einträge aller Audit-Dateien: normalisierter xml_path ->
-    {angehaengt_am, wmai_id}. Für Archivdateien aus der Zeit vor den Metadaten."""
+    """attach_ok-Einträge aller Audit-Dateien. Schlüssel: normalisierter
+    xml_path und "sha:<sha256>"; Wert {angehaengt_am, wmai_id, sha256}.
+
+    Massgeblich ist der Prüfwert: attach_ok nennt immer den Hauptnamen X.xml,
+    nach einem Retry liegt dort aber eine andere Version. Zwischengespeichert,
+    bis sich eine Audit-Datei ändert (Name, Größe, Zeitstempel)."""
+    files = sorted(Path(data_dir).glob("audit-*.jsonl"))
+    try:
+        key = tuple((f.name, f.stat().st_size, f.stat().st_mtime_ns) for f in files)
+    except OSError:
+        key = None
+    cached = _SENT_CACHE.get(norm_path(data_dir))
+    if key is not None and cached and cached[0] == key:
+        return cached[1]
     out: dict = {}
-    for f in sorted(Path(data_dir).glob("audit-*.jsonl")):
+    for f in files:
         try:
             lines = f.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -213,10 +228,33 @@ def sent_index(data_dir: Path) -> dict:
                 continue
             if e.get("event") != "attach_ok":
                 continue
-            xp = (e.get("details") or {}).get("xml_path")
-            if xp:
-                out[norm_path(xp)] = {"angehaengt_am": e.get("ts"), "wmai_id": e.get("wmai_id")}
+            details = e.get("details") or {}
+            hit = {"angehaengt_am": e.get("ts"), "wmai_id": e.get("wmai_id"),
+                   "sha256": details.get("sha256")}
+            if details.get("xml_path"):
+                out[norm_path(details["xml_path"])] = hit
+            if details.get("sha256"):
+                out["sha:" + str(details["sha256"]).lower()] = hit
+    if key is not None:
+        _SENT_CACHE[norm_path(data_dir)] = (key, out)
     return out
+
+
+def _sha_of(path: Path) -> Optional[str]:
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _hit(index: dict, xml_path: Path, sha: Optional[str]) -> Optional[dict]:
+    if sha and index.get("sha:" + sha):
+        return index["sha:" + sha]
+    by_path = index.get(norm_path(xml_path))
+    # Pfadtreffer nur, wenn das Protokoll keinen (anderen) Prüfwert nennt
+    if by_path and not by_path.get("sha256"):
+        return by_path
+    return None
 
 
 def ensure_meta(xml_path: Path, index: dict) -> dict:
@@ -224,15 +262,26 @@ def ensure_meta(xml_path: Path, index: dict) -> dict:
     p = meta_path(xml_path)
     data = _read_meta(p)
     if data is not None:
+        if data.get("status") == "archiviert" and index:
+            # Anhängen geglückt, aber der Status konnte nicht geschrieben werden:
+            # attach_ok mit gleichem Prüfwert belegt den Versand.
+            hit = _hit(index, xml_path, _sha_of(xml_path))
+            if hit:
+                data.update(status="gesendet", angehaengt_am=hit.get("angehaengt_am"),
+                            wmai_id=hit.get("wmai_id"))
+                try:
+                    _write_meta(p, data)
+                except OSError:
+                    logger.exception("Metadaten nicht schreibbar: %s", p)
         return data
     try:
         facts = xml_fakten.lies(Path(xml_path).read_bytes())
     except OSError:
         facts = {}
-    hit = index.get(norm_path(xml_path))
+    hit = _hit(index, xml_path, _sha_of(xml_path))
     data = {**facts, "status": "gesendet" if hit else "archiviert", "nachgetragen": True}
     if hit:
-        data.update(hit)
+        data.update(angehaengt_am=hit.get("angehaengt_am"), wmai_id=hit.get("wmai_id"))
     try:
         _write_meta(p, data)
     except OSError:

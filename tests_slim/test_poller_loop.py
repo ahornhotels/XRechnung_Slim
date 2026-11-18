@@ -525,3 +525,9 @@ def test_poller_schreibt_meta_und_markiert_gesendet(tmp_path, mocked_db, _reset_
 def test_poller_attach_fehler_bleibt_archiviert(tmp_path, mocked_db, _reset_trigger_merker):
     m = _attach_run(tmp_path, mocked_db, {"side_effect": RuntimeError("WMAI weg")})
     assert m["status"] == "archiviert"
+
+
+def test_poller_status_fehler_wird_protokolliert(tmp_path, mocked_db, _reset_trigger_merker):
+    with patch.object(poller.archive_fs, "mark_sent", side_effect=OSError("gesperrt")):
+        _attach_run(tmp_path, mocked_db, {"return_value": {"wmaa_id": 7, "wtxt_id": 8, "wmai_id": 101}})
+    assert _events(tmp_path, "archiv_status_fehler")

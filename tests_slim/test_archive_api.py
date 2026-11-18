@@ -301,3 +301,18 @@ def test_ansicht_keine_xrechnung_422(client):
     r = _archive(tmp_path, "1", b"<a/>")
     rel = Path(r["xml_path"]).relative_to(tmp_path / "xml").as_posix()
     assert c.get("/api/archive/ansicht", params={"path": rel}).status_code == 422
+
+
+def test_liste_korrigiert_archiviert_bei_attach_ok(client):
+    """mark_sent scheiterte nach geglücktem Anhängen: das Protokoll (attach_ok mit
+    sha256) belegt den Versand, die Liste zeigt 'gesendet' und merkt es sich."""
+    from slim.core_slim import audit_jsonl
+    c, tmp_path = client
+    xml = _inv("900001", "2026-11-01")
+    r = _archive(tmp_path, "900001", xml)
+    audit_jsonl.record(tmp_path, "attach_ok", wmai_id=7, zinv_number="900001",
+                       details={"xml_path": r["xml_path"], "sha256": _hashlib.sha256(xml).hexdigest()})
+    item = c.get("/api/archive").json()["items"][0]
+    assert item["status"] == "gesendet" and item["angehaengt_am"]
+    meta = _json.loads(Path(r["xml_path"]).with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "gesendet" and meta["wmai_id"] == 7

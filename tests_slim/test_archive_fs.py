@@ -298,3 +298,26 @@ def test_sent_index_aus_audit(tmp_path):
     idx = archive_fs.sent_index(tmp_path)
     assert list(idx) == [archive_fs.norm_path(tmp_path / "xml" / "x.xml")]
     assert idx[archive_fs.norm_path(tmp_path / "xml" / "x.xml")]["wmai_id"] == 3
+
+
+def test_ensure_meta_bestand_nach_hash_nicht_nach_pfad(tmp_path):
+    """v1 gesendet (Audit zeigt auf X.xml), danach v2 unter X.xml, Anhaengen scheiterte:
+    v2 darf nicht 'gesendet' werden, die umbenannte v1 schon."""
+    import hashlib as _h
+    from slim.core_slim import audit_jsonl
+    a = archive_fs.save_xml(tmp_path, "900001", b"<v1/>")
+    audit_jsonl.record(tmp_path, "attach_ok", wmai_id=1, zinv_number="900001",
+                       details={"xml_path": a["xml_path"], "sha256": _h.sha256(b"<v1/>").hexdigest()})
+    b = archive_fs.save_xml(tmp_path, "900001", b"<v2/>")
+    for m in (tmp_path / "xml").rglob("*.meta.json"):
+        m.unlink()
+    idx = archive_fs.sent_index(tmp_path)
+    assert archive_fs.ensure_meta(Path(b["xml_path"]), idx)["status"] == "archiviert"
+    assert archive_fs.ensure_meta(Path(b["renamed_existing"]), idx)["status"] == "gesendet"
+
+
+def test_sent_index_wird_nach_neuem_audit_neu_gelesen(tmp_path):
+    from slim.core_slim import audit_jsonl
+    assert archive_fs.sent_index(tmp_path) == {}
+    audit_jsonl.record(tmp_path, "attach_ok", wmai_id=3, details={"xml_path": "x.xml", "sha256": "ab"})
+    assert "sha:ab" in archive_fs.sent_index(tmp_path)
