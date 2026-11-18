@@ -198,3 +198,106 @@ def test_verify_blocks_traversal(client):
     c, tmp_path = client
     r = c.get("/api/archive/verify", params={"path": "../../etc/passwd.xml"})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------- Archiv fuer Pruefer
+
+import hashlib as _hashlib
+import json as _json
+
+NS = ('xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" '
+      'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
+      'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"')
+
+
+def _inv(nr, datum, betrag="100.00"):
+    return (f'<?xml version="1.0"?><Invoice {NS}><cbc:ID>{nr}</cbc:ID><cbc:IssueDate>{datum}</cbc:IssueDate>'
+            f'<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'
+            f'<cac:LegalMonetaryTotal><cbc:PayableAmount currencyID="EUR">{betrag}</cbc:PayableAmount>'
+            f'</cac:LegalMonetaryTotal></Invoice>').encode()
+
+
+def test_filter_rechnungsdatum(client):
+    c, tmp_path = client
+    for nr, d in (("900001", "2026-10-31"), ("900002", "2026-11-01"), ("900003", "2026-11-30")):
+        _archive(tmp_path, nr, _inv(nr, d))
+    j = c.get("/api/archive", params={"von": "2026-11-01", "bis": "2026-11-30"}).json()
+    assert sorted(i["rechnung"] for i in j["items"]) == ["900002", "900003"]
+    assert j["items"][0]["rechnungsdatum"] == "2026-11-30"      # neuestes Rechnungsdatum zuerst
+
+
+def test_filter_datum_ungueltig_422(client):
+    c, _ = client
+    assert c.get("/api/archive", params={"von": "31.10.2026"}).status_code == 422
+
+
+def test_suche_rechnungsnummer(client):
+    c, tmp_path = client
+    _archive(tmp_path, "900001", _inv("900001", "2026-11-01"), filename="XR_A.xml")
+    _archive(tmp_path, "900002", _inv("900002", "2026-11-01"), filename="XR_B.xml")
+    j = c.get("/api/archive", params={"q": "900002"}).json()
+    assert [i["name"] for i in j["items"]] == ["XR_B.xml"]
+
+
+def test_status_und_zuletzt_gesendet(client):
+    c, tmp_path = client
+    a = _archive(tmp_path, "900001", _inv("900001", "2026-11-01"), mtime=1_000_000)
+    archive_fs.mark_sent(a["xml_path"], 1, "a@example.com",
+                         now=datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc))
+    b = _archive(tmp_path, "900001", _inv("900001", "2026-11-01", "90.00"), mtime=2_000_000)
+    archive_fs.mark_sent(b["xml_path"], 2, "a@example.com",
+                         now=datetime(2026, 11, 2, 9, 0, tzinfo=timezone.utc))
+    _archive(tmp_path, "900001", _inv("900001", "2026-11-01", "80.00"), mtime=3_000_000)   # Anhaengen gescheitert
+    items = c.get("/api/archive").json()["items"]
+    assert len(items) == 3
+    by_betrag = {i["betrag"]: i for i in items}
+    assert by_betrag["80.00"]["status"] == "nicht angehängt"
+    assert by_betrag["90.00"]["status"] == "gesendet" and by_betrag["90.00"]["zuletzt_gesendet"] is True
+    assert by_betrag["100.00"]["zuletzt_gesendet"] is False and by_betrag["100.00"]["version"] is True
+    assert [i["zuletzt_gesendet"] for i in items].count(True) == 1
+
+
+def test_bestand_ohne_audit_status_unbekannt(client):
+    c, tmp_path = client
+    r = _archive(tmp_path, "900001", _inv("900001", "2026-11-01"))
+    Path(r["xml_path"]).with_suffix(".meta.json").unlink()
+    item = c.get("/api/archive").json()["items"][0]
+    assert item["status"] == "unbekannt" and item["rechnungsdatum"] == "2026-11-01"
+
+
+def test_echtheit_in_liste(client):
+    c, tmp_path = client
+    r = _archive(tmp_path, "900001", _inv("900001", "2026-11-01"))
+    assert c.get("/api/archive").json()["items"][0]["echt"] is True
+    Path(r["xml_path"]).write_bytes(_inv("900001", "2026-11-01", "1.00"))
+    assert c.get("/api/archive").json()["items"][0]["echt"] is False
+
+
+def test_kosit_nur_wenn_vorhanden(client):
+    c, tmp_path = client
+    _archive(tmp_path, "900001", _inv("900001", "2026-11-01"), kosit=b"<r/>")
+    _archive(tmp_path, "900002", _inv("900002", "2026-11-01"))
+    by = {i["rechnung"]: i for i in c.get("/api/archive").json()["items"]}
+    assert by["900001"]["kosit_report"].endswith("900001.kosit-report.xml")
+    assert by["900002"]["kosit_report"] is None
+
+
+def test_ansicht_rechnung(client):
+    c, tmp_path = client
+    r = _archive(tmp_path, "900001", _inv("900001", "2026-11-01", "42.00"))
+    rel = Path(r["xml_path"]).relative_to(tmp_path / "xml").as_posix()
+    j = c.get("/api/archive/ansicht", params={"path": rel}).json()
+    assert j["fakten"]["rechnung"] == "900001" and j["summen"]["zahlbetrag"] == "42.00"
+    assert "<Invoice" in j["xml"]
+
+
+def test_ansicht_pfad_ausserhalb_404(client):
+    c, _ = client
+    assert c.get("/api/archive/ansicht", params={"path": "../../config/connection.json"}).status_code == 404
+
+
+def test_ansicht_keine_xrechnung_422(client):
+    c, tmp_path = client
+    r = _archive(tmp_path, "1", b"<a/>")
+    rel = Path(r["xml_path"]).relative_to(tmp_path / "xml").as_posix()
+    assert c.get("/api/archive/ansicht", params={"path": rel}).status_code == 422

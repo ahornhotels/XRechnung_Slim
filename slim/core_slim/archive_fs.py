@@ -115,6 +115,10 @@ def save_xml(
     if xml_path.exists():
         ts = (now or now_local()).strftime("%Y%m%dT%H%M%S")
         rename_to = bucket / f"{safe}.{ts}.xml"
+        n = 2
+        while rename_to.exists():       # gleiche Sekunde: nie eine Version ueberschreiben
+            rename_to = bucket / f"{safe}.{ts}-{n}.xml"
+            n += 1
         try:
             xml_path.rename(rename_to)
             renamed = str(rename_to)
@@ -311,7 +315,7 @@ def delete_invalid(data_dir: Path, zinv_number: str) -> int:
 
 
 # Versionierte Konflikt-Dateien: <stem>.<YYYYmmddTHHMMSS>.xml
-_VERSIONED_SUFFIX = re.compile(r"\.\d{8}T\d{6}\.xml$")
+_VERSIONED_SUFFIX = re.compile(r"\.\d{8}T\d{6}(-\d+)?\.xml$")
 
 
 def find_xml(data_dir: Path, zinv_number: str) -> list[Path]:
