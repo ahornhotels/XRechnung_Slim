@@ -111,7 +111,7 @@ sieht nur die Rolle „verwalten“; jede Einstellung hat einen Erklärtext.
 | Archiv | alle gesendeten XRechnungen, Suche nach Rechnungsnummer und Rechnungsdatum |
 | System | Datenbank (mit Verbindungstest), Abrufintervall, Server, Update |
 | Benutzer | Anmeldungen und Rollen |
-| Handbuch | für Front Office und Buchhaltung: Weg einer Rechnungsmail, was bei hängenden Mails hilft (für alle Rollen) |
+| Handbuch | für Front Office und Buchhaltung: Weg einer Rechnungsmail, was bei hängenden Mails hilft, alle Einstellungen mit Erklärung und Standardwert (für alle Rollen, ohne die Werte des Hauses) |
 
 Die alte Adresse `/settings` führt auf „Konfiguration XRechnung“.
 

@@ -114,6 +114,7 @@ app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
 app.include_router(settings_api_module.router)
 app.include_router(settings_api_module.system_router)
+app.include_router(settings_api_module.handbuch_router)
 
 
 def _setup_done() -> bool:

@@ -36,6 +36,15 @@
   th { background:var(--bg); }
   code { font-size:13px; background:var(--bg); padding:1px 4px; border-radius:4px; }
   dt { font-weight:600; margin-top:8px; } dd { margin:0 0 4px 0; }
+  .einst { border-top:1px solid var(--border); padding:10px 0; }
+  .einst .name { font-weight:600; }
+  .einst .std { font-size:13px; color:var(--muted); }
+  .einst details summary { cursor:pointer; color:var(--accent); font-size:13px; margin-top:4px; }
+  .einst details > div { font-size:14px; padding:4px 0 0 12px; border-left:3px solid var(--border); margin-top:6px; }
+  .einst details table { font-size:13px; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:4px; background:var(--warn-bg); color:var(--warn); margin-left:6px; white-space:nowrap; }
+  h3.seite { font-size:17px; margin:22px 0 4px; padding-top:10px; border-top:2px solid var(--accent); }
+  h4 { font-size:15px; margin:14px 0 2px; }
 </style>
 </head>
 <body>
@@ -52,6 +61,7 @@
       <li><a href="#frontoffice">Möglichkeiten Front Office</a></li>
       <li><a href="#buchhaltung">Möglichkeiten Buchhaltung</a></li>
       <li><a href="#fehler">Häufige Fehler und was hilft</a></li>
+      <li><a href="#einstellungen">Die Einstellungen im Überblick</a></li>
       <li><a href="#begriffe">Begriffe kurz erklärt</a></li>
     </ol>
   </div>
@@ -196,8 +206,59 @@
     </table></div>
   </div>
 
+  <div class="card" id="einstellungen">
+    <h2>8. Die Einstellungen im Überblick</h2>
+    <p>Ändern dürfen die Einstellungen nur Benutzer mit der Rolle „verwalten“. Lesen kann diese Übersicht jeder.
+      Die Einstellungen sind auf die Menüpunkte <b>Konfiguration XRechnung</b>, <b>Hoteldaten</b> und <b>System</b>
+      verteilt. Jeder Kasten hat seinen eigenen Knopf „Speichern“. Einstellungen mit <span class="tag">Neustart</span>
+      wirken erst nach einem Neustart des Dienstes – der Knopf dafür erscheint nach dem Speichern. Vor jedem Speichern
+      legt Slim eine Sicherung der alten Einstellungen an. Die meisten Änderungen wirken beim nächsten Durchlauf.</p>
+    <p class="muted">Angegeben ist jeweils der Standardwert ab Werk. Was in Ihrem Haus eingestellt ist, sieht ein
+      Verwalter auf der jeweiligen Seite.</p>
+
+    <h3 class="seite">Konfiguration XRechnung</h3>
+    <div data-seite="xrechnung"><p class="muted">Lädt …</p></div>
+    <h4>Muster-Assistent (Betreff)</h4>
+    <p>Direkt unter „Erkennung und Anhang“. Statt einen regulären Ausdruck zu schreiben, tragen Sie einen echten Betreff
+      einer Suite8-Rechnungsmail und die Rechnungsnummer darin ein (deutsch und, falls vorhanden, englisch). „Muster
+      erzeugen“ schreibt das Muster in das Feld „Erkennung im Betreff“, „Testen“ zeigt, welche Nummer erkannt würde.
+      Übernommen wird das Muster erst mit „Speichern“ bei „Erkennung und Anhang“.</p>
+    <h4>Für Techniker / DBA</h4>
+    <p>Ganz unten auf der Seite, aufklappbar:</p>
+    <ul>
+      <li><b>Trigger-SQL</b> – der Befehl, mit dem der Datenbank-Administrator in Suite8 den Trigger anlegt, der
+        Rechnungsmails anhält. Er enthält das gespeicherte Muster und muss nach jeder Änderung des Musters neu
+        ausgeführt werden.</li>
+      <li><b>Mapping und SQL-Quellen</b> – die Abfragen, mit denen Slim die Rechnung aus Suite8 liest. Ein Techniker kann
+        sie hier ansehen, kopieren, für das Haus ändern (geprüft vor dem Speichern, Kennzeichen „geändert“) und auf die
+        mitgelieferte Fassung zurücksetzen.</li>
+    </ul>
+
+    <h3 class="seite">Hoteldaten</h3>
+    <h4>Verkäuferdaten</h4>
+    <p>Name, Anschrift, Steuernummern und Bankverbindung des Hauses kommen aus Suite8 (Hoteleinstellungen) und stehen
+      links. Rechts kann ein abweichender Wert eingetragen werden, der dann in der XRechnung gilt; leer = Suite8 gilt.
+      Slim ändert dabei nichts in Suite8.</p>
+    <div data-seite="hotel"><p class="muted">Lädt …</p></div>
+
+    <h3 class="seite">System</h3>
+    <div data-seite="system"><p class="muted">Lädt …</p></div>
+
+    <h3 class="seite">Weitere Stellen</h3>
+    <dl>
+      <dt>XRechnung-Schalter (rechts oben)</dt>
+      <dd>Schaltet in Suite8 das Anhalten der Rechnungsmails ein oder aus, siehe Abschnitt 6.</dd>
+      <dt>Benutzer</dt>
+      <dd>Anmeldungen anlegen, Rolle „ansehen“ oder „verwalten“ vergeben, Startpasswort setzen (muss bei der ersten
+        Anmeldung geändert werden), Benutzer löschen. Hat ein Verwalter sein Passwort vergessen und gibt es keinen
+        anderen Verwalter, setzt <code>slim\reset_admin.cmd</code> direkt am Server ein neues Startpasswort.</dd>
+      <dt>Override (Übersicht)</dt>
+      <dd>Werte für genau eine wartende Rechnung ersetzen, siehe Abschnitt 6.</dd>
+    </dl>
+  </div>
+
   <div class="card" id="begriffe">
-    <h2>8. Begriffe kurz erklärt</h2>
+    <h2>9. Begriffe kurz erklärt</h2>
     <dl>
       <dt>XRechnung</dt><dd>Deutsches Format für elektronische Rechnungen (XML-Datei), Pflicht für Rechnungen an Behörden
         und zunehmend an Firmen.</dd>
@@ -212,6 +273,40 @@
 </main>
 <script src="/nav.js"></script>
 <script>
+// Einstellungen kommen aus der Beschreibung im Programm (immer aktuell, ohne Werte).
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+function standard(f) {
+  if (f.type === "secret") return "–";
+  const d = f.default;
+  if (f.type === "bool") return d ? "ja" : "nein";
+  if (Array.isArray(d)) return d.length ? d.join(", ") : "leer";
+  if (d === null || d === undefined || d === "") return "leer";
+  return String(d);
+}
+function feld(f) {
+  let std = "Standard: <b>" + esc(standard(f)) + "</b>";
+  if (f.choices && f.choices.length) std += " · Auswahl: " + f.choices.map(esc).join(", ");
+  if (f.type === "int" && f.minimum != null) std += ` · erlaubt ${f.minimum} bis ${f.maximum}`;
+  return `<div class="einst">
+    <div class="name">${esc(f.label)}${f.restart ? '<span class="tag">Neustart</span>' : ""}</div>
+    <div>${esc(f.help)}</div>
+    <div class="std">${std}</div>
+    ${f.info ? `<details><summary>Ausführliche Erklärung</summary><div>${f.info}</div></details>` : ""}
+  </div>`;   // f.info: fester Text aus settings_schema.py, keine Benutzereingabe
+}
+fetch("/api/handbuch/einstellungen", {cache: "no-store"}).then(r => {
+  if (r.status === 401) { location.href = "/login"; throw new Error("Nicht angemeldet"); }
+  return r.json();
+}).then(j => {
+  for (const el of document.querySelectorAll("[data-seite]")) {
+    el.innerHTML = j.sections.filter(s => s.page === el.dataset.seite)
+      .map(s => `<h4>${esc(s.label)}</h4>` + s.fields.map(feld).join("")).join("");
+  }
+}).catch(e => {
+  for (const el of document.querySelectorAll("[data-seite]"))
+    el.innerHTML = `<p class="muted">Einstellungen konnten nicht geladen werden: ${esc(e.message)}</p>`;
+});
+
 // Abgelaufene Anmeldung: wie die anderen Seiten zur Anmeldung leiten.
 fetch("/api/auth/state", {cache: "no-store"}).then(r => r.json()).then(s => {
   if (!s.logged_in || s.must_change) location.href = "/login";
