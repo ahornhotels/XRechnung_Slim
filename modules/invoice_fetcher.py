@@ -133,6 +133,47 @@ def _rundungsausgleich() -> str:
     return mode
 
 
+def _bt10_freitexte() -> list[int]:
+    """hotel.json 'bt10_freitext1'..'bt10_freitext4' (nur echtes true zaehlt):
+    eingeschaltete Freitexte als Ersatz fuer BT-10, aufsteigend."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    return [n for n in (1, 2, 3, 4) if hotel.get(f"bt10_freitext{n}") is True]
+
+
+# Eigene kleine Abfrage statt invoice_header.sql: SQL-Overrides der Haeuser
+# wuerden eine Aenderung am Kopf-SQL sonst still ueberschatten.
+_BT10_SQL = """
+select (select max(xmnr_value) from xmnr, xmty
+         where xmnr_xmty_id = xmty_id and xmty_shortdesc = 'DXR'
+           and xmnr_xcms_id = zwin_invoice_to_xcms_id) dxr,
+       zwin_freetext1, zwin_freetext2, zwin_freetext3, zwin_freetext4
+  from zinv, zwin
+ where zinv_zwin_id = zwin_id and zinv_id = :zinv_id
+"""
+
+
+def _buyer_reference_aus_freitext(cur, zinv_id: int, aktiv: list[int]) -> Optional[str]:
+    """BT-10-Ersatz: DXR-Mitgliedschaft hat immer Vorrang (dann None = Kopf
+    bleibt), sonst der erste gefuellte eingeschaltete Freitext 1 -> 4."""
+    if not aktiv:
+        return None
+    try:
+        cur.execute(_BT10_SQL, {"zinv_id": zinv_id})
+        row = cur.fetchone()
+    except Exception as e:
+        logger.warning("BT-10-Freitexte nicht lesbar (zinv_id=%s): %s", zinv_id, e)
+        return None
+    if not row:
+        return None
+    if str(row[0] or "").strip():
+        return None
+    for n in aktiv:
+        value = str(row[n] or "").strip()
+        if value:
+            return value
+    return None
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -292,6 +333,10 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         header = header_rows[0]
         # Verkaeuferdaten aus der Oberflaeche ueberschreiben Suite8 (WUSS)
         _apply_seller_overrides(header)
+        # BT-10: ohne DXR-Mitgliedschaft der erste eingeschaltete Freitext
+        ref = _buyer_reference_aus_freitext(cur, zinv_id, _bt10_freitexte())
+        if ref:
+            header["buyerreference"] = ref
 
         lines = _fetch_lines(cur, zinv_id)
         # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel
