@@ -49,6 +49,7 @@ def _seller_contact_defaults() -> dict:
 
 _SELLER_OVERRIDE_KEYS = frozenset({
     "supplierregistrationname", "suppliername", "supplierstreetname", "suppliercityname", "supplierpostalzone",
+    "supplieridentificationcode",
     "suppliercompanyid", "payeefinancialaccountid", "payeefinancialaccountbic",
     "payeefinancialaccountname", "suppliercontacttelephone", "suppliercontactelectronicmail",
 })
@@ -65,7 +66,11 @@ def _apply_seller_overrides(header: dict) -> None:
     for k, v in overrides.items():
         if k in _SELLER_OVERRIDE_KEYS and v is not None and str(v).strip():
             v = str(v).strip()
-            header[k] = v.replace(" ", "") if k == "payeefinancialaccountid" else v  # wie Kopf-SQL
+            if k == "payeefinancialaccountid":
+                v = v.replace(" ", "")          # wie Kopf-SQL
+            elif k == "supplieridentificationcode":
+                v = v.upper()                   # ISO-Laendercode (BT-40)
+            header[k] = v
 
 
 def _gastzeile_template() -> str:
@@ -219,7 +224,7 @@ def _xml_only_reason(cur, zinv_id: int) -> Optional[str]:
 # Operator-Override, ist der Override vor den zugehoerigen Fixes gespeichert
 # worden und ueberschattet sie still — bei Aenderung der Templates pflegen.
 _EXPECTED_OVERRIDE_MARKERS = {
-    "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2"),
+    "invoice_header.sql": ("PaymentRefComment", "xadr_primary", "CustomerAdrStreet2", "xcou_iso3"),
     "invoice_tax.sql": ("ClassifiedTaxCategoryZtcdId", "decode(z.zpos_cdt,5,-1,1)"),
     "invoice_totals.sql": ("LineExtensionAmountVat_number", "decode(z.zpos_cdt,5,-1,1)"),
     "invoice_lines.sql": ("DepositZinvId", "OriginYresId", "decode(z.zpos_cdt,5,-1,1)", "ItemShortDesc", "GrossUnitPrice"),
