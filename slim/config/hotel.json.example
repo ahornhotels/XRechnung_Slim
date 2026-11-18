@@ -20,5 +20,9 @@
     "DUR"
   ],
   "positionen_zusammenfassen": true,
-  "rundungsausgleich": "aus"
+  "rundungsausgleich": "aus",
+  "bt10_freitext1": false,
+  "bt10_freitext2": false,
+  "bt10_freitext3": false,
+  "bt10_freitext4": false
 }

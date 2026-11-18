@@ -38,6 +38,7 @@ class Section:
     id: str
     label: str
     settings: tuple = field(default_factory=tuple)
+    page: str = ""               # Menuepunkt: xrechnung | hotel | system
 
 
 def _regex_with_group(value: str) -> None:
@@ -161,56 +162,87 @@ Suite8-Support.</li>
 """
 
 
+_INFO_BT10 = """
+<h3>Woher die Käuferreferenz (BT-10) kommt</h3>
+<ol>
+<li><b>DXR-Mitgliedschaft</b> am Rechnungsempfänger – hat immer Vorrang.</li>
+<li><b>Freitext 1 bis 4</b> aus dem Rechnungsfenster – nur die hier eingeschalteten.
+Die DXR-Mitgliedschaft hat immer Vorrang. Danach gilt der erste gefüllte eingeschaltete
+Freitext, in der Reihenfolge 1 → 4.</li>
+<li>Ist keiner gefüllt, steht wie bisher der Name des Profils in BT-10.</li>
+</ol>
+<h3>Wo stehen die Freitexte in Suite8?</h3>
+<p>Rechtsklick im Rechnungsfenster → „Bearbeite gewähltes Fenster“ → Reiter „Text“.
+Die vier Zeilen dort sind Freitext 1 bis 4.</p>
+<h3>Was davon steht sonst in der XRechnung?</h3>
+<ul>
+<li><b>Freitext 1</b> erscheint immer als Hinweis (BT-22) in der XRechnung,
+eingeschaltet zusätzlich als Käuferreferenz.</li>
+<li><b>Freitext 2 bis 4</b> erscheinen nur in der XRechnung, wenn sie hier eingeschaltet
+sind – dann als Käuferreferenz.</li>
+</ul>
+"""
+
+
 SECTIONS: tuple[Section, ...] = (
+    Section("erkennung", "Erkennung und Anhang", (
+        Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
+        Setting("suite8_recognize_filename_pattern", H, "Erkennung im Dateinamen", "Regulärer Ausdruck für den PDF-Dateinamen, mit (?P<zinv_number>...) oder (?P<zinv_id>...). Leer = nicht verwendet.", check=_regex_with_group, default=""),
+        Setting("suite8_attachment_name_template", H, "Name des XML-Anhangs", "Dateiname der XRechnung, muss {zinv_number} enthalten.", check=_attachment_name, default="{zinv_number}.xml"),
+        Setting("xml_only_all", H, "Nur XML für alle", "Ein: Jede Rechnungsmail enthält nur die XRechnung, PDF und RTF werden aus der Mail genommen.", type="bool", default=False),
+        Setting("xml_only_membership", H, "Membership für Nur-XML", "Kurzbezeichnung des Suite8-Memberships, mit dem ein Rechnungsempfänger nur die XRechnung bekommt. Leer = aus.", default="PDF"),
+    ), page="xrechnung"),
+    Section("inhalt", "Rechnungsinhalt", (
+        Setting("gastzeile", H, "Gastzeile (BT-22)", "Hinweis bei genau einem Gast. Platzhalter {gast}, {zimmer}, {anreise}, {abreise}. Leer = keine Gastzeile.", check=_gastzeile, default="Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"),
+        Setting("positionen_zusammenfassen", H, "Positionen zusammenfassen", "Gleiche Buchungen (gleicher Gast, Zimmer, Artikel, Preis) als eine Position mit Menge ausweisen.", type="bool", default=True),
+        Setting("auslagen_artikel", H, "Auslage-Artikel", "Suite8-Artikel (Kurzname), die ohne Steuerbuchung als Auslage mit 0 % gelten. Andere Artikel ohne Steuerbuchung blockieren die Rechnung.", type="list", default=["AUS", "DUR"]),
+        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). aus = Werte wie aus Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. abschlag = Rest als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="aus", info=_INFO_RUNDUNGSAUSGLEICH),
+    ), page="xrechnung"),
+    Section("kaeuferreferenz", "Käuferreferenz (BT-10)", (
+        Setting("bt10_freitext1", H, "Freitext 1", "Erscheint immer als Hinweis (BT-22) in der XRechnung, eingeschaltet zusätzlich als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext2", H, "Freitext 2", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext3", H, "Freitext 3", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext4", H, "Freitext 4", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+    ), page="xrechnung"),
+    Section("pruefung", "Prüfung", (
+        Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),
+        Setting("xrechnung_version", A, "XRechnung-Version", "Version der Prüfregeln.", type="select", choices=("3.0.2",), default="3.0.2"),
+    ), page="xrechnung"),
+    Section("hotel", "Haus", (
+        Setting("hotel_code", H, "Hauskürzel", "Kurzname des Hauses, erscheint in Protokoll und Archiv."),
+        Setting("hotel_long_name", H, "Hausname", "Ausgeschriebener Name des Hauses, erscheint in der Statusanzeige, wenn kein Hauskürzel gesetzt ist."),
+        Setting("currency", H, "Währung", "Ersatzwährung, wenn Suite8 keine Basiswährung liefert (ISO, z. B. EUR).", default="EUR"),
+        Setting("default_payment_terms_days", H, "Zahlungsziel (Tage)", "Tage bis zur Fälligkeit, falls Suite8 kein Zahlungsziel liefert.", type="int", minimum=0, maximum=365, default=14),
+    ), page="hotel"),
+    Section("ansprechpartner", "Ansprechpartner und Absender", (
+        Setting("seller_contact_name", H, "Ansprechpartner", "Name im Verkäuferkontakt (BT-41), wenn Suite8 keinen liefert.", default="Buchhaltung"),
+        Setting("seller_contact_phone", H, "Telefon Ansprechpartner", "Telefon im Verkäuferkontakt (BT-42), wenn Suite8 keines liefert."),
+        Setting("seller_contact_email", H, "E-Mail Ansprechpartner", "E-Mail im Verkäuferkontakt (BT-43), wenn Suite8 keine liefert.", check=_email),
+        Setting("absender_email", H, "Absender-E-Mail", "Absenderadresse der Rechnungsmails.", check=_email),
+    ), page="hotel"),
     Section("datenbank", "Datenbank (Suite8)", (
         Setting("tns_alias", C, "TNS-Alias", "Name der Suite8-Datenbank aus der tnsnames.ora, z. B. V8.", restart=True),
         Setting("username", C, "Benutzer", "Oracle-Benutzer, mit dem Slim liest und Anhänge schreibt.", restart=True),
         Setting("password", C, "Passwort", "Oracle-Passwort. Wird verschlüsselt gespeichert und nie angezeigt. Leer lassen = unverändert.", type="secret", restart=True),
         Setting("tns_admin", C, "Ordner der tnsnames.ora", "Ordner mit tnsnames.ora (TNS_ADMIN), auch ein Netzwerkordner.", restart=True),
         Setting("oracle_client_lib_dir", C, "Oracle-Client-Ordner", "Lokaler Ordner des 64-bit Oracle Instant Client. Leer = Thin-Modus bzw. automatische Suche.", restart=True, check=_local_dir),
-    )),
-    Section("hotel", "Hotel", (
-        Setting("hotel_code", H, "Hauskürzel", "Kurzname des Hauses, erscheint in Protokoll und Archiv."),
-        Setting("hotel_long_name", H, "Hausname", "Ausgeschriebener Name des Hauses, erscheint in der Statusanzeige, wenn kein Hauskürzel gesetzt ist."),
-        Setting("currency", H, "Währung", "Ersatzwährung, wenn Suite8 keine Basiswährung liefert (ISO, z. B. EUR).", default="EUR"),
-        Setting("default_payment_terms_days", H, "Zahlungsziel (Tage)", "Tage bis zur Fälligkeit, falls Suite8 kein Zahlungsziel liefert.", type="int", minimum=0, maximum=365, default=14),
-        Setting("seller_contact_name", H, "Ansprechpartner", "Name im Verkäuferkontakt (BT-41), wenn Suite8 keinen liefert.", default="Buchhaltung"),
-        Setting("seller_contact_phone", H, "Telefon Ansprechpartner", "Telefon im Verkäuferkontakt (BT-42), wenn Suite8 keines liefert."),
-        Setting("seller_contact_email", H, "E-Mail Ansprechpartner", "E-Mail im Verkäuferkontakt (BT-43), wenn Suite8 keine liefert.", check=_email),
-    )),
-    Section("versand", "Versand", (
-        Setting("mail_strategy", H, "Verarbeitung", "suite8 = Slim hängt die XRechnung an die vorbereiteten Suite8-Mails an (Normalbetrieb). aus = Slim verarbeitet keine Mails, die Mails bleiben in Suite8 gesperrt stehen. Wirkt ab dem nächsten Abruf.", type="select", choices=("suite8", "aus"), default="suite8"),
-        Setting("absender_email", H, "Absender-E-Mail", "Absenderadresse der Rechnungsmails.", check=_email),
-        Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
-        Setting("suite8_recognize_filename_pattern", H, "Erkennung im Dateinamen", "Regulärer Ausdruck für den PDF-Dateinamen, mit (?P<zinv_number>...) oder (?P<zinv_id>...). Leer = nicht verwendet.", check=_regex_with_group, default=""),
+    ), page="system"),
+    Section("abruf", "Abruf", (
         Setting("suite8_poll_interval_seconds", H, "Abrufintervall (Sekunden)", "Wie oft Slim nach neuen Rechnungsmails sucht.", type="int", minimum=5, maximum=3600, restart=True, default=30),
-        Setting("suite8_attachment_name_template", H, "Name des XML-Anhangs", "Dateiname der XRechnung, muss {zinv_number} enthalten.", check=_attachment_name, default="{zinv_number}.xml"),
-        Setting("xml_only_all", H, "Nur XML für alle", "Ein: Jede Rechnungsmail enthält nur die XRechnung, PDF und RTF werden aus der Mail genommen.", type="bool", default=False),
-        Setting("xml_only_membership", H, "Membership für Nur-XML", "Kurzbezeichnung des Suite8-Memberships, mit dem ein Rechnungsempfänger nur die XRechnung bekommt. Leer = aus.", default="PDF"),
-    )),
-    Section("inhalt", "Rechnungsinhalt", (
-        Setting("gastzeile", H, "Gastzeile (BT-22)", "Hinweis bei genau einem Gast. Platzhalter {gast}, {zimmer}, {anreise}, {abreise}. Leer = keine Gastzeile.", check=_gastzeile, default="Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"),
-        Setting("positionen_zusammenfassen", H, "Positionen zusammenfassen", "Gleiche Buchungen (gleicher Gast, Zimmer, Artikel, Preis) als eine Position mit Menge ausweisen.", type="bool", default=True),
-        Setting("auslagen_artikel", H, "Auslage-Artikel", "Suite8-Artikel (Kurzname), die ohne Steuerbuchung als Auslage mit 0 % gelten. Andere Artikel ohne Steuerbuchung blockieren die Rechnung.", type="list", default=["AUS", "DUR"]),
-        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). aus = Werte wie aus Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. abschlag = Rest als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="aus", info=_INFO_RUNDUNGSAUSGLEICH),
-    )),
-    Section("pruefung", "Prüfung", (
-        Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),
-        Setting("xrechnung_version", A, "XRechnung-Version", "Version der Prüfregeln.", type="select", choices=("3.0.2",), default="3.0.2"),
-    )),
+    ), page="system"),
     Section("server", "Server", (
         Setting("host", A, "Adresse", "127.0.0.1 = nur am Server erreichbar, 0.0.0.0 = im Netzwerk (dann erlaubte Adressen pflegen).", type="select", choices=("127.0.0.1", "0.0.0.0"), restart=True, default="127.0.0.1"),
         Setting("port", A, "Port", "Port der Oberfläche.", type="int", minimum=1, maximum=65535, restart=True, default=8022),
         Setting("allowed_ips", A, "Erlaubte Adressen", "IP-Adressen oder Netze (z. B. 192.168.1.0/24), die die Oberfläche erreichen dürfen. localhost ist immer erlaubt.", type="list", restart=True, check=_ip_list, default=[]),
         Setting("log_level", A, "Protokoll-Stufe", "Ausführlichkeit der Logdatei.", type="select", choices=("DEBUG", "INFO", "WARNING", "ERROR"), restart=True, default="INFO"),
         Setting("audit_retention_months", A, "Aufbewahrung Protokoll (Monate)", "Wie lange Audit-Einträge aufbewahrt werden.", type="int", minimum=1, maximum=240, default=24),
-    )),
+    ), page="system"),
     Section("update", "Update", (
         Setting("enabled", U, "Automatische Updates", "Neue Versionen von GitHub einspielen.", type="bool", default=True),
         Setting("owner", U, "GitHub-Besitzer", "Besitzer des Repositorys.", default="ahornhotels", check=_github_name),
         Setting("repo", U, "GitHub-Repository", "Name des Repositorys.", default="XRechnung_Slim", check=_github_name),
         Setting("pat_token", U, "Zugriffstoken", "Nur nötig, wenn das Repository privat ist (Leserecht auf Inhalte). Wird verschlüsselt gespeichert und nie angezeigt. Leer lassen = unverändert.", type="secret"),
-    )),
+    ), page="system"),
 )
 
 

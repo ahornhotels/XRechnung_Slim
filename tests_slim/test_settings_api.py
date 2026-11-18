@@ -182,9 +182,9 @@ def test_leerer_client_pfad_erlaubt(env):
 
 # --- Review zur Einstellungs-API ---
 
-def test_versand_braucht_ein_erkennungsmuster(env):
+def test_erkennung_braucht_ein_erkennungsmuster(env):
     client, _, _ = env
-    r = client.put("/api/settings/versand", json={"values": {
+    r = client.put("/api/settings/erkennung", json={"values": {
         "suite8_recognize_subject_pattern": "", "suite8_recognize_filename_pattern": ""}})
     assert r.status_code == 422 and "suite8_recognize_subject_pattern" in r.json()["detail"]
 
@@ -192,14 +192,14 @@ def test_versand_braucht_ein_erkennungsmuster(env):
 def test_betreffmuster_standard_sichtbar_und_nicht_geleert(env):
     client, cfg, _ = env
     data = client.get("/api/settings").json()
-    assert "zinv_number" in _field(data, "versand", "suite8_recognize_subject_pattern")["value"]
-    assert client.put("/api/settings/versand", json={"values": {"absender_email": "rechnung@example.com"}}).status_code == 200
+    assert "zinv_number" in _field(data, "erkennung", "suite8_recognize_subject_pattern")["value"]
+    assert client.put("/api/settings/erkennung", json={"values": {"xml_only_all": False}}).status_code == 200
     assert "suite8_recognize_subject_pattern" not in json.loads((cfg / "hotel.json").read_text(encoding="utf-8"))
 
 
 def test_muster_mit_zwei_gruppen_abgelehnt(env):
     client, _, _ = env
-    r = client.put("/api/settings/versand", json={"values": {
+    r = client.put("/api/settings/erkennung", json={"values": {
         "suite8_recognize_subject_pattern": r"(?P<zinv_id>\d+)-(?P<zinv_number>\d+)"}})
     assert r.status_code == 422
 
@@ -278,7 +278,8 @@ def test_atomares_schreiben_versucht_erneut_bei_windows_sperre(tmp_path, monkeyp
 
 # ───────────── Vollstaendigkeit und Erklaerung (Info-Knopf) ─────────────
 
-_NICHT_IM_SCHEMA = {"seller_overrides"}     # eigene Karte "Verkaeuferdaten"
+_NICHT_IM_SCHEMA = {"seller_overrides",     # eigene Karte "Verkaeuferdaten"
+                    "mail_strategy"}        # ersetzt durch den XRechnung-Schalter (Trigger)
 
 
 def test_jeder_json_schluessel_in_der_oberflaeche():
@@ -303,9 +304,57 @@ def test_toter_schluessel_profil_id_entfernt():
     assert "xrechnung_profile_id" not in Path(setup_api.__file__).read_text(encoding="utf-8")
 
 
-def test_verarbeitung_pausierbar():
-    s = next(x for x in settings_schema.section("versand").settings if x.key == "mail_strategy")
-    assert s.type == "select" and s.choices == ("suite8", "aus") and s.default == "suite8"
+def test_mail_strategy_nicht_mehr_in_oberflaeche():
+    assert all(s.key != "mail_strategy" for sec in settings_schema.SECTIONS for s in sec.settings)
+
+
+def test_seiten_aufteilung():
+    pages = {s.id: s.page for s in settings_schema.SECTIONS}
+    assert pages == {"erkennung": "xrechnung", "inhalt": "xrechnung", "kaeuferreferenz": "xrechnung",
+                     "pruefung": "xrechnung", "hotel": "hotel", "ansprechpartner": "hotel",
+                     "datenbank": "system", "abruf": "system", "server": "system", "update": "system"}
+    keys = lambda sid: [x.key for x in settings_schema.section(sid).settings]
+    assert keys("erkennung") == ["suite8_recognize_subject_pattern", "suite8_recognize_filename_pattern",
+                                 "suite8_attachment_name_template", "xml_only_all", "xml_only_membership"]
+    assert keys("ansprechpartner") == ["seller_contact_name", "seller_contact_phone",
+                                       "seller_contact_email", "absender_email"]
+    assert keys("abruf") == ["suite8_poll_interval_seconds"]
+    assert keys("kaeuferreferenz") == ["bt10_freitext1", "bt10_freitext2", "bt10_freitext3", "bt10_freitext4"]
+
+
+def test_api_filtert_nach_seite(env):
+    client, _, _ = env
+    data = client.get("/api/settings?page=hotel").json()
+    assert [s["id"] for s in data["sections"]] == ["hotel", "ansprechpartner"]
+    assert all(s["page"] == "hotel" for s in data["sections"])
+    alle = client.get("/api/settings").json()
+    assert len(alle["sections"]) == len(settings_schema.SECTIONS)
+
+
+def test_bt10_freitexte_standard_aus_und_erklaert(env):
+    client, _, _ = env
+    data = client.get("/api/settings?page=xrechnung").json()
+    for n in (1, 2, 3, 4):
+        f = _field(data, "kaeuferreferenz", f"bt10_freitext{n}")
+        assert f["type"] == "bool" and f["value"] is False and f["label"] == f"Freitext {n}"
+        for wort in ("DXR", "1 → 4", "Bearbeite gewähltes Fenster", "Text", "Name des Profils"):
+            assert wort in f["info"], wort
+
+
+def test_freitext_hinweistexte():
+    sec = settings_schema.section("kaeuferreferenz")
+    by = {s.key: s for s in sec.settings}
+    assert by["bt10_freitext1"].help == ("Erscheint immer als Hinweis (BT-22) in der XRechnung, "
+                                         "eingeschaltet zusätzlich als Käuferreferenz.")
+    for n in (2, 3, 4):
+        assert by[f"bt10_freitext{n}"].help == ("Erscheint nur in der XRechnung, wenn hier eingeschaltet "
+                                                "– dann als Käuferreferenz.")
+
+
+def test_bt10_speichern(env):
+    client, cfg, _ = env
+    assert client.put("/api/settings/kaeuferreferenz", json={"values": {"bt10_freitext2": True}}).status_code == 200
+    assert json.loads((cfg / "hotel.json").read_text(encoding="utf-8"))["bt10_freitext2"] is True
 
 
 def test_rundungsausgleich_hat_erklaerung(env):

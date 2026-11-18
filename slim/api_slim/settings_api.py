@@ -14,6 +14,7 @@ Geheimnisse (DB-Passwort, Update-Token) werden nie zurueckgegeben und
 verschluesselt gespeichert; ein leerer Wert bedeutet 'unveraendert'.
 """
 import json
+from typing import Optional
 import logging
 import os
 import threading
@@ -118,15 +119,17 @@ def _field_view(s: schema.Setting, data: dict) -> dict:
 
 
 @router.get("")
-def get_settings():
+def get_settings(page: Optional[str] = None):
     files = {}
     out = []
     for sec in schema.SECTIONS:
+        if page and sec.page != page:
+            continue
         fields = []
         for s in sec.settings:
             data = files.setdefault(s.file, _load(s.file))
             fields.append(_field_view(s, data))
-        out.append({"id": sec.id, "label": sec.label, "fields": fields})
+        out.append({"id": sec.id, "label": sec.label, "page": sec.page, "fields": fields})
     return {"sections": out}
 
 
@@ -263,7 +266,7 @@ def _put_section(section_id: str, payload: Values, request: Request):
             errors["password"] = "bei geaendertem Datenbankziel bitte das Passwort neu eingeben"
     # Mindestens ein Erkennungsmuster muss bleiben, sonst erkennt der Poller
     # keine Rechnungsmail mehr (gleiche Regel wie die Pattern-Seite).
-    if section_id == "versand" and not errors:
+    if section_id == "erkennung" and not errors:
         hotel = _load("hotel.json")
         def _eff(k):
             if k in changes:
