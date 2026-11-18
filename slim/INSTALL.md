@@ -277,8 +277,26 @@ Schritt 6 ausführen.
 ### Passwort des Verwalters vergessen
 
 Ein anderer Verwalter setzt unter **Benutzer** ein neues Startpasswort. Gibt es
-keinen anderen Verwalter: am Server die Datei `slim\data\users.json`
-umbenennen, den Dienst neu starten und Schritt 3 wiederholen.
+keinen anderen Verwalter: **am Server selbst** (direkt oder per Remotedesktop)
+`slim\reset_admin.cmd` doppelklicken, beim UAC-Dialog „Ja“.
+
+- Das Skript zeigt die vorhandenen Benutzer und fragt nach dem Namen und einem
+  neuen Startpasswort (mind. 10 Zeichen, zweimal eingeben).
+- Ein vorhandener Verwalter bekommt das neue Startpasswort, ein Benutzer mit
+  „ansehen“ wird zusätzlich Verwalter, ein unbekannter Name wird als neuer
+  Verwalter angelegt.
+- Bei der nächsten Anmeldung muss das Passwort geändert werden. Alle anderen
+  Benutzer bleiben unverändert, der Vorgang steht im Protokoll
+  (`admin_zurueckgesetzt`). Ein Dienst-Neustart ist nicht nötig – nur wenn die
+  Anmeldung nach Fehlversuchen gesperrt ist (sonst 15 Minuten warten).
+
+Das Zurücksetzen gibt es bewusst nur am Server: keine Funktion in der
+Oberfläche, und über eine Netzwerkfreigabe (`\\server\...`) gestartet bricht
+das Skript ab.
+
+Ist die Datei `slim\data\users.json` beschädigt: Datei umbenennen, Dienst neu
+starten und am Server unter `http://127.0.0.1:8022/` den ersten Verwalter neu
+anlegen.
 
 ### Setup nochmal starten
 
