@@ -91,3 +91,65 @@ def test_einstellungen_unbekannter_auswahlwert_bleibt_erhalten():
     nicht still auf die erste Option springen."""
     src = (FRONT / "settings.html").read_text(encoding="utf-8")
     assert "f.choices.includes(f.value)" in src
+
+
+# ── Menue, Schalter, neue Seiten ──
+
+@pytest.mark.parametrize("page", ["archiv.html"])
+def test_archivseite_vorhanden_und_login(page):
+    src = (FRONT / page).read_text(encoding="utf-8")
+    assert "401" in src and 'location.href = "/login"' in src
+
+
+def test_routen_fuer_neue_seiten():
+    import inspect
+    import slim.main_slim as m
+    src = inspect.getsource(m)
+    for route in ('"/konfiguration"', '"/hoteldaten"', '"/system"', '"/archiv"', '"/nav.js"'):
+        assert f"@app.get({route}" in src, route
+
+
+def test_settings_leitet_auf_konfiguration():
+    import inspect
+    import slim.main_slim as m
+    src = inspect.getsource(m.settings_page)
+    assert 'RedirectResponse("/konfiguration"' in src
+
+
+def test_nav_hat_alle_menuepunkte():
+    src = (FRONT / "nav.js").read_text(encoding="utf-8")
+    for txt in ("Übersicht", "Konfiguration XRechnung", "Hoteldaten", "Archiv", "System", "Benutzer",
+                "/api/schalter", "/api/trigger-sql", "XRechnung EIN", "XRechnung AUS",
+                "Trigger fehlt", "nicht prüfbar"):
+        assert txt in src, txt
+
+
+def test_nav_texte_schalter():
+    src = (FRONT / "nav.js").read_text(encoding="utf-8")
+    assert ("Neue Rechnungsmails gehen ohne XRechnung (nur PDF) raus. Bereits wartende Mails "
+            "bleiben gesperrt, bis wieder eingeschaltet wird.") in src
+    assert ("Neue Rechnungsmails werden wieder gesperrt und bekommen die XRechnung. Wartende Mails "
+            "werden jetzt verarbeitet.") in src
+
+
+@pytest.mark.parametrize("page", ["index.html", "settings.html", "archiv.html", "users.html"])
+def test_alle_seiten_laden_nav(page):
+    assert '<script src="/nav.js"></script>' in (FRONT / page).read_text(encoding="utf-8")
+
+
+def test_startseite_ohne_archivkasten():
+    src = (FRONT / "index.html").read_text(encoding="utf-8")
+    assert 'id="archive_table"' not in src and 'href="/settings"' not in src
+
+
+def test_settings_seite_nach_pfad():
+    src = (FRONT / "settings.html").read_text(encoding="utf-8")
+    for txt in ('"/konfiguration"', '"/hoteldaten"', '"/system"', "?page="):
+        assert txt in src, txt
+
+
+def test_archivseite_suche_und_ansicht():
+    src = (FRONT / "archiv.html").read_text(encoding="utf-8")
+    for txt in ("/api/archive", "/api/archive/ansicht", "/api/archive/file", 'id="q"', 'id="von"', 'id="bis"',
+                "Rechnungsdatum", "unverändert"):
+        assert txt in src, txt

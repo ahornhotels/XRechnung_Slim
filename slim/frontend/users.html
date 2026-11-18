@@ -32,7 +32,6 @@
 <body>
 <main>
   <h1>Benutzer</h1>
-  <nav><a href="/">← Übersicht</a> · <a href="/settings">Einstellungen</a></nav>
 
   <div class="card">
     <table>
@@ -54,6 +53,7 @@
     <div id="msg" class="msg" role="status"></div>
   </div>
 </main>
+<script src="/nav.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 function msg(t, err) { $("msg").textContent = t || ""; $("msg").className = "msg" + (err ? " err" : ""); }

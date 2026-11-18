@@ -142,7 +142,26 @@ async def users_page():
 
 @app.get("/settings")
 async def settings_page():
+    # Alte Lesezeichen: Die Einstellungen sind auf Menuepunkte verteilt.
+    return RedirectResponse("/konfiguration", status_code=307)
+
+
+@app.get("/konfiguration")
+@app.get("/hoteldaten")
+@app.get("/system")
+async def settings_pages():
+    # Eine Seite, die je nach Pfad nur die Abschnitte ihres Menuepunkts zeigt
     return FileResponse(str(_SLIM_DIR / "frontend" / "settings.html"))
+
+
+@app.get("/archiv")
+async def archiv_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "archiv.html"))
+
+
+@app.get("/nav.js")
+async def nav_js():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "nav.js"), media_type="application/javascript")
 
 
 @app.get("/setup")

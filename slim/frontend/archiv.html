@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archiv – XRechnung Slim</title>
+<style>
+  :root { --bg:#f4f5f7; --fg:#1a1a1a; --accent:#2d7a3c; --accent-fg:#fff; --error:#b13a2c;
+          --panel:#fff; --border:#d8dce2; --muted:#6a7280; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111; --fg:#e8e8e8; --accent:#b6d100; --accent-fg:#000; --error:#e06a50;
+            --panel:#1c1c1c; --border:#2a2a2a; --muted:#999; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .muted { color:var(--muted); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:18px; }
+  .suche { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .suche label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); gap:4px; }
+  input { padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; font-size:14px; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:var(--accent-fg); cursor:pointer; font-size:14px; }
+  button.secondary, a.btn { background:transparent; color:var(--fg); border:1px solid var(--border); padding:4px 10px; font-size:13px; border-radius:6px; text-decoration:none; display:inline-block; }
+  .tabelle { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  td.zahl, th.zahl { text-align:right; white-space:nowrap; }
+  .ok { color:var(--accent); font-weight:600; } .bad { color:var(--error); font-weight:600; }
+  .marke { font-size:11px; padding:1px 6px; border-radius:4px; border:1px solid var(--border); margin-left:4px; white-space:nowrap; }
+  .aktionen { white-space:nowrap; display:flex; gap:6px; flex-wrap:wrap; }
+  dialog { max-width:1000px; width:calc(100% - 32px); max-height:calc(100vh - 48px); border:1px solid var(--border);
+           border-radius:12px; background:var(--panel); color:var(--fg); padding:0; }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .dlg-kopf { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 18px;
+              border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel); }
+  .dlg-kopf h2 { margin:0; font-size:18px; }
+  .dlg-body { padding:12px 18px 18px; }
+  .parteien { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:8px 0 14px; }
+  .parteien div { border:1px solid var(--border); border-radius:8px; padding:10px; }
+  pre { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:10px; border-radius:6px; font-size:12px; max-height:50vh; overflow:auto; }
+  @media (max-width: 640px) { .parteien { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Archiv</h1>
+  <p class="muted" style="margin-top:0">Jede XRechnung genau so, wie sie an die Rechnungsmail gehängt wurde.
+    „unverändert“ heißt: Die Datei stimmt mit dem beim Archivieren gespeicherten Prüfwert (SHA-256) überein.</p>
+
+  <div class="card">
+    <form class="suche" id="suche">
+      <label>Rechnungsnummer<input id="q" type="text" placeholder="z. B. 123456"></label>
+      <label>Rechnungsdatum von<input id="von" type="date"></label>
+      <label>bis<input id="bis" type="date"></label>
+      <button type="submit">Suchen</button>
+      <span class="muted" id="anzahl"></span>
+    </form>
+  </div>
+
+  <div class="card tabelle">
+    <table>
+      <thead><tr>
+        <th>Rechnung</th><th>Rechnungsdatum</th><th>Art</th><th>Angehängt am</th><th>Empfänger-Mail</th>
+        <th class="zahl">Betrag</th><th>Status</th><th>Echtheit</th><th></th>
+      </tr></thead>
+      <tbody id="liste"><tr><td colspan="9" class="muted">Lädt …</td></tr></tbody>
+    </table>
+  </div>
+
+  <dialog id="ansicht">
+    <div class="dlg-kopf"><h2 id="ansicht-titel">Rechnung</h2><button class="secondary" id="ansicht-zu">Schließen</button></div>
+    <div class="dlg-body" id="ansicht-body"></div>
+  </dialog>
+</main>
+<script src="/nav.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const datum = (iso) => iso ? iso.slice(0, 10).split("-").reverse().join(".") : "–";
+const zeit = (iso) => iso ? datum(iso) + " " + iso.slice(11, 16) : "–";
+const geld = (v, w) => v == null ? "–" : Number(v).toLocaleString("de-DE", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " " + (w === "EUR" || !w ? "€" : w);
+const datei = (rel) => "/api/archive/file?path=" + encodeURIComponent(rel);
+
+async function api(url) {
+  const r = await fetch(url, {cache: "no-store"});
+  if (r.status === 401) { location.href = "/login"; throw new Error("Nicht angemeldet"); }
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Fehler " + r.status);
+  return j;
+}
+
+function echtheit(e) {
+  if (e === true) return '<span class="ok">✔ unverändert</span>';
+  if (e === false) return '<span class="bad">✘ verändert</span>';
+  return '<span class="muted">kein Prüfwert</span>';
+}
+
+async function laden() {
+  const p = new URLSearchParams({limit: "500"});
+  for (const k of ["q", "von", "bis"]) if ($(k).value.trim()) p.set(k, $(k).value.trim());
+  try {
+    const a = await api("/api/archive?" + p);
+    $("anzahl").textContent = a.count + " Treffer";
+    if (!a.count) { $("liste").innerHTML = '<tr><td colspan="9" class="muted">Keine Treffer.</td></tr>'; return; }
+    $("liste").innerHTML = a.items.map(i => `
+      <tr>
+        <td>${esc(i.rechnung || i.name)}${i.zuletzt_gesendet ? '<span class="marke">zuletzt gesendet</span>' : ""}${i.version ? '<span class="marke">ältere Version</span>' : ""}</td>
+        <td>${esc(datum(i.rechnungsdatum))}</td>
+        <td>${esc(i.art || "–")}</td>
+        <td>${esc(zeit(i.angehaengt_am))}</td>
+        <td>${esc(i.empfaenger || "–")}</td>
+        <td class="zahl">${esc(geld(i.betrag, i.waehrung))}</td>
+        <td>${esc(i.status)}</td>
+        <td>${echtheit(i.echt)}</td>
+        <td class="aktionen">
+          <button class="secondary" data-ansicht="${esc(i.rel_path)}">Ansehen</button>
+          <a class="btn" href="${esc(datei(i.rel_path))}">XML</a>
+          ${i.kosit_report ? `<a class="btn" href="${esc(datei(i.kosit_report))}">Prüfbericht</a>` : ""}
+        </td>
+      </tr>`).join("");
+  } catch (e) {
+    $("liste").innerHTML = `<tr><td colspan="9" class="bad">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function partei(titel, p) {
+  return `<div><b>${esc(titel)}</b><br>${esc(p.name || "–")}<br>${esc(p.strasse || "")}<br>${esc(p.ort || "")}` +
+         (p.ust_id ? `<br>USt-IdNr. ${esc(p.ust_id)}` : "") + "</div>";
+}
+
+async function ansehen(rel) {
+  $("ansicht-body").innerHTML = '<p class="muted">Lädt …</p>';
+  $("ansicht").showModal();
+  try {
+    const a = await api("/api/archive/ansicht?path=" + encodeURIComponent(rel));
+    const f = a.fakten, w = f.waehrung;
+    $("ansicht-titel").textContent = `${f.art || "Rechnung"} ${f.rechnung || ""}`;
+    $("ansicht-body").innerHTML = `
+      <p>Rechnungsdatum <b>${esc(datum(f.rechnungsdatum))}</b>${f.kaeuferreferenz ? ` · Käuferreferenz (BT-10) <b>${esc(f.kaeuferreferenz)}</b>` : ""}</p>
+      <div class="parteien">${partei("Verkäufer", a.verkaeufer)}${partei("Käufer", a.kaeufer)}</div>
+      ${a.hinweise.length ? `<p>${a.hinweise.map(esc).join("<br>")}</p>` : ""}
+      <div class="tabelle"><table>
+        <thead><tr><th>Pos.</th><th>Bezeichnung</th><th class="zahl">Menge</th><th class="zahl">Einzelpreis</th><th class="zahl">Netto</th><th class="zahl">USt.</th></tr></thead>
+        <tbody>${a.positionen.map(p => `<tr><td>${esc(p.nr)}</td><td>${esc(p.bezeichnung)}</td>
+          <td class="zahl">${esc(p.menge)} ${esc(p.einheit || "")}</td><td class="zahl">${esc(geld(p.preis, w))}</td>
+          <td class="zahl">${esc(geld(p.netto, w))}</td><td class="zahl">${esc(p.steuer_prozent ?? "")} %</td></tr>`).join("")}</tbody>
+      </table></div>
+      <h3>Steuern</h3>
+      <table><tbody>${a.steuern.map(s => `<tr><td>${esc(s.kategorie)} ${esc(s.prozent ?? "")} %</td>
+        <td class="zahl">Basis ${esc(geld(s.basis, w))}</td><td class="zahl">Steuer ${esc(geld(s.betrag, w))}</td></tr>`).join("")}</tbody></table>
+      <h3>Summen</h3>
+      <table><tbody>
+        <tr><td>Netto</td><td class="zahl">${esc(geld(a.summen.netto, w))}</td></tr>
+        <tr><td>Steuer</td><td class="zahl">${esc(geld(a.summen.steuer, w))}</td></tr>
+        <tr><td>Brutto</td><td class="zahl">${esc(geld(a.summen.brutto, w))}</td></tr>
+        ${a.summen.vorauszahlung ? `<tr><td>Vorauszahlung</td><td class="zahl">${esc(geld(a.summen.vorauszahlung, w))}</td></tr>` : ""}
+        <tr><td><b>Zahlbetrag</b></td><td class="zahl"><b>${esc(geld(a.summen.zahlbetrag, w))}</b></td></tr>
+      </tbody></table>
+      <details style="margin-top:14px"><summary>Original-XML anzeigen</summary><pre>${esc(a.xml)}</pre></details>`;
+  } catch (e) {
+    $("ansicht-body").innerHTML = `<p class="bad">${esc(e.message)}</p>`;
+  }
+}
+
+$("suche").addEventListener("submit", (e) => { e.preventDefault(); laden(); });
+$("ansicht-zu").addEventListener("click", () => $("ansicht").close());
+document.addEventListener("click", (e) => { const r = e.target.dataset && e.target.dataset.ansicht; if (r) ansehen(r); });
+laden();
+</script>
+</body>
+</html>
