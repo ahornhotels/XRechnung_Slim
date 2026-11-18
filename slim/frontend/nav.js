@@ -9,6 +9,7 @@
     ["/archiv", "Archiv", false],
     ["/system", "System", true],
     ["/users", "Benutzer", true],
+    ["/handbuch", "Handbuch", false],
   ];
   const TEXT_AUS = "Neue Rechnungsmails gehen ohne XRechnung (nur PDF) raus. Bereits wartende Mails bleiben gesperrt, bis wieder eingeschaltet wird.";
   const TEXT_EIN = "Neue Rechnungsmails werden wieder gesperrt und bekommen die XRechnung. Wartende Mails werden jetzt verarbeitet.";

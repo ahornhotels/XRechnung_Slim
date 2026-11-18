@@ -246,7 +246,7 @@ häufigsten Verbindungsfehler:
 | Was Sie sehen | Was es bedeutet | Was tun |
 |---|---|---|
 | Liste der wartenden Mails leer, keine Protokolleinträge | Trigger fehlt oder feuert nicht | Trigger-SQL prüfen, in Suite8 testweise eine Folio-Mail erzeugen, in der `WMAI`-Tabelle `BLOCKSEND` prüfen |
-| `pattern_no_match` für alle | Betreff-Pattern passt nicht zum Mail-Template | Auf der Startseite unter „Pattern-Konfiguration“ mit echten Beispielen testen |
+| `pattern_no_match` für alle | Betreff-Pattern passt nicht zum Mail-Template | Unter Konfiguration XRechnung mit dem Muster-Assistenten und echten Beispielen testen |
 | `validator_fail` mit „Kunden-E-Mail fehlt“ | XCOM-Eintrag fehlt | Override eintragen ODER in Suite8 nachpflegen |
 | `validator_fail` mit `lines.tax_missing` | Artikel ohne Steuerbuchung | siehe Stolperstein 7 |
 | `kosit_fail` mit BR-DE-X | Schematron-Regel verletzt | Fehlertext zeigt die Regel; meistens ist ein Pflichtfeld in WUSS leer |

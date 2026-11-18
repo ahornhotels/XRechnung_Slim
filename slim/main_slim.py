@@ -160,6 +160,16 @@ async def archiv_page():
     return FileResponse(str(_SLIM_DIR / "frontend" / "archiv.html"))
 
 
+@app.get("/handbuch")
+async def handbuch_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "handbuch.html"))
+
+
+@app.get("/konfig_technik.js")
+async def konfig_technik_js():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "konfig_technik.js"), media_type="application/javascript")
+
+
 @app.get("/nav.js")
 async def nav_js():
     return FileResponse(str(_SLIM_DIR / "frontend" / "nav.js"), media_type="application/javascript")

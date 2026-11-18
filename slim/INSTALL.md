@@ -106,11 +106,12 @@ sieht nur die Rolle „verwalten“; jede Einstellung hat einen Erklärtext.
 | Menüpunkt | Inhalt |
 |---|---|
 | Übersicht | wartende Mails, letzte Läufe, Protokoll, Updates |
-| Konfiguration XRechnung | Erkennung im Betreff/Dateinamen, Name des XML-Anhangs, **Nur-XML** · Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich · Käuferreferenz (BT-10) · KoSIT-Prüfung, XRechnung-Version |
+| Konfiguration XRechnung | Erkennung im Betreff/Dateinamen mit Muster-Assistent, Name des XML-Anhangs, **Nur-XML** · Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich · Käuferreferenz (BT-10) · KoSIT-Prüfung, XRechnung-Version · für Techniker/DBA: Trigger-SQL, Mapping und SQL-Quellen |
 | Hoteldaten | Verkäuferdaten aus Suite8 (abweichend festlegbar) · Hauskürzel, Hausname, Währung, Zahlungsziel · Ansprechpartner, Absender-E-Mail |
 | Archiv | alle gesendeten XRechnungen, Suche nach Rechnungsnummer und Rechnungsdatum |
 | System | Datenbank (mit Verbindungstest), Abrufintervall, Server, Update |
 | Benutzer | Anmeldungen und Rollen |
+| Handbuch | für Front Office und Buchhaltung: Weg einer Rechnungsmail, was bei hängenden Mails hilft (für alle Rollen) |
 
 Die alte Adresse `/settings` führt auf „Konfiguration XRechnung“.
 

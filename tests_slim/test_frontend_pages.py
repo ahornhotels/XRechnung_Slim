@@ -175,3 +175,44 @@ def test_start_traegt_archiv_im_hintergrund_nach():
     import inspect
     import slim.main_slim as m
     assert "archive_fs.nachtragen" in inspect.getsource(m)
+
+
+# ── Technik auf die Konfigurationsseite, Handbuch ──
+
+def test_startseite_ohne_sql_und_pattern():
+    """SQL und Betreff-Muster gehoeren in die Konfiguration, nicht auf die Uebersicht."""
+    src = (FRONT / "index.html").read_text(encoding="utf-8")
+    for txt in ('id="trigger_sql"', 'id="map_src"', 'id="cfg_subject"', "/api/config/pattern",
+                "/api/sql/templates", "/api/trigger-sql", "subject_pattern="):
+        assert txt not in src, txt
+
+
+def test_konfiguration_hat_muster_assistent_und_sql():
+    assert '<script src="/konfig_technik.js"></script>' in (FRONT / "settings.html").read_text(encoding="utf-8")
+    js = (FRONT / "konfig_technik.js").read_text(encoding="utf-8")
+    for txt in ('PAGE !== "xrechnung"', "/api/trigger-sql", "/api/sql/templates",
+                "/api/config/pattern/generate", "/api/config/pattern/test",
+                'feld("suite8_recognize_subject_pattern")', 'feld("suite8_recognize_filename_pattern")', '$("f-" + k)'):
+        assert txt in js, txt
+
+
+def test_routen_handbuch_und_technik_js():
+    import inspect
+    import slim.main_slim as m
+    src = inspect.getsource(m)
+    for route in ('"/handbuch"', '"/konfig_technik.js"'):
+        assert f"@app.get({route}" in src, route
+
+
+def test_nav_hat_handbuch_fuer_alle():
+    src = (FRONT / "nav.js").read_text(encoding="utf-8")
+    assert '["/handbuch", "Handbuch", false]' in src
+
+
+def test_handbuch_inhalt():
+    src = (FRONT / "handbuch.html").read_text(encoding="utf-8")
+    assert '<script src="/nav.js"></script>' in src
+    for txt in ("Der Weg einer Rechnungsmail", "Front Office", "Buchhaltung", "Neu versuchen",
+                "Archiv", "Leitweg-ID", "XRechnung AUS", "Nur XML", "Override"):
+        assert txt in src, txt
+
