@@ -55,7 +55,9 @@ to_char(null) ProjectReferenceID,
 (select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='HotelAddress') SupplierStreetName,
 (select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='Hotelcity') SupplierCityName,
 (select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='Hotelzipcode') SupplierPostalZone,
-(select XCOU.XCOU_ISO2 from xcou where upper(XCOU.XCOU_LONGDESC)=(select upper(wuss_value) from wuss where wuss_xcms_id=0 and wuss_name='Hotelcountry')) SupplierIdentificationCode,
+-- Hotel-Land tolerant: Langbezeichnung, sonst ISO2, ISO3, Kurzname (ohne Rand-Leerzeichen,
+-- Gross-/Kleinschreibung egal). Aggregiert: mehrere Treffer sind kein ORA-01427.
+(select max(x.xcou_iso2) keep (dense_rank first order by case when upper(trim(x.xcou_longdesc))=w.v then 1 when upper(x.xcou_iso2)=w.v then 2 when upper(x.xcou_iso3)=w.v then 3 else 4 end) from xcou x, (select upper(trim(max(wuss_value))) v from wuss where wuss_xcms_id=0 and wuss_name='Hotelcountry') w where w.v in (upper(trim(x.xcou_longdesc)), upper(x.xcou_iso2), upper(x.xcou_iso3), upper(trim(x.xcou_custshortdesc)))) SupplierIdentificationCode,
 (select wuss_value from wuss where wuss_xcms_id=0 and wuss_name='HotelTaxNumber') SupplierCompanyID,
 'VAT' SupplierTaxSchemeID,
 case

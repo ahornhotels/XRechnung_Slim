@@ -17,6 +17,7 @@ import json
 from typing import Optional
 import logging
 import os
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ SELLER_FIELDS = (
     ("supplierstreetname", "HotelAddress", "Strasse (BT-35)"),
     ("suppliercityname", "Hotelcity", "Ort (BT-37)"),
     ("supplierpostalzone", "Hotelzipcode", "PLZ (BT-38)"),
+    ("supplieridentificationcode", "Hotelcountry", "Land (BT-40), ISO-Code mit 2 Buchstaben, z. B. DE"),
     ("suppliercompanyid", "HotelTaxNumber", "USt-IdNr. (BT-31)"),
     ("payeefinancialaccountid", "HotelbankIBAN", "IBAN (BT-84)"),
     ("payeefinancialaccountbic", "HotelbankBIC", "BIC (BT-86)"),
@@ -167,6 +169,7 @@ def _suite8_seller_values() -> dict:
                         f"where upper(wuss_name) in ({binds})",
                         {f"n{i}": n for i, n in enumerate(names)})
             rows = cur.fetchall()
+            land = _suite8_land(cur)
         # Wie invoice_header.sql: Hausdaten exakt benannt mit wuss_xcms_id=0;
         # IBAN/BIC exakt benannt ohne xcms-Filter; Firmierung ohne Gross-/
         # Kleinschreibung - existiert die Zeile, gilt ihr Wert (auch leer),
@@ -182,11 +185,26 @@ def _suite8_seller_values() -> dict:
         out["payeefinancialaccountid"] = _iban(exact("HotelbankIBAN", xcms0=False))
         out["payeefinancialaccountbic"] = exact("HotelbankBIC", xcms0=False)
         out["supplierregistrationname"] = firm
+        out["supplieridentificationcode"] = land     # aufgeloester ISO-Code, nicht der Rohwert
         out["payeefinancialaccountname"] = firm or exact("Hotelid", xcms0=False)
         return out
     except Exception as e:
         logger.warning("Suite8-Verkaeuferdaten nicht lesbar: %s", e)
         return {}
+
+
+def _suite8_land(cur) -> Optional[str]:
+    """Hotel-Land so aufgeloest wie im Kopf-SQL (Spalte SupplierIdentificationCode
+    aus sql/invoice_header.sql, damit Anzeige und Rechnung nie auseinanderlaufen)."""
+    from modules.invoice_fetcher import SQL_DIR
+    zeile = next((z for z in (SQL_DIR / "invoice_header.sql").read_text(encoding="utf-8").splitlines()
+                  if z.rstrip().rstrip(",").endswith("SupplierIdentificationCode")), None)
+    if not zeile:
+        return None
+    ausdruck = zeile.rstrip().rstrip(",")[: -len("SupplierIdentificationCode")]
+    cur.execute(f"select {ausdruck} from dual")
+    row = cur.fetchone()
+    return row[0] if row else None
 
 
 @router.get("/seller")
@@ -210,6 +228,10 @@ def put_seller(payload: Values, request: Request):
             v = "" if v is None else str(v).strip()
             if k == "payeefinancialaccountid":
                 v = _iban(v)                # wie das Kopf-SQL
+            if k == "supplieridentificationcode":
+                v = v.upper()
+                if v and not re.fullmatch(r"[A-Z]{2}", v):
+                    raise HTTPException(422, {k: "ISO-Ländercode mit 2 Buchstaben, z. B. DE"})
             if len(v) > 300:
                 raise HTTPException(422, {k: "höchstens 300 Zeichen"})
             if v:

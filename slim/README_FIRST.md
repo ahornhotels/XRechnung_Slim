@@ -124,11 +124,15 @@ steht, fehlt sie im XML.
 Workaround: pro Rechnung einen **Override** auf der Startseite eintragen
 (siehe „Override-Funktion“ unten).
 
-### 5. Land als Langname
+### 5. Hotel-Land
 
-In `WUSS.Hotelcountry` muss der **Langname** stehen (z. B. „Deutschland“),
-nicht der ISO-Code. Die App löst ihn über `XCOU.XCOU_LONGDESC`
-nach „DE“ auf.
+`WUSS.Hotelcountry` wird über die Ländertabelle `XCOU` nach „DE“ aufgelöst.
+Erkannt werden der Langname (z. B. „Deutschland“), der ISO-Code mit 2 oder
+3 Buchstaben („DE“, „DEU“) und der Kurzname des Landes, jeweils ohne
+Rücksicht auf Groß-/Kleinschreibung und Leerzeichen am Rand. Ein Name, den
+die Ländertabelle nicht kennt (z. B. „Germany“ bei deutscher Tabelle), wird
+nicht gefunden. Dann das Land unter **Hoteldaten → Verkäuferdaten → Land**
+als ISO-Code eintragen.
 
 ### 6. WUSS-INSERT-Rechte für den Oracle-Benutzer
 
