@@ -176,6 +176,59 @@ def find_pending_wmai(conn, limit: int = 50) -> list[dict]:
     ]
 
 
+# Suchfenster hinter der Freigabegrenze: deckt ab, dass Slim bis zu einer Woche
+# nicht lief, und haelt die Abfrage klein (nicht die ganze WMAI durchsuchen).
+FREIGABE_FENSTER_TAGE = 7
+
+
+def release_overdue_wmai(conn, tage, limit: int = 200) -> list[dict]:
+    """Gibt gesperrte Mails frei, die seit `tage` Tagen auf die XRechnung
+    warten: WMAI_BLOCKSEND=0, Suite8 verschickt sie dann ohne XRechnung.
+    tage <= 0 oder leer = aus.
+
+    Alter = Hoteldatum der Mail (WMAI_FIDELIODATE) gegen das aktuelle
+    Hoteldatum aus WGBS - wie die bisherige manuelle Freigabe. Gesucht wird
+    nur im Fenster [tage, tage + FREIGABE_FENSTER_TAGE]. Liefert nur die
+    Mails, die dieser Aufruf wirklich entsperrt hat."""
+    try:
+        tage = int(tage or 0)
+    except (TypeError, ValueError):
+        tage = 0
+    if tage <= 0:
+        return []
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT WMAI_ID, WMAI_ATTACHMENT_FILE_NAME, WMAI_SUBJECT, WMAI_FIDELIODATE, WMAI_ERROR
+          FROM WMAI
+         WHERE WMAI_BLOCKSEND=1
+           AND WMAI_SENT=0
+           AND WMAI_FIDELIODATE >= (SELECT MAX(TRUNC(WGBS_DATEVALUE)) FROM WGBS) - :bis
+           AND WMAI_FIDELIODATE <  (SELECT MAX(TRUNC(WGBS_DATEVALUE)) FROM WGBS) - :tage + 1
+         ORDER BY WMAI_ID
+         FETCH FIRST :lim ROWS ONLY
+        """,
+        {"tage": tage, "bis": tage + FREIGABE_FENSTER_TAGE, "lim": int(limit)},
+    )
+    rows = cur.fetchall()
+    out = []
+    for r in rows:
+        # Nur entsperren, was noch gesperrt und ungesendet ist (Slim oder ein
+        # Mitarbeiter koennte die Mail inzwischen erledigt haben).
+        cur.execute(
+            "UPDATE WMAI SET WMAI_BLOCKSEND=0 WHERE WMAI_ID=:id "
+            "AND WMAI_BLOCKSEND=1 AND WMAI_SENT=0",
+            {"id": r[0]},
+        )
+        if cur.rowcount == 1:
+            d = r[3]
+            out.append({"wmai_id": r[0], "filename": r[1] or "", "subject": r[2] or "",
+                        "fideliodate": d.date().isoformat() if hasattr(d, "date") else str(d),
+                        "error": r[4]})
+    conn.commit()
+    return out
+
+
 def verify_attach_path() -> dict:
     """Smoke-Test: legt eine Dummy-WMAI an, haengt Dummy-XML an, raeumt wieder weg.
 

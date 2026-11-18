@@ -315,7 +315,8 @@ def test_seiten_aufteilung():
                      "datenbank": "system", "abruf": "system", "server": "system", "update": "system"}
     keys = lambda sid: [x.key for x in settings_schema.section(sid).settings]
     assert keys("erkennung") == ["suite8_recognize_subject_pattern", "suite8_recognize_filename_pattern",
-                                 "suite8_attachment_name_template", "xml_only_all", "xml_only_membership"]
+                                 "suite8_attachment_name_template", "xml_only_all", "xml_only_membership",
+                                 "freigabe_nach_tagen"]
     assert keys("ansprechpartner") == ["seller_contact_name", "seller_contact_phone",
                                        "seller_contact_email", "absender_email"]
     assert keys("abruf") == ["suite8_poll_interval_seconds"]

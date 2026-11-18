@@ -140,6 +140,8 @@ slim/
 | `user_created` / `user_changed` / `user_deleted` / `password_changed` | Benutzerverwaltung |
 | `settings_changed` | Einstellungen gespeichert (welche Schlüssel, ohne Werte) |
 | `schalter_geaendert` | XRechnung-Schalter betätigt (wer, vorher/nachher bzw. Oracle-Fehler) |
+| `freigegeben_ohne_xrechnung` | Gesperrte Mail nach X Tagen (Hoteldatum) ohne XRechnung freigegeben (Tage, Hoteldatum, letzter Fehler) |
+| `admin_zurueckgesetzt` | Verwalter-Zugang am Server mit `reset_admin.cmd` zurückgesetzt |
 | `poller_pausiert_trigger` | Poller pausiert, weil der Trigger inaktiv ist (nur beim Wechsel) |
 
 **Spam-Schutz**: Ein identischer Fehler für dieselbe WMAI wird nur einmal protokolliert – der Audit-Schreiber liest erst `WMAI_ERROR`, vergleicht mit dem neuen Text und überspringt das Schreiben, wenn er unverändert ist.

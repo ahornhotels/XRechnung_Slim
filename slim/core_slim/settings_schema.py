@@ -191,6 +191,7 @@ SECTIONS: tuple[Section, ...] = (
         Setting("suite8_attachment_name_template", H, "Name des XML-Anhangs", "Dateiname der XRechnung, muss {zinv_number} enthalten.", check=_attachment_name, default="{zinv_number}.xml"),
         Setting("xml_only_all", H, "Nur XML für alle", "Ein: Jede Rechnungsmail enthält nur die XRechnung, PDF und RTF werden aus der Mail genommen.", type="bool", default=False),
         Setting("xml_only_membership", H, "Membership für Nur-XML", "Kurzbezeichnung des Suite8-Memberships, mit dem ein Rechnungsempfänger nur die XRechnung bekommt. Leer = aus.", default="PDF"),
+        Setting("freigabe_nach_tagen", H, "Ohne XRechnung freigeben nach (Tagen)", "Rechnungsmails, die so viele Tage (nach Hoteldatum) noch gesperrt sind (z. B. weil die XRechnung fehlerhaft ist und sich niemand gekümmert hat), gibt Slim frei: Suite8 verschickt sie dann ohne XRechnung, nur mit PDF. Gesucht wird bis 7 Tage darüber hinaus, ältere Mails bleiben gesperrt. Jede Freigabe steht im Protokoll. 0 = nie freigeben. Gilt nicht, solange XRechnung ausgeschaltet ist.", type="int", minimum=0, maximum=365, default=0),
     ), page="xrechnung"),
     Section("inhalt", "Rechnungsinhalt", (
         Setting("gastzeile", H, "Gastzeile (BT-22)", "Hinweis bei genau einem Gast. Platzhalter {gast}, {zimmer}, {anreise}, {abreise}. Leer = keine Gastzeile.", check=_gastzeile, default="Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"),

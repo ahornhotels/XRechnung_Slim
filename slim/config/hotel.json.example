@@ -8,6 +8,7 @@
   "suite8_recognize_subject_pattern": "Rechnung\\s+Nr\\.?\\s*(?P<zinv_number>\\d+)",
   "suite8_recognize_filename_pattern": "",
   "suite8_poll_interval_seconds": 30,
+  "freigabe_nach_tagen": 0,
   "suite8_attachment_name_template": "{zinv_number}.xml",
   "seller_contact_name": "Buchhaltung",
   "seller_contact_phone": "",

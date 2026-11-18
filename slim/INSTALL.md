@@ -147,6 +147,35 @@ GRANT SELECT ON SYS.DBA_TRIGGERS TO <App-Benutzer>;
 GRANT ALTER ANY TRIGGER TO <App-Benutzer>;
 ```
 
+### Ohne XRechnung freigeben nach X Tagen
+
+Unter **Konfiguration XRechnung → Erkennung und Anhang → Ohne XRechnung
+freigeben nach (Tagen)** (Standard 0 = aus). Rechnungsmails, die so viele Tage
+nach ihrem Hoteldatum noch gesperrt sind – meist weil die XRechnung fehlerhaft
+war und sich niemand gekümmert hat –, gibt Slim frei (`WMAI_BLOCKSEND=0`).
+Suite8 verschickt sie dann ohne XRechnung, nur mit PDF.
+
+- Das Alter zählt nach Hoteldatum: `WMAI_FIDELIODATE` gegen das aktuelle
+  Hoteldatum aus `WGBS`.
+- Slim versucht die Mail in jedem Abruf zuerst noch einmal zu verarbeiten und
+  gibt sie erst frei, wenn das wieder nicht klappt.
+- Gesucht wird bis 7 Tage über die Grenze hinaus, damit nicht die ganze WMAI
+  durchsucht wird. Ältere Mails bleiben gesperrt.
+- Solange XRechnung ausgeschaltet ist, wird nichts freigegeben.
+- Jede Freigabe steht im Protokoll (`freigegeben_ohne_xrechnung`) mit
+  Rechnungsnummer, Hoteldatum und letztem Fehler.
+
+Entspricht der bisherigen manuellen Freigabe
+
+```sql
+UPDATE wmai SET wmai_blocksend=0
+ WHERE wmai_blocksend=1
+   AND TRUNC(wmai_fideliodate) BETWEEN (SELECT wgbs_datevalue FROM wgbs) - 7
+                                   AND (SELECT wgbs_datevalue FROM wgbs) - 4;
+```
+
+mit der Einstellung 4 – nur dass Slim das bei jedem Abruf selbst erledigt.
+
 ### Käuferreferenz (BT-10)
 
 Die Käuferreferenz (bei Behörden die Leitweg-ID) kommt in dieser Reihenfolge:

@@ -25,7 +25,7 @@ from core.db_connector import get_connection
 from modules import invoice_fetcher, invoice_validator, xml_builder, kosit_validator
 from modules.kosit_validator import KositValidationError
 from modules.suite8_mailer import (
-    find_pending_wmai, attach_xml_to_wmai,
+    find_pending_wmai, attach_xml_to_wmai, release_overdue_wmai,
     set_wmai_error, get_wmai_error, WMAI_ERROR_MAX,
 )
 from modules.suite8_pattern import (
@@ -349,7 +349,45 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                     conn,
                 )
 
+    _freigabe_nach_tagen(data_dir, cfg, summary, fn_pat, sub_pat)
     return summary
+
+
+def _freigabe_nach_tagen(data_dir: Path, cfg: dict, summary: dict,
+                         fn_pat: str, sub_pat: str) -> None:
+    """Mails, die seit X Tagen (Hoteldatum) gesperrt sind, ohne XRechnung
+    freigeben - erst NACH dem Verarbeitungsversuch dieser Runde, damit eine
+    Mail, die jetzt doch klappt, ihre XRechnung noch bekommt. Laeuft nicht bei
+    ausgeschaltetem Schalter (run_once kehrt vorher zurueck)."""
+    try:
+        tage = int(cfg.get("freigabe_nach_tagen") or 0)
+    except (TypeError, ValueError):
+        tage = 0
+    if tage <= 0:
+        return
+    try:
+        with get_connection() as conn:
+            freigegeben = release_overdue_wmai(conn, tage)
+    except Exception as e:
+        logger.exception("Freigabe nach %d Tagen fehlgeschlagen", tage)
+        audit_jsonl.record_safe(data_dir, "poller_db_error",
+                                details={"error": str(e)[:400], "phase": "freigabe"})
+        summary["db_error"] = True
+        return
+    summary["freigegeben"] = len(freigegeben)
+    for r in freigegeben:
+        try:
+            _, nr = extract_zinv_number(filename=r["filename"], subject=r["subject"],
+                                        filename_pattern=fn_pat, subject_pattern=sub_pat)
+        except Exception:
+            nr = None
+        logger.warning("WMAI %s nach %d Tagen ohne XRechnung freigegeben", r["wmai_id"], tage)
+        audit_jsonl.record_safe(
+            data_dir, "freigegeben_ohne_xrechnung", wmai_id=r["wmai_id"],
+            zinv_number=str(nr) if nr else None,
+            details={"tage": tage, "hoteldatum": r["fideliodate"],
+                     "letzter_fehler": (r.get("error") or "")[:400]},
+        )
 
 
 # Fehlerklassen, bei denen eine XML gerendert werden KANN (Rohdaten stehen
