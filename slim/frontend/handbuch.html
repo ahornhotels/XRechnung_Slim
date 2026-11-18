@@ -55,6 +55,7 @@
   <div class="card toc">
     <ol>
       <li><a href="#wozu">Wozu gibt es Slim?</a></li>
+      <li><a href="#xrechnung">Die XRechnung nach deutschem Standard</a></li>
       <li><a href="#weg">Der Weg einer Rechnungsmail</a></li>
       <li><a href="#empfaenger">Was der Empfänger bekommt</a></li>
       <li><a href="#haengt">Eine Mail hängt – woran sehe ich das?</a></li>
@@ -75,8 +76,111 @@
       von Suite8</b> – Slim verschickt selbst nichts und ändert keine Rechnung in Suite8.</p>
   </div>
 
+  <div class="card" id="xrechnung">
+    <h2>2. Die XRechnung nach deutschem Standard</h2>
+
+    <h3>Was ist eine XRechnung?</h3>
+    <p>Eine XRechnung ist eine Rechnung als <b>strukturierte Datei (XML)</b>. Jede Angabe steht in einem festen,
+      nummerierten Feld – Rechnungsnummer, Anschrift, Steuersatz, Betrag. Ein Buchhaltungsprogramm kann sie dadurch
+      ohne Abtippen einlesen und prüfen. Ein PDF ist dagegen nur ein Bild der Rechnung und gilt <b>nicht</b> als
+      E-Rechnung.</p>
+    <ul>
+      <li>Grundlage ist die europäische Norm <b>EN 16931</b> für elektronische Rechnungen. Die XRechnung ist ihre deutsche
+        Ausprägung mit zusätzlichen deutschen Regeln (Regelnummern <code>BR-DE-…</code>).</li>
+      <li>Herausgeber ist die <b>KoSIT</b> (Koordinierungsstelle für IT-Standards) in Bremen.</li>
+      <li>Die Felder heißen <b>BT</b> (Business Term, z. B. BT-1 = Rechnungsnummer) und sind zu <b>BG</b>
+        (Business Group, z. B. BG-25 = eine Rechnungsposition) zusammengefasst.</li>
+      <li>Es gibt zwei technische Schreibweisen (UBL und CII). Slim erzeugt <b>UBL</b> in der Version <b>3.0.2</b>,
+        als Rechnung (Art 380) oder Gutschrift (Art 381). Die Nachfolgeversion 4.0 wird für 2027 erwartet;
+        3.0.2 gilt mindestens bis Mitte 2027.</li>
+      <li>Als E-Rechnung zählt die XML-Datei. Das PDF, das Suite8 zusätzlich mitschickt, ist eine lesbare Zugabe.</li>
+    </ul>
+
+    <h3>Wer braucht sie?</h3>
+    <div class="tabelle"><table>
+      <tr><th>Empfänger</th><th>Pflicht</th></tr>
+      <tr><td>Behörden (Bund, Länder, Kommunen)</td><td>schon heute; meist mit <b>Leitweg-ID</b>, ohne sie nimmt die
+          Behörde die Rechnung nicht an</td></tr>
+      <tr><td>Firmen in Deutschland</td><td>Seit 1.1.2025 muss jede Firma E-Rechnungen <b>empfangen</b> können. Das
+          <b>Ausstellen</b> ist Pflicht ab 1.1.2027 für Unternehmen mit mehr als 800.000 € Vorjahresumsatz, ab 1.1.2028 für alle.</td></tr>
+      <tr><td>Privatgäste</td><td>keine Pflicht – die XRechnung schadet aber nicht, der Gast nutzt einfach das PDF</td></tr>
+      <tr><td>Kleinbetragsrechnung bis 250 € brutto</td><td>keine Pflicht; Slim hängt trotzdem eine XRechnung an</td></tr>
+    </table></div>
+
+    <h3>Der KoSIT-Validator</h3>
+    <p>Die KoSIT stellt ein offizielles Prüfprogramm bereit, den <b>KoSIT-Validator</b>. Behörden und viele
+      Rechnungsportale prüfen eingehende Rechnungen damit. Er prüft in drei Stufen:</p>
+    <ol>
+      <li><b>Aufbau</b> – ist die Datei technisch richtig geschrieben (UBL)?</li>
+      <li><b>Europäische Regeln</b> (<code>BR-…</code>) – z. B. ob Summen und Steuer zusammenpassen und ob
+        Pflichtfelder gefüllt sind.</li>
+      <li><b>Deutsche Regeln</b> (<code>BR-DE-…</code>) – z. B. Käuferreferenz, Kontaktdaten des Verkäufers,
+        Zahlungsangaben.</li>
+    </ol>
+    <p>Slim prüft jede XRechnung vor dem Anhängen mit genau diesem Programm. Es läuft direkt auf dem Server, es gehen
+      dafür keine Rechnungsdaten nach außen. Meldet es einen Fehler, hängt Slim die Rechnung nicht an, und die Mail
+      bleibt angehalten (siehe „Häufige Fehler“). Vorher prüft Slim mit eigenen Regeln, ob in Suite8 etwas fehlt –
+      diese Meldungen sind meist verständlicher. Ein- und ausschalten lässt sich die Prüfung unter Konfiguration
+      XRechnung → Prüfung (ab Werk ein, bitte so lassen).</p>
+    <p class="muted">Achtung: Manche Empfänger (z. B. mit SAP) prüfen strenger als der Validator, vor allem beim
+      Nachrechnen der Steuer. Dafür gibt es den Rundungsausgleich.</p>
+
+    <h3>Die wichtigen Felder und woher sie kommen</h3>
+    <p>Fast alles liest Slim aus Suite8. Die Spalte „Wird von der Konfiguration abgedeckt“ zeigt, wo ein Verwalter
+      eingreifen kann. Ist ein Feld leer, wird es meist am besten in Suite8 ergänzt. Für eine einzelne wartende
+      Rechnung geht auch ein Override auf der Übersicht.</p>
+    <div class="tabelle"><table>
+      <tr><th>Feld</th><th>Bedeutung</th><th>Kommt aus</th><th>Wird von der Konfiguration abgedeckt</th></tr>
+      <tr><th colspan="4">Rechnung allgemein</th></tr>
+      <tr><td>BT-1</td><td>Rechnungsnummer</td><td>Suite8</td><td>– (Erkennung im Betreff findet sie in der Mail)</td></tr>
+      <tr><td>BT-2</td><td>Rechnungsdatum</td><td>Suite8</td><td>–</td></tr>
+      <tr><td>BT-3</td><td>Art: 380 Rechnung, 381 Gutschrift</td><td>Suite8 (Gutschrift bzw. Storno)</td><td>–</td></tr>
+      <tr><td>BT-5</td><td>Währung</td><td>Suite8-Basiswährung</td><td>Hoteldaten → Währung (nur Ersatz)</td></tr>
+      <tr><td>BT-9</td><td>Fälligkeit</td><td>Suite8-Zahlungsziel</td><td>Hoteldaten → Zahlungsziel (nur Ersatz)</td></tr>
+      <tr><td><b>BT-10</b></td><td><b>Käuferreferenz / Leitweg-ID</b> – nach deutscher Regel immer Pflicht (BR-DE-15)</td>
+          <td>DXR-Mitgliedschaft am Profil, sonst Freitexte, sonst Profilname</td>
+          <td>Konfiguration XRechnung → Käuferreferenz (Freitexte 1–4); Override</td></tr>
+      <tr><td>BT-22</td><td>Hinweis zur Rechnung</td><td>Gastzeile, Freitext 1</td><td>Konfiguration XRechnung → Gastzeile</td></tr>
+      <tr><td>BT-25</td><td>Bezug auf die ursprüngliche Rechnung (bei Gutschrift)</td><td>Suite8</td><td>–</td></tr>
+      <tr><td>BT-73/74</td><td>Leistungszeitraum (Anreise bis Abreise)</td><td>Suite8</td><td>–</td></tr>
+
+      <tr><th colspan="4">Verkäufer (das Haus)</th></tr>
+      <tr><td>BT-27/28</td><td>Name</td><td>Suite8-Hoteleinstellungen</td><td>Hoteldaten → Verkäuferdaten (abweichend)</td></tr>
+      <tr><td>BT-31</td><td>Umsatzsteuer-Identifikationsnummer</td><td>Suite8-Hoteleinstellungen</td><td>Hoteldaten → Verkäuferdaten</td></tr>
+      <tr><td>BT-34</td><td>Elektronische Adresse (E-Mail)</td><td>Ansprechpartner-E-Mail</td><td>Hoteldaten → E-Mail Ansprechpartner</td></tr>
+      <tr><td>BT-35–40</td><td>Anschrift (Straße, PLZ, Ort, Land)</td><td>Suite8-Hoteleinstellungen</td><td>Hoteldaten → Verkäuferdaten</td></tr>
+      <tr><td>BT-41–43</td><td>Ansprechpartner, Telefon, E-Mail – Pflicht nach deutscher Regel</td><td>Suite8</td>
+          <td>Hoteldaten → Ansprechpartner und Absender (Ersatz)</td></tr>
+      <tr><td>BT-81/84/86</td><td>Zahlungsart Überweisung, IBAN, BIC</td><td>Suite8-Hotelbank</td><td>Hoteldaten → Verkäuferdaten</td></tr>
+
+      <tr><th colspan="4">Käufer (Rechnungsempfänger)</th></tr>
+      <tr><td>BT-44</td><td>Name</td><td>Suite8-Profil</td><td>Override</td></tr>
+      <tr><td><b>BT-49</b></td><td><b>Elektronische Adresse (E-Mail)</b> – seit XRechnung 3.0 Pflicht</td><td>E-Mail am Profil</td><td>Override</td></tr>
+      <tr><td>BT-50–55</td><td>Anschrift (Straße, PLZ, Ort, Land)</td><td>Rechnungsadresse des Profils</td><td>Override</td></tr>
+      <tr><td>BT-70</td><td>Lieferempfänger (der Gast)</td><td>Suite8, nur bei genau einem Gast</td><td>–</td></tr>
+
+      <tr><th colspan="4">Beträge und Steuer</th></tr>
+      <tr><td>BG-20/21</td><td>Abschläge und Zuschläge</td><td>Rundungsausgleich</td><td>Konfiguration XRechnung → Rundungsausgleich</td></tr>
+      <tr><td>BG-22</td><td>Summen: Netto (BT-106, BT-109), Steuer (BT-110), Brutto (BT-112), bereits bezahlt (BT-113), Zahlbetrag (BT-115)</td>
+          <td>Suite8</td><td>Rundungsausgleich (nur die Steuer, der Endbetrag nie)</td></tr>
+      <tr><td>BG-23</td><td>Steuer je Steuersatz: Bemessung, Betrag, Kategorie (S = Regelsatz, Z = 0 %), Satz</td><td>Steuerbuchungen in Suite8</td>
+          <td>Rundungsausgleich; Auslage-Artikel (gelten mit 0 %)</td></tr>
+
+      <tr><th colspan="4">Positionen (BG-25)</th></tr>
+      <tr><td>BT-153</td><td>Bezeichnung (Artikel)</td><td>Suite8-Buchungen</td><td>–</td></tr>
+      <tr><td>BT-129/131/146</td><td>Menge, Nettobetrag, Einzelpreis</td><td>Suite8-Buchungen</td><td>Positionen zusammenfassen</td></tr>
+      <tr><td>BT-151/152</td><td>Steuerkategorie und -satz der Position</td><td>Suite8-Steuerbuchung</td><td>Auslage-Artikel</td></tr>
+      <tr><td>BT-127</td><td>Hinweis zur Position (Zimmer, Gast bei Gruppenrechnungen)</td><td>Suite8</td><td>–</td></tr>
+      <tr><td>BT-134/135</td><td>Leistungszeitraum der Position</td><td>Suite8</td><td>–</td></tr>
+
+      <tr><th colspan="4">Nicht in der XRechnung, aber in der Konfiguration</th></tr>
+      <tr><td colspan="2">Name der XML-Datei, Nur XML (ohne PDF), KoSIT-Prüfung, XRechnung-Version, Freigabe nach X Tagen</td>
+          <td>–</td><td>Konfiguration XRechnung</td></tr>
+    </table></div>
+  </div>
+
   <div class="card" id="weg">
-    <h2>2. Der Weg einer Rechnungsmail</h2>
+    <h2>3. Der Weg einer Rechnungsmail</h2>
     <ol class="weg">
       <li><b class="wer">Front Office</b>Sie schließen die Rechnung in Suite8 ab und schicken sie wie gewohnt per E-Mail
         an den Gast oder die Firma.</li>
@@ -101,7 +205,7 @@
   </div>
 
   <div class="card" id="empfaenger">
-    <h2>3. Was der Empfänger bekommt</h2>
+    <h2>4. Was der Empfänger bekommt</h2>
     <div class="tabelle"><table>
       <tr><th>Fall</th><th>Inhalt der Mail</th></tr>
       <tr><td>Normalfall</td><td>PDF wie bisher <b>und</b> XRechnung (XML-Datei, Name = Rechnungsnummer)</td></tr>
@@ -113,7 +217,7 @@
   </div>
 
   <div class="card" id="haengt">
-    <h2>4. Eine Mail hängt – woran sehe ich das?</h2>
+    <h2>5. Eine Mail hängt – woran sehe ich das?</h2>
     <ul>
       <li><b>In Suite8:</b> Die Mail steht noch im Postausgang und ist nicht versendet. Beim Eintrag steht der
         Fehlertext von Slim, z. B. „Kunden-PLZ fehlt“.</li>
@@ -124,7 +228,7 @@
   </div>
 
   <div class="card" id="frontoffice">
-    <h2>5. Möglichkeiten Front Office</h2>
+    <h2>6. Möglichkeiten Front Office</h2>
     <dl>
       <dt>Daten in Suite8 korrigieren – der wichtigste Weg</dt>
       <dd>Die meisten Fehler sind fehlende Angaben beim Rechnungsempfänger: Straße, PLZ, Ort, Land oder E-Mail-Adresse.
@@ -148,7 +252,7 @@
   </div>
 
   <div class="card" id="buchhaltung">
-    <h2>6. Möglichkeiten Buchhaltung</h2>
+    <h2>7. Möglichkeiten Buchhaltung</h2>
     <dl>
       <dt>Archiv – jede verschickte XRechnung nachschlagen</dt>
       <dd>Im <a href="/archiv">Archiv</a> liegt jede XRechnung genau so, wie sie an die Mail gehängt wurde. Suche nach
@@ -183,7 +287,7 @@
   </div>
 
   <div class="card" id="fehler">
-    <h2>7. Häufige Fehler und was hilft</h2>
+    <h2>8. Häufige Fehler und was hilft</h2>
     <div class="tabelle"><table>
       <tr><th>Fehlertext (Auszug)</th><th>Bedeutung</th><th>Was hilft</th></tr>
       <tr><td>Kunden-Strasse / -PLZ / -Ort / -Land fehlt</td><td>Adresse des Rechnungsempfängers unvollständig</td>
@@ -207,7 +311,7 @@
   </div>
 
   <div class="card" id="einstellungen">
-    <h2>8. Die Einstellungen im Überblick</h2>
+    <h2>9. Die Einstellungen im Überblick</h2>
     <p>Ändern dürfen die Einstellungen nur Benutzer mit der Rolle „verwalten“. Lesen kann diese Übersicht jeder.
       Die Einstellungen sind auf die Menüpunkte <b>Konfiguration XRechnung</b>, <b>Hoteldaten</b> und <b>System</b>
       verteilt. Jeder Kasten hat seinen eigenen Knopf „Speichern“. Einstellungen mit <span class="tag">Neustart</span>
@@ -247,18 +351,18 @@
     <h3 class="seite">Weitere Stellen</h3>
     <dl>
       <dt>XRechnung-Schalter (rechts oben)</dt>
-      <dd>Schaltet in Suite8 das Anhalten der Rechnungsmails ein oder aus, siehe Abschnitt 6.</dd>
+      <dd>Schaltet in Suite8 das Anhalten der Rechnungsmails ein oder aus, siehe Abschnitt 7.</dd>
       <dt>Benutzer</dt>
       <dd>Anmeldungen anlegen, Rolle „ansehen“ oder „verwalten“ vergeben, Startpasswort setzen (muss bei der ersten
         Anmeldung geändert werden), Benutzer löschen. Hat ein Verwalter sein Passwort vergessen und gibt es keinen
         anderen Verwalter, setzt <code>slim\reset_admin.cmd</code> direkt am Server ein neues Startpasswort.</dd>
       <dt>Override (Übersicht)</dt>
-      <dd>Werte für genau eine wartende Rechnung ersetzen, siehe Abschnitt 6.</dd>
+      <dd>Werte für genau eine wartende Rechnung ersetzen, siehe Abschnitt 7.</dd>
     </dl>
   </div>
 
   <div class="card" id="begriffe">
-    <h2>9. Begriffe kurz erklärt</h2>
+    <h2>10. Begriffe kurz erklärt</h2>
     <dl>
       <dt>XRechnung</dt><dd>Deutsches Format für elektronische Rechnungen (XML-Datei), Pflicht für Rechnungen an Behörden
         und zunehmend an Firmen.</dd>

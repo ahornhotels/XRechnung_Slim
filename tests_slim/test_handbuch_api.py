@@ -44,3 +44,14 @@ def test_handbuch_hat_konfigteil():
     for txt in ("/api/handbuch/einstellungen", 'id="einstellungen"', "Muster-Assistent",
                 "Für Techniker / DBA", "Verkäuferdaten", "Benutzer", "Standard", r"slim\reset_admin.cmd"):
         assert txt in src, txt
+
+
+def test_handbuch_hat_xrechnung_grundlagen():
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "handbuch.html").read_text(encoding="utf-8")
+    for txt in ('id="xrechnung"', "EN 16931", "KoSIT", "Leitweg-ID", "BT-10", "BT-49", "BR-DE",
+                "UBL", "3.0.2", "1.1.2027", "Kleinbetragsrechnung", "Wird von der Konfiguration abgedeckt"):
+        assert txt in src, txt
+    nummern = [int(n) for n in re.findall(r"<h2>(\d+)\. ", src)]
+    assert nummern == list(range(1, len(nummern) + 1))
