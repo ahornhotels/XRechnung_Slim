@@ -48,6 +48,7 @@ from slim.api_slim import trigger_sql as trigger_sql_module
 from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
+from slim.api_slim import schalter_api as schalter_api_module
 from slim.api_slim import auth_api as auth_api_module
 from slim.api_slim import settings_api as settings_api_module
 from slim.core_slim import access
@@ -107,6 +108,7 @@ app.include_router(trigger_sql_module.router)
 app.include_router(run_now_module.router)
 app.include_router(update_api_module.router)
 app.include_router(archive_api_module.router)
+app.include_router(schalter_api_module.router)
 app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
 app.include_router(settings_api_module.router)
