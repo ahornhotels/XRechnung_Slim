@@ -32,7 +32,7 @@ from modules.suite8_pattern import (
     extract_zinv_number, PatternMatchError, AmbiguousMatchError,
 )
 
-from slim.core_slim import audit_jsonl, archive_fs, overrides
+from slim.core_slim import audit_jsonl, archive_fs, overrides, trigger_state
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,27 @@ logger = logging.getLogger(__name__)
 # der APScheduler-Misfire-Grace-Time. Konservativ 10 — nächster Lauf
 # (Default-Intervall 30s) holt den Rest.
 _PENDING_LIMIT_PER_RUN = 10
+
+
+_letzter_trigger_state: Optional[str] = None
+
+
+def _read_trigger_state(conn) -> str:
+    """Zustand des Triggers WMAI_XRECHNUNG_BLOCK; jede Stoerung = nicht_pruefbar."""
+    try:
+        return trigger_state.read_state(conn)["state"]
+    except Exception:
+        logger.exception("Triggerzustand nicht lesbar")
+        return "nicht_pruefbar"
+
+
+def _merke_trigger_state(data_dir: Path, state: str) -> None:
+    """Audit nur beim Wechsel IN den Zustand inaktiv, nicht in jedem Lauf."""
+    global _letzter_trigger_state
+    if state == "inaktiv" and _letzter_trigger_state != "inaktiv":
+        audit_jsonl.record_safe(data_dir, "poller_pausiert_trigger",
+                                details={"trigger": state})
+    _letzter_trigger_state = state
 
 
 def _audit_fail_with_spam_guard(
@@ -116,7 +137,7 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
     fname_tmpl = cfg.get("suite8_attachment_name_template", "{zinv_number}.xml")
 
     summary = {"attached": 0, "failed": 0, "no_match": 0, "ambiguous": 0,
-               "skipped_strategy": False}
+               "skipped_strategy": False, "skipped_trigger": False}
 
     # Liste der Pending-WMAIs in eigener Connection holen — danach pro WMAI
     # eine frische Connection im inner-Loop. So koennen Connection-Breaks
@@ -125,6 +146,16 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
     # try/finally cur.close()) sammelt sich nicht über 50 Iterationen.
     try:
         with get_connection() as conn:
+            # XRechnung-Schalter: Ist der Suite8-Trigger INAKTIV (ausgeschaltet),
+            # bleibt jede gesperrte Mail gesperrt, bis wieder eingeschaltet wird.
+            # "fehlt"/"nicht_pruefbar" halten NICHT an - sonst stuende die
+            # Verarbeitung in Haeusern ohne Sicht auf den Trigger still.
+            tstate = _read_trigger_state(conn)
+            summary["trigger_state"] = tstate
+            _merke_trigger_state(data_dir, tstate)
+            if tstate == "inaktiv":
+                summary["skipped_trigger"] = True
+                return summary
             pending = find_pending_wmai(conn=conn, limit=_PENDING_LIMIT_PER_RUN)
     except Exception as e:
         logger.exception("Konnte Pending-WMAIs nicht abfragen")

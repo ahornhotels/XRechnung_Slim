@@ -110,3 +110,14 @@ def test_retry_503_on_db_failure(client):
                       side_effect=RuntimeError("oops")):
         r = c.post("/api/wmai/1/retry")
     assert r.status_code == 503
+
+
+def test_status_warnt_bei_inaktivem_trigger(client):
+    c, _, state = client
+    state["last_run_summary"] = {"attached": 0, "failed": 0, "no_match": 0, "ambiguous": 0,
+                                 "skipped_trigger": True, "trigger_state": "inaktiv"}
+    with patch.object(status_api, "load_hotel_config",
+                      return_value={"hotel_code": "TST", "suite8_recognize_subject_pattern": "x"}):
+        j = c.get("/api/status").json()
+    assert j["trigger"] == "inaktiv"
+    assert any("XRechnung ist ausgeschaltet" in w for w in j["warnings"])

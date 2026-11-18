@@ -424,3 +424,66 @@ def test_render_fehler_bei_ablage_crasht_poller_nicht(tmp_path, mocked_db):
     audit_files = list(tmp_path.glob("audit-*.jsonl"))
     entries = [json.loads(l) for l in audit_files[0].read_text(encoding="utf-8").splitlines() if l.strip()]
     assert entries[0]["event"] == "validator_fail"
+
+
+# ── Trigger-Schalter (XRechnung ein/aus) ──
+
+def _trig(state):
+    return {"state": state, "owner": "V8LIVE", "user": "V8LIVE", "grant_sql": None, "error": None}
+
+
+@pytest.fixture
+def _reset_trigger_merker():
+    poller._letzter_trigger_state = None
+    yield
+    poller._letzter_trigger_state = None
+
+
+def _run_with_trigger(tmp_path, mocked_db, state):
+    cm, _ = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller.trigger_state, "read_state", return_value=_trig(state)), \
+         patch.object(poller, "find_pending_wmai", return_value=[]) as fp:
+        s = poller.run_once(data_dir=tmp_path)
+    return s, fp
+
+
+def _events(tmp_path, name):
+    out = []
+    for f in tmp_path.glob("audit-*.jsonl"):
+        out += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [e for e in out if e["event"] == name]
+
+
+def test_trigger_inaktiv_haelt_poller_an(tmp_path, mocked_db, _reset_trigger_merker):
+    s, fp = _run_with_trigger(tmp_path, mocked_db, "inaktiv")
+    assert s["skipped_trigger"] is True and s["attached"] == 0
+    fp.assert_not_called()
+
+
+@pytest.mark.parametrize("state", ["aktiv", "fehlt", "nicht_pruefbar"])
+def test_trigger_sonst_arbeitet_weiter(tmp_path, mocked_db, _reset_trigger_merker, state):
+    s, fp = _run_with_trigger(tmp_path, mocked_db, state)
+    assert s["skipped_trigger"] is False
+    fp.assert_called_once()
+
+
+def test_pausiert_audit_nur_beim_wechsel(tmp_path, mocked_db, _reset_trigger_merker):
+    _run_with_trigger(tmp_path, mocked_db, "inaktiv")
+    _run_with_trigger(tmp_path, mocked_db, "inaktiv")
+    assert len(_events(tmp_path, "poller_pausiert_trigger")) == 1
+    _run_with_trigger(tmp_path, mocked_db, "aktiv")
+    _run_with_trigger(tmp_path, mocked_db, "inaktiv")
+    assert len(_events(tmp_path, "poller_pausiert_trigger")) == 2
+
+
+def test_triggerabfrage_fehler_arbeitet_weiter(tmp_path, mocked_db, _reset_trigger_merker):
+    cm, _ = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg()), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller.trigger_state, "read_state", side_effect=RuntimeError("weg")), \
+         patch.object(poller, "find_pending_wmai", return_value=[]) as fp:
+        s = poller.run_once(data_dir=tmp_path)
+    assert s["skipped_trigger"] is False
+    fp.assert_called_once()

@@ -61,6 +61,12 @@ def status(state: dict = Depends(get_state)):
         warnings.append(
             "Letzter Lauf wurde wegen mail_strategy SKIPPED - keine Verarbeitung."
         )
+    trigger = last_summary.get("trigger_state")
+    if trigger == "inaktiv":
+        warnings.append(
+            "XRechnung ist ausgeschaltet (Trigger inaktiv) - neue Rechnungsmails "
+            "gehen ohne XRechnung raus, wartende Mails bleiben gesperrt."
+        )
     if not pattern_set:
         warnings.append("Kein Pattern konfiguriert - keine WMAIs werden gematched.")
 
@@ -69,6 +75,7 @@ def status(state: dict = Depends(get_state)):
         "hotel": hotel,
         "mail_strategy": mail_strategy,
         "pattern_configured": pattern_set,
+        "trigger": trigger,
         "warnings": warnings,
         "interval_seconds": state.get("interval_seconds"),
         "last_run": state.get("last_run"),
