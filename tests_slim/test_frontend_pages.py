@@ -153,3 +153,13 @@ def test_archivseite_suche_und_ansicht():
     for txt in ("/api/archive", "/api/archive/ansicht", "/api/archive/file", 'id="q"', 'id="von"', 'id="bis"',
                 "Rechnungsdatum", "unverändert"):
         assert txt in src, txt
+
+
+def test_doku_nennt_schalter_und_bt10():
+    root = FRONT.parent
+    inst = (root / "INSTALL.md").read_text(encoding="utf-8")
+    for txt in ("XRechnung EIN", "GRANT ALTER ANY TRIGGER", "Bearbeite gewähltes Fenster",
+                "Konfiguration XRechnung", "Hoteldaten", "Archiv"):
+        assert txt in inst, txt
+    assert "Verarbeitung (Normalbetrieb oder Pause)" not in inst
+    assert "bt10_freitext1" in (root / "README.md").read_text(encoding="utf-8")

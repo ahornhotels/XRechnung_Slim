@@ -31,11 +31,11 @@ Bei Fehlern wird `WMAI_ERROR` auf die Fehlermeldung gesetzt (sichtbar in der Sui
 - Den ersten Verwalter legt man **am Server selbst** unter `http://127.0.0.1:8022/login` an – nur solange es keinen Benutzer gibt. Bis dahin läuft der Rechnungsversand normal weiter.
 - Sitzung 8 Stunden, Cookie `HttpOnly`/`SameSite=Strict`. Startpasswörter müssen bei der ersten Anmeldung geändert werden.
 - Fehlversuche: von anderen Rechnern 15 Minuten Sperre nach 5 Fehlversuchen; am Server keine Sperre, aber höchstens ein Versuch pro Sekunde und Benutzer, ab dem 5. Fehlversuch wachsende Wartezeit (bis 60 s).
-- Standard-Bind `127.0.0.1`. Für LAN-Zugriff unter *Einstellungen → Server* die Adresse `0.0.0.0` und die erlaubten Adressen (IPs oder Netze wie `192.168.10.0/24`) setzen, danach neu starten. localhost ist immer erlaubt.
+- Standard-Bind `127.0.0.1`. Für LAN-Zugriff unter *System → Server* die Adresse `0.0.0.0` und die erlaubten Adressen (IPs oder Netze wie `192.168.10.0/24`) setzen, danach neu starten. localhost ist immer erlaubt.
 
 ## Einstellungen
 
-Alles aus `connection.json`, `hotel.json`, `app_settings.json` und `update.json` ist unter `/settings` änderbar, nur mit der Rolle „verwalten“. Vor jedem Speichern entsteht eine Sicherung `<datei>.<zeitstempel>.sicherung` (die letzten 20 bleiben). Passwort und Token werden verschlüsselt gespeichert und nie angezeigt. Verkäuferdaten kommen aus Suite8 und können abweichend gesetzt werden (`seller_overrides` in `hotel.json`). Slim schreibt außerhalb des Setup-Assistenten nie nach WUSS.
+Alles aus `connection.json`, `hotel.json`, `app_settings.json` und `update.json` ist über die Menüpunkte *Konfiguration XRechnung* (`/konfiguration`), *Hoteldaten* (`/hoteldaten`) und *System* (`/system`) änderbar, nur mit der Rolle „verwalten“ (`/settings` leitet weiter). Rechts oben schaltet der XRechnung-Schalter den Suite8-Trigger `WMAI_XRECHNUNG_BLOCK` aktiv/inaktiv (`/api/schalter`, Zustand immer live aus `ALL_TRIGGERS`; bei inaktivem Trigger verarbeitet der Poller nichts, gesperrte Mails bleiben gesperrt). Das *Archiv* (`/archiv`) listet jede gesendete XRechnung mit Rechnungsdatum, Status und SHA-256-Echtheit, Metadaten je Datei in `<stem>.meta.json`. Vor jedem Speichern entsteht eine Sicherung `<datei>.<zeitstempel>.sicherung` (die letzten 20 bleiben). Passwort und Token werden verschlüsselt gespeichert und nie angezeigt. Verkäuferdaten kommen aus Suite8 und können abweichend gesetzt werden (`seller_overrides` in `hotel.json`). Slim schreibt außerhalb des Setup-Assistenten nie nach WUSS.
 
 Wichtige Schalter in `hotel.json` (Standardwerte in `config/hotel.json.example`):
 
@@ -46,6 +46,7 @@ Wichtige Schalter in `hotel.json` (Standardwerte in `config/hotel.json.example`)
 | `auslagen_artikel` | `["AUS", "DUR"]` | Artikel-Kurznamen, die ohne Steuerbuchung mit 0 % gelten |
 | `xml_only_membership` | `PDF` | Membership-Kurzbezeichnung für Nur-XML; leer = aus |
 | `xml_only_all` | `false` | Nur-XML für alle Rechnungen |
+| `bt10_freitext1` … `bt10_freitext4` | `false` | ZWIN-Freitext 1–4 als Käuferreferenz (BT-10), wenn keine DXR-Mitgliedschaft am Rechnungsempfänger hängt; der erste gefüllte eingeschaltete gilt (1 → 4), sonst der Profilname |
 | `rundungsausgleich` | `aus` | `position` oder `abschlag`: Steuer je Satz vom Brutto neu (Bemessung = Positionen exakt, für strenge Empfänger wie SAP); Rest in der größten Position bzw. als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt gleich |
 
 ## Was es NICHT macht
@@ -81,7 +82,7 @@ sieht den Wechsel evtl. eine Stunde verzögert.
 Jedes Haus nutzt ein anderes Mail-Template – die ZINV-Nummer kann
 im Betreff oder im Dateinamen stehen. **Beide Patterns sind in der Oberfläche
 editierbar** (Startseite, Abschnitt „Pattern-Konfiguration“, oder
-*Einstellungen → Versand*). Standard: Betreff mit
+*Konfiguration XRechnung → Erkennung und Anhang*). Standard: Betreff mit
 `Rechnung Nr. <ZINV_NUMBER>`.
 
 **Wichtig:** Suite8 schreibt in den PDF-Dateinamen die `ZINV_ID` (interner
@@ -138,6 +139,8 @@ slim/
 | `bootstrap_admin` | Erster Verwalter angelegt |
 | `user_created` / `user_changed` / `user_deleted` / `password_changed` | Benutzerverwaltung |
 | `settings_changed` | Einstellungen gespeichert (welche Schlüssel, ohne Werte) |
+| `schalter_geaendert` | XRechnung-Schalter betätigt (wer, vorher/nachher bzw. Oracle-Fehler) |
+| `poller_pausiert_trigger` | Poller pausiert, weil der Trigger inaktiv ist (nur beim Wechsel) |
 
 **Spam-Schutz**: Ein identischer Fehler für dieselbe WMAI wird nur einmal protokolliert – der Audit-Schreiber liest erst `WMAI_ERROR`, vergleicht mit dem neuen Text und überspringt das Schreiben, wenn er unverändert ist.
 

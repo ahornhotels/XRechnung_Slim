@@ -97,20 +97,74 @@ wartende Suite8-Mails und das Protokoll.
 Die App läuft jetzt als Windows-Dienst und startet bei jedem Server-Neustart
 automatisch.
 
-### Einstellungen
+### Menü
 
-Alle Einstellungen sind unter **Einstellungen** änderbar (Rolle „verwalten“),
-jede mit Erklärtext:
+Oben auf jeder Seite steht die Menüleiste, rechts daneben der
+XRechnung-Schalter. Konfiguration XRechnung, Hoteldaten, System und Benutzer
+sieht nur die Rolle „verwalten“; jede Einstellung hat einen Erklärtext.
 
-| Bereich | Inhalt |
+| Menüpunkt | Inhalt |
 |---|---|
-| Datenbank | TNS-Alias, Benutzer, Passwort, Oracle-Client, Verbindung testen |
-| Hotel | Hauskürzel, Hausname, Währung, Zahlungsziel, Ansprechpartner; Verkäuferdaten aus Suite8, abweichend festlegbar |
-| Versand | Verarbeitung (Normalbetrieb oder Pause), Absender, Erkennung im Betreff/Dateinamen, Abrufintervall, Name des XML-Anhangs, **Nur-XML** |
-| Rechnungsinhalt | Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich |
-| Prüfung | KoSIT-Prüfung, XRechnung-Version |
-| Server | Adresse, Port, erlaubte Adressen, Protokoll |
-| Update | automatische Updates, GitHub-Repository |
+| Übersicht | wartende Mails, letzte Läufe, Protokoll, Updates |
+| Konfiguration XRechnung | Erkennung im Betreff/Dateinamen, Name des XML-Anhangs, **Nur-XML** · Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich · Käuferreferenz (BT-10) · KoSIT-Prüfung, XRechnung-Version |
+| Hoteldaten | Verkäuferdaten aus Suite8 (abweichend festlegbar) · Hauskürzel, Hausname, Währung, Zahlungsziel · Ansprechpartner, Absender-E-Mail |
+| Archiv | alle gesendeten XRechnungen, Suche nach Rechnungsnummer und Rechnungsdatum |
+| System | Datenbank (mit Verbindungstest), Abrufintervall, Server, Update |
+| Benutzer | Anmeldungen und Rollen |
+
+Die alte Adresse `/settings` führt auf „Konfiguration XRechnung“.
+
+### XRechnung ein- und ausschalten
+
+Der Schalter rechts oben schaltet den Suite8-Trigger `WMAI_XRECHNUNG_BLOCK`
+in der Datenbank (nur Rolle „verwalten“). Er zeigt immer den echten Zustand
+aus der Datenbank:
+
+| Anzeige | Bedeutung |
+|---|---|
+| **● XRechnung EIN** | Trigger aktiv: Suite8 hält jede Rechnungsmail zurück, bis die App die XRechnung angehängt hat |
+| **○ XRechnung AUS** | Trigger inaktiv: neue Rechnungsmails gehen ohne XRechnung (nur PDF) raus. Bereits wartende Mails bleiben gesperrt, bis wieder eingeschaltet wird |
+| **Trigger fehlt** | der Trigger ist nicht angelegt – ein Klick zeigt das SQL für den Datenbank-Administrator |
+| **XRechnung nicht prüfbar** | keine Verbindung oder keine Sicht auf den Trigger; die App arbeitet dann wie bisher weiter |
+
+Nach dem Wiedereinschalten bekommen die liegengebliebenen Mails ihre
+XRechnung. Mails, die in der Aus-Zeit verschickt wurden, bekommen nachträglich
+nichts. Jeder Schaltvorgang steht im Protokoll (wer, wann, vorher/nachher).
+
+Gehört der Trigger einem anderen Datenbankbenutzer als dem der App, braucht
+der App-Benutzer einmalig das Recht dazu – der DBA führt aus:
+
+```sql
+GRANT ALTER ANY TRIGGER TO <App-Benutzer>;
+```
+
+### Käuferreferenz (BT-10)
+
+Die Käuferreferenz (bei Behörden die Leitweg-ID) kommt in dieser Reihenfolge:
+
+1. **DXR-Mitgliedschaft** am Rechnungsempfänger – hat immer Vorrang
+2. **Freitext 1 bis 4** aus dem Rechnungsfenster – nur die unter
+   Konfiguration XRechnung → Käuferreferenz eingeschalteten, der erste
+   gefüllte in der Reihenfolge 1 → 4 (ab Werk alle aus)
+3. sonst wie bisher der Name des Profils
+
+Die Freitexte stehen in Suite8 hier: Rechtsklick im Rechnungsfenster →
+„Bearbeite gewähltes Fenster“ → Reiter „Text“, die vier Zeilen sind Freitext
+1 bis 4. Freitext 1 erscheint immer als Hinweis (BT-22) in der XRechnung;
+Freitext 2 bis 4 erscheinen nur, wenn sie als Käuferreferenz eingeschaltet
+sind.
+
+### Archiv
+
+Unter **Archiv** liegt jede XRechnung genau so, wie sie an die Mail gehängt
+wurde – zum Nachlesen und für Prüfer. Suche nach Rechnungsnummer und nach
+**Rechnungsdatum** (von/bis). Je Datei: Art, Zeitpunkt des Anhängens,
+Empfänger-Mail, Betrag und Status („gesendet“, „nicht angehängt“ oder bei
+alten Dateien ohne Protokolleintrag „unbekannt“). „✔ unverändert“ bestätigt
+per SHA-256, dass die Datei seit dem Archivieren nicht verändert wurde.
+„Ansehen“ zeigt die Rechnung lesbar, darunter die Original-XML; „XML“ lädt die
+Datei unverändert herunter. Wird eine Rechnung erneut erzeugt, bleibt jede
+Version mit eigenem Prüfwert erhalten.
 
 Vor jedem Speichern legt die App eine Sicherung der Datei an
 (`<datei>.<zeitstempel>.sicherung`, die letzten 20 bleiben). Einstellungen mit
@@ -131,7 +185,7 @@ ausprobieren.**
 Suite8 rundet die Steuer je Buchung. Bei vielen kleinen Buchungen (z. B.
 Frühstück im Paket) passen Bemessungsgrundlage und Steuer dann um einige Cent
 nicht zu den Positionen. Der KoSIT-Validator toleriert das, strenge
-Empfänger wie SAP lehnen die Rechnung ab. Unter **Einstellungen →
+Empfänger wie SAP lehnen die Rechnung ab. Unter **Konfiguration XRechnung →
 Rechnungsinhalt → Rundungsausgleich** (das rote **!** daneben erklärt
 ausführlich, wie Suite8 rechnet und was in Datenbank, PDF und XML herauskommt):
 
@@ -149,7 +203,7 @@ Buchhaltung abstimmen.
 ### Optional: Zugriff aus dem Netzwerk (andere PCs)
 
 Standardmäßig ist die App nur auf dem Server selbst erreichbar. Für den
-Zugriff von anderen PCs im Hotel-Netz unter **Einstellungen → Server**:
+Zugriff von anderen PCs im Hotel-Netz unter **System → Server**:
 
 - Adresse `0.0.0.0`
 - Erlaubte Adressen: exakte IPs oder Netze wie `192.168.10.0/24`
