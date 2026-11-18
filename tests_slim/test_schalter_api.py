@@ -73,3 +73,12 @@ def test_post_fehler_409_mit_meldung_und_audit(client):
 def test_post_ohne_bool_422(client):
     c, _ = client
     assert c.post("/api/schalter", json={"ein": "ja"}).status_code == 422
+
+
+def test_einschalten_hebt_alte_pause_auf(client):
+    c, _ = client
+    with patch.object(schalter_api.trigger_state, "read_state", return_value=_st("inaktiv")), \
+         patch.object(schalter_api.trigger_state, "set_enabled", return_value=_st("aktiv")), \
+         patch.object(schalter_api.verarbeitung, "aus_aufheben", return_value=True) as auf:
+        assert c.post("/api/schalter", json={"ein": True}).status_code == 200
+    auf.assert_called_once()

@@ -20,7 +20,7 @@ from pydantic import BaseModel, StrictBool
 
 from core.db_connector import get_connection
 from slim.api_slim.status import get_state
-from slim.core_slim import audit_jsonl, trigger_state
+from slim.core_slim import audit_jsonl, trigger_state, verarbeitung
 
 router = APIRouter(prefix="/api/schalter", tags=["schalter"])
 
@@ -51,6 +51,10 @@ def post_schalter(payload: SchalterPayload, request: Request, state: dict = Depe
         with get_connection() as conn:
             vorher = trigger_state.read_state(conn)["state"]
             nachher = trigger_state.set_enabled(conn, payload.ein)
+        if payload.ein:
+            # Altwert der entfernten Einstellung "Verarbeitung = aus" darf "EIN"
+            # nicht still aushebeln.
+            verarbeitung.aus_aufheben()
     except trigger_state.TriggerSchaltFehler as e:
         if data_dir is not None:
             audit_jsonl.record_safe(Path(data_dir), "schalter_geaendert",

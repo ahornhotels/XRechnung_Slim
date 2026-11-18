@@ -32,7 +32,7 @@ from modules.suite8_pattern import (
     extract_zinv_number, PatternMatchError, AmbiguousMatchError,
 )
 
-from slim.core_slim import audit_jsonl, archive_fs, overrides, trigger_state
+from slim.core_slim import audit_jsonl, archive_fs, overrides, trigger_state, verarbeitung
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,18 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
     data_dir = Path(data_dir)
 
     cfg = load_hotel_config()
+    # Altwert der entfernten Einstellung "Verarbeitung = aus" in den
+    # XRechnung-Schalter ueberfuehren (Trigger aus), sonst stuende Slim still,
+    # waehrend der Schalter "EIN" zeigt.
+    if str(cfg.get("mail_strategy") or "").strip().lower() == "aus":
+        try:
+            with get_connection() as conn:
+                if verarbeitung.migriere_aus(conn):
+                    audit_jsonl.record_safe(data_dir, "verarbeitung_aus_migriert",
+                                            details={"trigger": "inaktiv"})
+                    cfg = load_hotel_config()
+        except Exception:
+            logger.exception("Uebernahme von Verarbeitung=aus fehlgeschlagen")
     # Slim laeuft nur für mail_strategy='suite8' — bei anderer Konfig
     # gibt es nichts zu tun (Big-App übernimmt).
     if (cfg.get("mail_strategy") or "suite8") not in ("suite8", "auto"):
