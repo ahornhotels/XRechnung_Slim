@@ -118,14 +118,15 @@ Rechnung ab.</p>
 
 <h3>Die drei Einstellungen</h3>
 <ul>
-<li><b>aus</b> – die XRechnung übernimmt die Werte aus Suite8 wie bisher. Kann
-bei strengen Empfängern abgelehnt werden.</li>
+<li><b>aus</b> – die XRechnung übernimmt die Werte aus Suite8 unverändert. Die
+Regeln BR-S-08/BR-CO-17 sind dann um Cent verletzt, strenge Empfänger lehnen
+ab.</li>
 <li><b>position</b> – je Steuersatz rechnet Slim vom Brutto aus: Steuer =
 Brutto × Satz / (100 + Satz), einmal gerundet; Bemessungsgrundlage = Brutto −
 Steuer. Den Rest von wenigen Cent bekommt die <b>größte Position</b> des
 Steuersatzes (ihr Einzelpreis wird 4-stellig angepasst). Im Beispiel:
 Frühstück 216,76 € statt 217,08 €.</li>
-<li><b>abschlag</b> – dieselbe Rechnung, aber alle Positionen bleiben wie in
+<li><b>abschlag</b> (Standard) – dieselbe Rechnung, aber alle Positionen bleiben wie in
 Suite8. Der Rest steht als eigener <b>Abschlag bzw. Zuschlag
 „Rundungsausgleich“</b> mit dem Steuersatz in der Rechnung. Im Beispiel:
 Frühstück 217,08 € und Abschlag 0,32 €.</li>
@@ -197,7 +198,7 @@ SECTIONS: tuple[Section, ...] = (
         Setting("gastzeile", H, "Gastzeile (BT-22)", "Hinweis bei genau einem Gast. Platzhalter {gast}, {zimmer}, {anreise}, {abreise}. Leer = keine Gastzeile.", check=_gastzeile, default="Gast: {gast}, Zimmer {zimmer}, {anreise} bis {abreise}"),
         Setting("positionen_zusammenfassen", H, "Positionen zusammenfassen", "Gleiche Buchungen (gleicher Gast, Zimmer, Artikel, Preis) als eine Position mit Menge ausweisen.", type="bool", default=True),
         Setting("auslagen_artikel", H, "Auslage-Artikel", "Suite8-Artikel (Kurzname), die ohne Steuerbuchung als Auslage mit 0 % gelten. Andere Artikel ohne Steuerbuchung blockieren die Rechnung.", type="list", default=["AUS", "DUR"]),
-        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). aus = Werte wie aus Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. abschlag = Rest als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="aus", info=_INFO_RUNDUNGSAUSGLEICH),
+        Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). abschlag (Standard) = Rest als Abschlag/Zuschlag „Rundungsausgleich“, alle Positionen wie in Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. aus = Werte wie aus Suite8, kann von strengen Empfängern abgelehnt werden. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="abschlag", info=_INFO_RUNDUNGSAUSGLEICH),
     ), page="xrechnung"),
     Section("kaeuferreferenz", "Käuferreferenz (BT-10)", (
         Setting("bt10_freitext1", H, "Freitext 1", "Erscheint immer als Hinweis (BT-22) in der XRechnung, eingeschaltet zusätzlich als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),

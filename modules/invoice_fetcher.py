@@ -119,17 +119,19 @@ def _positionen_zusammenfassen() -> bool:
 
 
 def _rundungsausgleich() -> str:
-    """hotel.json 'rundungsausgleich': aus | position | abschlag (Standard aus),
-    siehe xml_builder._apply_rundungsausgleich."""
+    """hotel.json 'rundungsausgleich': aus | position | abschlag (Standard
+    abschlag - die XRechnung muss fuer den Empfaenger auf den Cent stimmen;
+    nur ein ausdrueckliches "aus" schaltet ab), siehe
+    xml_builder._apply_rundungsausgleich."""
     from modules.xml_builder import RUNDUNGSAUSGLEICH_MODI
     hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
     value = hotel.get("rundungsausgleich")
     if value is None:
-        return "aus"
+        return "abschlag"
     mode = str(value).strip().lower() if isinstance(value, str) else ""
     if mode not in RUNDUNGSAUSGLEICH_MODI:
-        logger.warning("hotel.json 'rundungsausgleich'=%r unbekannt - Ausgleich bleibt aus", value)
-        return "aus"
+        logger.warning("hotel.json 'rundungsausgleich'=%r unbekannt - Standard abschlag", value)
+        return "abschlag"
     return mode
 
 

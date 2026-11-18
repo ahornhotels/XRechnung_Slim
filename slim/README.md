@@ -47,7 +47,7 @@ Wichtige Schalter in `hotel.json` (Standardwerte in `config/hotel.json.example`)
 | `xml_only_membership` | `PDF` | Membership-Kurzbezeichnung für Nur-XML; leer = aus |
 | `xml_only_all` | `false` | Nur-XML für alle Rechnungen |
 | `bt10_freitext1` … `bt10_freitext4` | `false` | ZWIN-Freitext 1–4 als Käuferreferenz (BT-10), wenn keine DXR-Mitgliedschaft am Rechnungsempfänger hängt; der erste gefüllte eingeschaltete gilt (1 → 4), sonst der Profilname |
-| `rundungsausgleich` | `aus` | `position` oder `abschlag`: Steuer je Satz vom Brutto neu (Bemessung = Positionen exakt, für strenge Empfänger wie SAP); Rest in der größten Position bzw. als Abschlag/Zuschlag „Rundungsausgleich“. Endbetrag bleibt gleich |
+| `rundungsausgleich` | `abschlag` | Steuer je Satz vom Brutto neu (Bemessung = Positionen exakt, für strenge Empfänger wie SAP); Rest als Abschlag/Zuschlag „Rundungsausgleich“ (`abschlag`) bzw. in der größten Position (`position`). `aus` = Werte wie aus Suite8. Endbetrag bleibt gleich |
 
 ## Was es NICHT macht
 

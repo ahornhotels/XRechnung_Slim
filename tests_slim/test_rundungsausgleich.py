@@ -301,15 +301,17 @@ def test_einstellung_im_schema():
     s = next(x for x in ss.section("inhalt").settings if x.key == "rundungsausgleich")
     assert s.file == "hotel.json" and s.type == "select"
     assert s.choices == ("aus", "position", "abschlag") == xml_builder.RUNDUNGSAUSGLEICH_MODI
-    assert s.default == "aus"
+    assert s.default == "abschlag"
     with pytest.raises(ss.SettingError):
         ss.coerce(s, "rest")
 
 
 def test_fetcher_liest_einstellung(monkeypatch):
     from modules import invoice_fetcher
-    for value, expected in ((None, "aus"), ("abschlag", "abschlag"), (" Position ", "position"),
-                            ("quatsch", "aus"), (True, "aus")):
+    # Ohne Eintrag oder bei ungueltigem Wert: Standard abschlag (korrekte XRechnung);
+    # nur ein ausdrueckliches "aus" schaltet den Ausgleich ab.
+    for value, expected in ((None, "abschlag"), ("abschlag", "abschlag"), (" Position ", "position"),
+                            ("aus", "aus"), ("quatsch", "abschlag"), (True, "abschlag")):
         monkeypatch.setattr(invoice_fetcher, "load_json",
                             lambda p, default=None, v=value: {} if v is None else {"rundungsausgleich": v})
         assert invoice_fetcher._rundungsausgleich() == expected, value

@@ -227,12 +227,12 @@ Empfänger wie SAP lehnen die Rechnung ab. Unter **Konfiguration XRechnung →
 Rechnungsinhalt → Rundungsausgleich** (das rote **!** daneben erklärt
 ausführlich, wie Suite8 rechnet und was in Datenbank, PDF und XML herauskommt):
 
-- **aus** – Werte wie aus Suite8 (Standard)
+- **abschlag** (Standard) – Steuer je Satz vom Brutto neu berechnet, der Rest
+  steht als Abschlag bzw. Zuschlag „Rundungsausgleich“ in der Rechnung, alle
+  Positionen bleiben wie in Suite8
+- **aus** – Werte wie aus Suite8; strenge Empfänger können ablehnen
 - **position** – Steuer je Satz vom Brutto neu berechnet, der Rest von wenigen
   Cent steckt in der größten Position
-- **abschlag** – wie „position“, der Rest steht aber als Abschlag bzw.
-  Zuschlag „Rundungsausgleich“ in der Rechnung, alle Positionen bleiben wie in
-  Suite8
 
 Der Endbetrag ändert sich nie. Die Steuer in der XRechnung kann um einige Cent
 von den Suite8-Steuerbuchungen (und damit vom PDF) abweichen – bitte mit der
