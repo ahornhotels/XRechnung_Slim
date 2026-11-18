@@ -132,9 +132,18 @@ XRechnung. Mails, die in der Aus-Zeit verschickt wurden, bekommen nachträglich
 nichts. Jeder Schaltvorgang steht im Protokoll (wer, wann, vorher/nachher).
 
 Gehört der Trigger einem anderen Datenbankbenutzer als dem der App, braucht
-der App-Benutzer einmalig das Recht dazu – der DBA führt aus:
+der App-Benutzer einmalig das Recht zum Schalten – der DBA führt aus:
 
 ```sql
+GRANT ALTER ANY TRIGGER TO <App-Benutzer>;
+```
+
+Gehört auch die Tabelle WMAI einem anderen Benutzer, sieht der App-Benutzer
+den Trigger zusätzlich nur mit Leserecht auf `DBA_TRIGGERS`; die Anzeige steht
+dann auf „nicht prüfbar“ und ein Klick zeigt beide Befehle:
+
+```sql
+GRANT SELECT ON SYS.DBA_TRIGGERS TO <App-Benutzer>;
 GRANT ALTER ANY TRIGGER TO <App-Benutzer>;
 ```
 

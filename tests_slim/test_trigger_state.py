@@ -66,7 +66,12 @@ def test_fehlt_nur_wenn_eigene_tabelle():
 
 
 def test_fremde_tabelle_ohne_sicht_ist_nicht_pruefbar():
-    st = read_state(_c(user="SLIM", tables=(), synonym="V8LIVE", trig=None))
+    class _Blind(_Cur):
+        def execute(self, sql, params=None):
+            if "dba_triggers" in sql.lower():
+                raise RuntimeError("ORA-00942")
+            return super().execute(sql, params)
+    st = read_state(_Conn(_Blind(user="SLIM", tables=(), synonym="V8LIVE", trig=None)))
     assert st["state"] == "nicht_pruefbar"
 
 
@@ -125,3 +130,41 @@ def test_oracle_fehler_beim_schalten():
     with pytest.raises(TriggerSchaltFehler) as e:
         set_enabled(conn, False)
     assert "ORA-01031" in str(e.value)
+
+
+# ── Trigger gehoert einem anderen Benutzer und ist in ALL_TRIGGERS unsichtbar ──
+
+class _CurDba(_Cur):
+    def __init__(self, dba_trig=None, dba_error=None, **kw):
+        super().__init__(**kw)
+        self.dba_trig, self.dba_error = dba_trig, dba_error
+
+    def execute(self, sql, params=None):
+        s = " ".join(sql.split()).lower()
+        if "dba_triggers" in s:
+            self.calls.append((s, params))
+            if self.dba_error:
+                raise self.dba_error
+            self._rows = [self.dba_trig] if self.dba_trig else []
+            return
+        return super().execute(sql, params)
+
+
+def test_unsichtbar_aber_dba_sicht_liefert_zustand():
+    conn = _Conn(_CurDba(user="SLIM", tables=(), synonym="V8LIVE", trig=None, dba_trig=("V8LIVE", "DISABLED")))
+    st = read_state(conn)
+    assert st["state"] == "inaktiv" and st["owner"] == "V8LIVE"
+    assert st["grant_sql"] == "GRANT ALTER ANY TRIGGER TO SLIM;"
+
+
+def test_unsichtbar_dba_sicht_kein_trigger_ist_fehlt():
+    conn = _Conn(_CurDba(user="SLIM", tables=(), synonym="V8LIVE", trig=None, dba_trig=None))
+    assert read_state(conn)["state"] == "fehlt"
+
+
+def test_unsichtbar_ohne_dba_sicht_nennt_beide_grants():
+    conn = _Conn(_CurDba(user="SLIM", tables=(), synonym="V8LIVE", trig=None,
+                         dba_error=RuntimeError("ORA-00942: table or view does not exist")))
+    st = read_state(conn)
+    assert st["state"] == "nicht_pruefbar"
+    assert st["grant_sql"] == "GRANT SELECT ON SYS.DBA_TRIGGERS TO SLIM;\nGRANT ALTER ANY TRIGGER TO SLIM;"

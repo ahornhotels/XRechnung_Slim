@@ -163,3 +163,9 @@ def test_doku_nennt_schalter_und_bt10():
         assert txt in inst, txt
     assert "Verarbeitung (Normalbetrieb oder Pause)" not in inst
     assert "bt10_freitext1" in (root / "README.md").read_text(encoding="utf-8")
+
+
+def test_nav_nicht_pruefbar_mit_grant_zeigt_dialog():
+    src = (FRONT / "nav.js").read_text(encoding="utf-8")
+    assert "SYS.DBA_TRIGGERS" not in src           # Text kommt vom Server (grant_sql)
+    assert 'zustand.state === "nicht_pruefbar" && !zustand.grant_sql' in src

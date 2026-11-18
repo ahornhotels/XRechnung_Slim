@@ -81,7 +81,7 @@
     const [label, klasse] = ANZEIGE[zustand.state] || ANZEIGE.nicht_pruefbar;
     b.textContent = label;
     b.className = "schalter " + klasse;
-    b.disabled = rolle !== "verwalten" || zustand.state === "nicht_pruefbar";
+    b.disabled = rolle !== "verwalten" || (zustand.state === "nicht_pruefbar" && !zustand.grant_sql);
     b.title = zustand.error ? zustand.error : "";
   }
 
@@ -96,6 +96,14 @@
 
   async function klick() {
     if (!zustand || rolle !== "verwalten") return;
+    if (zustand.state === "nicht_pruefbar" && !zustand.grant_sql) return;
+    if (zustand.state === "nicht_pruefbar") {
+      dialog(`<h3>XRechnung nicht prüfbar</h3><p>Der Trigger gehört einem anderen Datenbankbenutzer und ist
+              für den App-Benutzer nicht sichtbar. Die App arbeitet wie bisher weiter. Damit der Schalter
+              funktioniert, muss der Datenbank-Administrator einmal ausführen:</p><pre>${esc(zustand.grant_sql)}</pre>`,
+             [kopieren(zustand.grant_sql), ["Schließen"]]);
+      return;
+    }
     if (zustand.state === "fehlt") {
       let sql = "";
       try { sql = (await (await fetch("/api/trigger-sql")).json()).sql || ""; } catch (e) {}

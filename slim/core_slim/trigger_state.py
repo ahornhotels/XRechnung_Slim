@@ -76,8 +76,29 @@ def read_state(conn) -> dict:
         elif owner == user:
             out["state"] = "fehlt"
         else:
-            out["error"] = ("Trigger nicht sichtbar - WMAI gehoert einem anderen "
-                            "Datenbankbenutzer")
+            # ALL_TRIGGERS zeigt fremde Trigger auf fremden Tabellen nicht. Mit
+            # Leserecht auf DBA_TRIGGERS ist der Zustand trotzdem pruefbar.
+            try:
+                cur.execute(
+                    "SELECT owner, status FROM sys.dba_triggers WHERE trigger_name = :n "
+                    "AND table_name = :t AND table_owner = :o",
+                    {"n": TRIGGER_NAME, "t": _TABLE, "o": owner or user},
+                )
+                dba = cur.fetchone()
+            except Exception as e:
+                out["error"] = ("Trigger nicht sichtbar - WMAI gehoert einem anderen "
+                                f"Datenbankbenutzer ({str(e)[:200]})")
+                out["grant_sql"] = (f"GRANT SELECT ON SYS.DBA_TRIGGERS TO {user};\n"
+                                    f"GRANT ALTER ANY TRIGGER TO {user};")
+                return out
+            if dba:
+                out["owner"] = str(dba[0])
+                out["state"] = {"ENABLED": "aktiv", "DISABLED": "inaktiv"}.get(
+                    str(dba[1] or "").upper(), "nicht_pruefbar")
+                if out["owner"] != user:
+                    out["grant_sql"] = f"GRANT ALTER ANY TRIGGER TO {user};"
+            else:
+                out["state"] = "fehlt"
     except Exception as e:  # jede DB-Stoerung = nicht pruefbar, nie "fehlt"
         logger.warning("Triggerzustand nicht lesbar: %s", e)
         out["state"] = "nicht_pruefbar"
