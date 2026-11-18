@@ -323,6 +323,11 @@ def test_liste_liest_unveraenderte_monate_nicht_neu(client, monkeypatch):
     archive_api._BUCKET_CACHE.clear()
     for i in range(3):
         _archive(tmp_path, f"90000{i}", _inv(f"90000{i}", "2026-11-01"))
+    bucket = tmp_path / "xml" / "2026" / "11"
+    if not bucket.is_dir():
+        bucket = next(d for d in (tmp_path / "xml").glob("*/*") if d.is_dir())
+    alt = 1_700_000_000
+    os.utime(bucket, (alt, alt))                    # Ordner laenger nicht geaendert
     calls = []
     orig = archive_fs.ensure_meta
     monkeypatch.setattr(archive_fs, "ensure_meta", lambda p, idx: calls.append(p) or orig(p, idx))
@@ -341,3 +346,18 @@ def test_nachtrag_im_hintergrund(tmp_path):
     assert archive_fs.nachtragen(tmp_path) == 1
     assert Path(r["xml_path"]).with_suffix(".meta.json").exists()
     assert archive_fs.nachtragen(tmp_path) == 0
+
+
+def test_frisch_geaenderter_monat_wird_nicht_zwischengespeichert(client, monkeypatch):
+    # Windows-Zeitstempel sind grob: kommt eine Datei im selben Zeitschritt
+    # wie das Lesen hinzu, aendert sich die Ordnerzeit nicht. Ein gerade erst
+    # geaenderter Ordner darf deshalb nicht zwischengespeichert werden.
+    c, tmp_path = client
+    archive_api._BUCKET_CACHE.clear()
+    _archive(tmp_path, "900001", _inv("900001", "2026-11-01"))
+    bucket = next(d for d in (tmp_path / "xml").glob("*/*") if d.is_dir())
+    jetzt = bucket.stat().st_mtime
+    assert c.get("/api/archive").json()["count"] == 1
+    _archive(tmp_path, "900002", _inv("900002", "2026-11-01"))
+    os.utime(bucket, (jetzt, jetzt))                # gleicher Zeitschritt
+    assert c.get("/api/archive").json()["count"] == 2

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -85,6 +86,7 @@ def _echt(p: Path) -> Optional[bool]:
 # sich der Ordner aendert (neue, umbenannte oder ersetzte Datei). So liest
 # nicht jeder Seitenaufruf Zehntausende Metadateien neu.
 _BUCKET_CACHE: dict = {}
+_RACY_NS = 2_000_000_000
 
 
 def _entry(p: Path, root: Path, meta: dict) -> dict:
@@ -143,7 +145,12 @@ def _bucket_entries(bucket: Path, root: Path, index: dict) -> list:
         sig = bucket.stat().st_mtime_ns      # ensure_meta kann Metadateien angelegt haben
     except OSError:
         return entries
-    _BUCKET_CACHE[key] = (sig, entries)
+    # Nur Ordner merken, die laenger nicht geaendert wurden: Windows-Zeitstempel
+    # sind grob, eine Datei aus demselben Zeitschritt waere sonst unsichtbar.
+    if time.time_ns() - sig > _RACY_NS:
+        _BUCKET_CACHE[key] = (sig, entries)
+    else:
+        _BUCKET_CACHE.pop(key, None)
     return entries
 
 
