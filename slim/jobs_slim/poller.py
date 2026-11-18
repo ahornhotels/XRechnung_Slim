@@ -264,6 +264,7 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 # Anhang, ein Retry passt also.
                 arch = archive_fs.save_xml(
                     data_dir, zinv_number, xml, filename=filename,
+                    meta={"wmai_id": wmai_id, "empfaenger": row.get("to") or ""},
                 )
 
                 # Ein zuvor gescheiterter, jetzt geglueckter Retry raeumt
@@ -296,6 +297,10 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 # hat ihren Zweck erfüllt, und sollte nicht versehentlich
                 # bei einer Folge-WMAI mit gleicher ID nochmal angewandt werden.
                 had_override = overrides.delete(data_dir, wmai_id)
+                try:
+                    archive_fs.mark_sent(arch["xml_path"], wmai_id, row.get("to") or "")
+                except Exception:
+                    logger.exception("Archiv-Status nicht schreibbar (wmai=%s)", wmai_id)
                 audit_jsonl.record_safe(
                     data_dir, "attach_ok",
                     wmai_id=wmai_id, zinv_number=zinv_number,

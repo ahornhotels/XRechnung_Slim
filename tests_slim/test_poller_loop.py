@@ -487,3 +487,41 @@ def test_triggerabfrage_fehler_arbeitet_weiter(tmp_path, mocked_db, _reset_trigg
         s = poller.run_once(data_dir=tmp_path)
     assert s["skipped_trigger"] is False
     fp.assert_called_once()
+
+
+# ── Archiv-Metadaten ──
+
+def _attach_run(tmp_path, mocked_db, attach):
+    cm, _ = mocked_db
+    with patch.object(poller, "load_hotel_config", return_value=_mock_hotel_cfg(
+            filename_pattern="", subject_pattern=r"Rechnung Nr\.?\s*(?P<zinv_number>\d+)")), \
+         patch.object(poller, "get_connection", return_value=cm), \
+         patch.object(poller.trigger_state, "read_state", return_value=_trig("aktiv")), \
+         patch.object(poller, "find_pending_wmai",
+                      return_value=[_wmai_row(101, "x.pdf", "Ihre Rechnung Nr. 900001",
+                                              to="buchhaltung@example.com")]), \
+         patch.object(poller.invoice_fetcher, "find_zinv_id_by_number", return_value=999), \
+         patch.object(poller.invoice_fetcher, "fetch_invoice",
+                      return_value={"zinv_id": 999, "header": {"id": "900001"}, "lines": [], "totals": {}}), \
+         patch.object(poller.invoice_validator, "validate", return_value=[]), \
+         patch.object(poller.xml_builder, "build_and_validate", return_value=b"<Invoice>OK</Invoice>"), \
+         patch.object(poller.kosit_validator, "validate"), \
+         patch.object(poller, "get_wmai_error", return_value=None), \
+         patch.object(poller, "set_wmai_error"), \
+         patch.object(poller, "attach_xml_to_wmai", **attach):
+        poller.run_once(data_dir=tmp_path)
+    metas = list((tmp_path / "xml").rglob("*.meta.json"))
+    assert len(metas) == 1
+    return json.loads(metas[0].read_text(encoding="utf-8"))
+
+
+def test_poller_schreibt_meta_und_markiert_gesendet(tmp_path, mocked_db, _reset_trigger_merker):
+    m = _attach_run(tmp_path, mocked_db,
+                    {"return_value": {"wmaa_id": 7, "wtxt_id": 8, "wmai_id": 101}})
+    assert m["status"] == "gesendet" and m["wmai_id"] == 101
+    assert m["empfaenger"] == "buchhaltung@example.com" and m["angehaengt_am"]
+
+
+def test_poller_attach_fehler_bleibt_archiviert(tmp_path, mocked_db, _reset_trigger_merker):
+    m = _attach_run(tmp_path, mocked_db, {"side_effect": RuntimeError("WMAI weg")})
+    assert m["status"] == "archiviert"

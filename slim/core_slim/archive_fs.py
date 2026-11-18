@@ -21,12 +21,15 @@ die neue Datei nimmt den Hauptnamen ein.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from slim.core_slim import xml_fakten
 from slim.core_slim.clock import now_local
 
 logger = logging.getLogger(__name__)
@@ -80,8 +83,9 @@ def save_xml(
     kosit_report: Optional[bytes] = None,
     now: Optional[datetime] = None,
     filename: Optional[str] = None,
+    meta: Optional[dict] = None,
 ) -> dict:
-    """Speichert XML + SHA256-Seitendatei (+ optional KoSIT-Report).
+    """Speichert XML + SHA256-Seitendatei + Metadaten (+ optional KoSIT-Report).
 
     Args:
         filename: Fertiger Dateiname aus dem Anhang-Template (z.B.
@@ -105,6 +109,8 @@ def save_xml(
     sha_path = bucket / f"{safe}.sha256"
     kosit_path = bucket / f"{safe}.kosit-report.xml" if kosit_report is not None else None
 
+    meta_path = bucket / f"{safe}.meta.json"
+
     renamed: Optional[str] = None
     if xml_path.exists():
         ts = (now or now_local()).strftime("%Y%m%dT%H%M%S")
@@ -112,7 +118,17 @@ def save_xml(
         try:
             xml_path.rename(rename_to)
             renamed = str(rename_to)
-        except OSError:
+            # Pruefwert und Metadaten gehoeren zu IHRER Version - mit umbenennen,
+            # sonst ueberschreibt die neue Version sie und die alte ist nicht
+            # mehr als unveraendert nachweisbar.
+            if sha_path.exists():
+                old_digest = sha_path.read_text(encoding="utf-8").split()[0]
+                rename_to.with_suffix(".sha256").write_text(
+                    f"{old_digest}  {rename_to.name}\n", encoding="utf-8")
+                sha_path.unlink()
+            if meta_path.exists():
+                meta_path.rename(rename_to.with_suffix(".meta.json"))
+        except (OSError, IndexError):
             logger.exception(
                 "Konnte existierende XML-Datei nicht umbenennen: %s", xml_path
             )
@@ -121,6 +137,9 @@ def save_xml(
     digest = hashlib.sha256(xml_bytes).hexdigest()
     # SHA256-Format wie `sha256sum`: "<hex>  <filename>"
     sha_path.write_text(f"{digest}  {xml_path.name}\n", encoding="utf-8")
+    _write_meta(meta_path, {**xml_fakten.lies(xml_bytes), **(meta or {}),
+                            "status": "archiviert",
+                            "archiviert_am": (now or now_local()).isoformat()})
 
     if kosit_path is not None:
         # KoSIT-Report ggf. bestehender Datei überlassen → bei Konflikt
@@ -141,6 +160,80 @@ def save_xml(
         "kosit_path": str(kosit_path) if kosit_path else None,
         "renamed_existing": renamed,
     }
+
+
+def _write_meta(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_meta(path: Path) -> Optional[dict]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def meta_path(xml_path) -> Path:
+    return Path(xml_path).with_suffix(".meta.json")
+
+
+def mark_sent(xml_path, wmai_id: int, empfaenger: str, now: Optional[datetime] = None) -> None:
+    """Nach geglücktem Anhängen: Status 'gesendet' mit Zeitpunkt und Empfänger."""
+    p = meta_path(xml_path)
+    data = _read_meta(p) or {}
+    data.update(status="gesendet", angehaengt_am=(now or now_local()).isoformat(),
+                wmai_id=wmai_id, empfaenger=empfaenger)
+    _write_meta(p, data)
+
+
+def norm_path(p) -> str:
+    return os.path.normcase(os.path.abspath(str(p)))
+
+
+def sent_index(data_dir: Path) -> dict:
+    """attach_ok-Einträge aller Audit-Dateien: normalisierter xml_path ->
+    {angehaengt_am, wmai_id}. Für Archivdateien aus der Zeit vor den Metadaten."""
+    out: dict = {}
+    for f in sorted(Path(data_dir).glob("audit-*.jsonl")):
+        try:
+            lines = f.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("event") != "attach_ok":
+                continue
+            xp = (e.get("details") or {}).get("xml_path")
+            if xp:
+                out[norm_path(xp)] = {"angehaengt_am": e.get("ts"), "wmai_id": e.get("wmai_id")}
+    return out
+
+
+def ensure_meta(xml_path: Path, index: dict) -> dict:
+    """Metadaten lesen; fehlen sie (Bestandsdatei), einmalig aus XML + Audit anlegen."""
+    p = meta_path(xml_path)
+    data = _read_meta(p)
+    if data is not None:
+        return data
+    try:
+        facts = xml_fakten.lies(Path(xml_path).read_bytes())
+    except OSError:
+        facts = {}
+    hit = index.get(norm_path(xml_path))
+    data = {**facts, "status": "gesendet" if hit else "archiviert", "nachgetragen": True}
+    if hit:
+        data.update(hit)
+    try:
+        _write_meta(p, data)
+    except OSError:
+        logger.exception("Metadaten nicht schreibbar: %s", p)
+    return data
 
 
 def save_invalid_xml(

@@ -232,3 +232,69 @@ def test_delete_invalid_removes_xml_and_error(tmp_path):
 def test_delete_invalid_noop_when_absent(tmp_path):
     # Darf nicht crashen, wenn es nie eine Fehler-XML gab
     assert archive_fs.delete_invalid(tmp_path, "nie-dagewesen") == 0
+
+
+# ── Metadaten je XML (Archiv fuer Pruefer) ──
+
+import json as _json
+
+from tests_slim.test_xml_fakten import RECHNUNG
+
+
+def _meta(xml_path):
+    return _json.loads(Path(xml_path).with_suffix(".meta.json").read_text(encoding="utf-8"))
+
+
+def test_save_xml_schreibt_meta(tmp_path):
+    r = archive_fs.save_xml(tmp_path, "900001", RECHNUNG,
+                            meta={"wmai_id": 5, "empfaenger": "buchhaltung@example.com"})
+    m = _meta(r["xml_path"])
+    assert m["status"] == "archiviert" and m["archiviert_am"]
+    assert m["rechnung"] == "900001" and m["rechnungsdatum"] == "2026-11-14"
+    assert m["wmai_id"] == 5 and m["empfaenger"] == "buchhaltung@example.com"
+
+
+def test_mark_sent(tmp_path):
+    r = archive_fs.save_xml(tmp_path, "900001", RECHNUNG)
+    archive_fs.mark_sent(r["xml_path"], 5, "a@example.com")
+    m = _meta(r["xml_path"])
+    assert m["status"] == "gesendet" and m["angehaengt_am"]
+    assert m["wmai_id"] == 5 and m["empfaenger"] == "a@example.com"
+
+
+def test_version_behaelt_eigenen_hash(tmp_path):
+    import hashlib as _h
+    a = archive_fs.save_xml(tmp_path, "900001", b"<v1/>", meta={"wmai_id": 1})
+    b = archive_fs.save_xml(tmp_path, "900001", b"<v2/>", meta={"wmai_id": 2})
+    old = Path(b["renamed_existing"])
+    sha_old = old.with_suffix(".sha256").read_text(encoding="utf-8").split()
+    assert sha_old == [_h.sha256(b"<v1/>").hexdigest(), old.name]
+    assert _meta(old)["wmai_id"] == 1
+    assert _meta(a["xml_path"])["wmai_id"] == 2      # Hauptname = neue Version
+
+
+def test_ensure_meta_bestand_gesendet(tmp_path):
+    r = archive_fs.save_xml(tmp_path, "900001", RECHNUNG)
+    Path(r["xml_path"]).with_suffix(".meta.json").unlink()
+    idx = {archive_fs.norm_path(r["xml_path"]): {"angehaengt_am": "2026-11-14T09:12:00+01:00", "wmai_id": 9}}
+    m = archive_fs.ensure_meta(Path(r["xml_path"]), idx)
+    assert m["status"] == "gesendet" and m["wmai_id"] == 9 and m["rechnungsdatum"] == "2026-11-14"
+    assert Path(r["xml_path"]).with_suffix(".meta.json").exists()
+    # zweiter Aufruf liest die Datei, Index egal
+    assert archive_fs.ensure_meta(Path(r["xml_path"]), {})["status"] == "gesendet"
+
+
+def test_ensure_meta_bestand_ohne_audit(tmp_path):
+    r = archive_fs.save_xml(tmp_path, "900001", RECHNUNG)
+    Path(r["xml_path"]).with_suffix(".meta.json").unlink()
+    assert archive_fs.ensure_meta(Path(r["xml_path"]), {})["status"] == "archiviert"
+
+
+def test_sent_index_aus_audit(tmp_path):
+    from slim.core_slim import audit_jsonl
+    audit_jsonl.record(tmp_path, "attach_ok", wmai_id=3, zinv_number="900001",
+                       details={"xml_path": str(tmp_path / "xml" / "x.xml")})
+    audit_jsonl.record(tmp_path, "kosit_fail", wmai_id=4, details={"error": "x"})
+    idx = archive_fs.sent_index(tmp_path)
+    assert list(idx) == [archive_fs.norm_path(tmp_path / "xml" / "x.xml")]
+    assert idx[archive_fs.norm_path(tmp_path / "xml" / "x.xml")]["wmai_id"] == 3
