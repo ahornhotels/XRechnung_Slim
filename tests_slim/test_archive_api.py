@@ -316,3 +316,28 @@ def test_liste_korrigiert_archiviert_bei_attach_ok(client):
     assert item["status"] == "gesendet" and item["angehaengt_am"]
     meta = _json.loads(Path(r["xml_path"]).with_suffix(".meta.json").read_text(encoding="utf-8"))
     assert meta["status"] == "gesendet" and meta["wmai_id"] == 7
+
+
+def test_liste_liest_unveraenderte_monate_nicht_neu(client, monkeypatch):
+    c, tmp_path = client
+    archive_api._BUCKET_CACHE.clear()
+    for i in range(3):
+        _archive(tmp_path, f"90000{i}", _inv(f"90000{i}", "2026-11-01"))
+    calls = []
+    orig = archive_fs.ensure_meta
+    monkeypatch.setattr(archive_fs, "ensure_meta", lambda p, idx: calls.append(p) or orig(p, idx))
+    assert c.get("/api/archive").json()["count"] == 3
+    first = len(calls)
+    assert first == 3
+    assert c.get("/api/archive").json()["count"] == 3
+    assert len(calls) == first                      # Monat unveraendert: nichts neu gelesen
+    _archive(tmp_path, "900009", _inv("900009", "2026-11-02"))
+    assert c.get("/api/archive").json()["count"] == 4
+
+
+def test_nachtrag_im_hintergrund(tmp_path):
+    r = archive_fs.save_xml(tmp_path, "900001", _inv("900001", "2026-11-01"))
+    Path(r["xml_path"]).with_suffix(".meta.json").unlink()
+    assert archive_fs.nachtragen(tmp_path) == 1
+    assert Path(r["xml_path"]).with_suffix(".meta.json").exists()
+    assert archive_fs.nachtragen(tmp_path) == 0

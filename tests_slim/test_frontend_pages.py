@@ -169,3 +169,9 @@ def test_nav_nicht_pruefbar_mit_grant_zeigt_dialog():
     src = (FRONT / "nav.js").read_text(encoding="utf-8")
     assert "SYS.DBA_TRIGGERS" not in src           # Text kommt vom Server (grant_sql)
     assert 'zustand.state === "nicht_pruefbar" && !zustand.grant_sql' in src
+
+
+def test_start_traegt_archiv_im_hintergrund_nach():
+    import inspect
+    import slim.main_slim as m
+    assert "archive_fs.nachtragen" in inspect.getsource(m)

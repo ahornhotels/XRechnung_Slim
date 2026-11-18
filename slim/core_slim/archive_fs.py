@@ -289,6 +289,25 @@ def ensure_meta(xml_path: Path, index: dict) -> dict:
     return data
 
 
+def nachtragen(data_dir: Path) -> int:
+    """Metadaten aller Bestandsdateien einmalig anlegen (beim Dienststart im
+    Hintergrund), damit der erste Archivaufruf nach dem Update nicht alle
+    Alt-XMLs im Request parsen muss. Liefert die Zahl nachgetragener Dateien."""
+    root = Path(data_dir) / "xml"
+    if not root.exists():
+        return 0
+    index = None
+    count = 0
+    for p in root.rglob("*.xml"):
+        if p.name.endswith(".kosit-report.xml") or meta_path(p).exists():
+            continue
+        if index is None:
+            index = sent_index(data_dir)
+        ensure_meta(p, index)
+        count += 1
+    return count
+
+
 def save_invalid_xml(
     data_dir: Path,
     zinv_number: str,

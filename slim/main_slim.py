@@ -30,6 +30,7 @@ _SLIM_DIR = Path(__file__).resolve().parent
 os.environ["SUITE8_CONFIG_DIR"] = str(_SLIM_DIR / "config")
 
 import logging
+import threading
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
@@ -199,6 +200,17 @@ def _run_poller_safely():
 async def _startup():
     state = status_api.get_state()
     state["data_dir"] = DATA_DIR
+
+    # Archiv-Metadaten fuer Bestandsdateien im Hintergrund nachtragen
+    def _archiv_nachtragen():
+        from slim.core_slim import archive_fs
+        try:
+            n = archive_fs.nachtragen(DATA_DIR)
+            if n:
+                logger.info("Archiv: Metadaten fuer %d Bestandsdateien nachgetragen", n)
+        except Exception:
+            logger.exception("Archiv-Nachtrag fehlgeschlagen")
+    threading.Thread(target=_archiv_nachtragen, name="archiv-nachtrag", daemon=True).start()
     try:
         cfg = load_hotel_config()
         interval = int(cfg.get("suite8_poll_interval_seconds", 30))

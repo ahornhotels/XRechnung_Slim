@@ -81,6 +81,77 @@ def _echt(p: Path) -> Optional[bool]:
     return hashlib.sha256(p.read_bytes()).hexdigest() == expected
 
 
+# Je Monatsordner (xml/JJJJ/MM) die fertig gelesenen Eintraege, gueltig bis
+# sich der Ordner aendert (neue, umbenannte oder ersetzte Datei). So liest
+# nicht jeder Seitenaufruf Zehntausende Metadateien neu.
+_BUCKET_CACHE: dict = {}
+
+
+def _entry(p: Path, root: Path, meta: dict) -> dict:
+    stat = p.stat()
+    rel = p.relative_to(root)
+    kosit = p.with_name(f"{p.stem}.kosit-report.xml")
+    has_kosit = kosit.is_file()
+    return {
+        "rechnung": meta.get("rechnung"),
+        "rechnungsdatum": meta.get("rechnungsdatum"),
+        "art": meta.get("art"),
+        "betrag": meta.get("betrag"),
+        "waehrung": meta.get("waehrung"),
+        "empfaenger": meta.get("empfaenger"),
+        "angehaengt_am": meta.get("angehaengt_am"),
+        "status": _status(meta),
+        "_meta_status": meta.get("status"),
+        "version": bool(archive_fs._VERSIONED_SUFFIX.search(p.name)),
+        "kosit_report": kosit.relative_to(root).as_posix() if has_kosit else None,
+        "name": p.name,
+        "rel_path": rel.as_posix(),
+        "bucket": rel.parent.as_posix(),
+        "size": stat.st_size,
+        "mtime": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(),
+        "_ts": stat.st_mtime,
+        "has_sha256": p.with_suffix(".sha256").exists(),
+        "has_kosit_report": has_kosit,
+    }
+
+
+def _bucket_entries(bucket: Path, root: Path, index: dict) -> list:
+    key = archive_fs.norm_path(bucket)
+    try:
+        sig = bucket.stat().st_mtime_ns
+    except OSError:
+        return []
+    cached = _BUCKET_CACHE.get(key)
+    if cached and cached[0] == sig:
+        entries = cached[1]
+        # Noch nicht als gesendet belegte Dateien gegen das Protokoll pruefen
+        # (z. B. Statusdatei konnte nach dem Anhaengen nicht geschrieben werden)
+        for i, e in enumerate(entries):
+            if e["_meta_status"] == "archiviert" and index:
+                p = root / e["rel_path"]
+                if p.is_file():
+                    meta = archive_fs.ensure_meta(p, index)
+                    if meta.get("status") != "archiviert":
+                        entries[i] = _entry(p, root, meta)
+        return entries
+    entries = []
+    for p in sorted(bucket.glob("*.xml")):
+        if not p.is_file() or p.name.endswith(".kosit-report.xml"):
+            continue
+        entries.append(_entry(p, root, archive_fs.ensure_meta(p, index)))
+    try:
+        sig = bucket.stat().st_mtime_ns      # ensure_meta kann Metadateien angelegt haben
+    except OSError:
+        return entries
+    _BUCKET_CACHE[key] = (sig, entries)
+    return entries
+
+
+def _all_entries(root: Path, index: dict):
+    for bucket in sorted(d for d in root.glob("*/*") if d.is_dir()):
+        yield from _bucket_entries(bucket, root, index)
+
+
 def _status(meta: dict) -> str:
     if meta.get("status") == "gesendet":
         return "gesendet"
@@ -106,49 +177,18 @@ def list_archive(
         return {"items": [], "count": 0}
 
     needle = (q or "").lower()
-    index = None
+    index = archive_fs.sent_index(Path(state["data_dir"]))
     items = []
-    for p in root.rglob("*.xml"):
-        if not p.is_file() or p.name.endswith(".kosit-report.xml"):
+    for e in _all_entries(root, index):
+        nr = str(e["rechnung"] or "")
+        if needle and needle not in e["name"].lower() and needle not in nr.lower():
             continue
-        if index is None:
-            index = archive_fs.sent_index(Path(state["data_dir"]))
-        meta = archive_fs.ensure_meta(p, index)
-        nr = str(meta.get("rechnung") or "")
-        if needle and needle not in p.name.lower() and needle not in nr.lower():
-            continue
-        rd = meta.get("rechnungsdatum")
+        rd = e["rechnungsdatum"]
         if (von or bis) and not rd:
             continue
         if von and rd < von or bis and rd > bis:
             continue
-        stat = p.stat()
-        rel = p.relative_to(root)
-        kosit = p.with_name(f"{p.stem}.kosit-report.xml")
-        items.append({
-            "rechnung": meta.get("rechnung"),
-            "rechnungsdatum": rd,
-            "art": meta.get("art"),
-            "betrag": meta.get("betrag"),
-            "waehrung": meta.get("waehrung"),
-            "empfaenger": meta.get("empfaenger"),
-            "angehaengt_am": meta.get("angehaengt_am"),
-            "status": _status(meta),
-            "version": bool(archive_fs._VERSIONED_SUFFIX.search(p.name)),
-            "kosit_report": kosit.relative_to(root).as_posix() if kosit.is_file() else None,
-            "name": p.name,
-            "rel_path": rel.as_posix(),
-            "bucket": rel.parent.as_posix(),
-            "size": stat.st_size,
-            "mtime": datetime.fromtimestamp(
-                stat.st_mtime
-            ).astimezone().isoformat(),
-            "_ts": stat.st_mtime,
-            "has_sha256": p.with_suffix(".sha256").exists(),
-            "has_kosit_report": p.with_name(
-                f"{p.stem}.kosit-report.xml"
-            ).exists(),
-        })
+        items.append(dict(e))
 
     # Je Rechnungsnummer die zuletzt gesendete Version markieren
     latest: dict = {}
@@ -163,6 +203,7 @@ def list_archive(
     items = _sort_items(items)[:limit]
     for i in items:
         i.pop("_ts", None)
+        i.pop("_meta_status", None)
         i["echt"] = _echt(root / i["rel_path"])
     return {"items": items, "count": len(items)}
 
