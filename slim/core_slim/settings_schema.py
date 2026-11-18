@@ -166,7 +166,9 @@ Suite8-Support.</li>
 _INFO_BT10 = """
 <h3>Woher die Käuferreferenz (BT-10) kommt</h3>
 <ol>
-<li><b>DXR-Mitgliedschaft</b> am Rechnungsempfänger – hat immer Vorrang.</li>
+<li><b>DXR-Mitgliedschaft</b> am Rechnungsempfänger – standardmäßig wird zuerst
+dieser Wert genommen (<b>Leitweg-ID bzw. Käuferreferenz</b>), wenn gefüllt. Sie hat
+immer Vorrang.</li>
 <li><b>Freitext 1 bis 4</b> aus dem Rechnungsfenster – nur die hier eingeschalteten.
 Die DXR-Mitgliedschaft hat immer Vorrang. Danach gilt der erste gefüllte eingeschaltete
 Freitext, in der Reihenfolge 1 → 4.</li>
@@ -201,10 +203,10 @@ SECTIONS: tuple[Section, ...] = (
         Setting("rundungsausgleich", H, "Rundungsausgleich je Steuersatz", "Suite8 rundet die Steuer je Buchung, dadurch passen Bemessung und Steuer nicht exakt zu den Positionen (manche Empfänger wie SAP lehnen das ab). abschlag (Standard) = Rest als Abschlag/Zuschlag „Rundungsausgleich“, alle Positionen wie in Suite8. position = Steuer je Satz vom Brutto neu, Rest von wenigen Cent in der größten Position. aus = Werte wie aus Suite8, kann von strengen Empfängern abgelehnt werden. Endbetrag bleibt immer gleich, die Steuer kann um Cent von Suite8 abweichen.", type="select", choices=("aus", "position", "abschlag"), default="abschlag", info=_INFO_RUNDUNGSAUSGLEICH),
     ), page="xrechnung"),
     Section("kaeuferreferenz", "Käuferreferenz (BT-10)", (
-        Setting("bt10_freitext1", H, "Freitext 1", "Erscheint immer als Hinweis (BT-22) in der XRechnung, eingeschaltet zusätzlich als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
-        Setting("bt10_freitext2", H, "Freitext 2", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
-        Setting("bt10_freitext3", H, "Freitext 3", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
-        Setting("bt10_freitext4", H, "Freitext 4", "Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext1", H, "Freitext 1", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint immer als Hinweis (BT-22) in der XRechnung, eingeschaltet zusätzlich als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext2", H, "Freitext 2", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext3", H, "Freitext 3", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+        Setting("bt10_freitext4", H, "Freitext 4", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
     ), page="xrechnung"),
     Section("pruefung", "Prüfung", (
         Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),
