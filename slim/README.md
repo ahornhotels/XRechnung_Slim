@@ -81,8 +81,10 @@ sieht den Wechsel evtl. eine Stunde verzögert.
 
 Jedes Haus nutzt ein anderes Mail-Template – die ZINV-Nummer kann
 im Betreff oder im Dateinamen stehen. **Beide Patterns sind in der Oberfläche
-editierbar** (Startseite, Abschnitt „Pattern-Konfiguration“, oder
-*Konfiguration XRechnung → Erkennung und Anhang*). Standard: Betreff mit
+editierbar** unter *Konfiguration XRechnung → Erkennung und Anhang*; direkt
+darunter erzeugt der Muster-Assistent das Betreff-Muster aus einem echten
+Betreff und testet es. Trigger-SQL und Mapping/SQL-Quellen stehen auf derselben
+Seite unter „Für Techniker / DBA“. Standard: Betreff mit
 `Rechnung Nr. <ZINV_NUMBER>`.
 
 **Wichtig:** Suite8 schreibt in den PDF-Dateinamen die `ZINV_ID` (interner
@@ -94,8 +96,8 @@ Standard-Pattern auf dem Betreff.
 
 Ablauf in der Oberfläche:
 1. Betreff-Pattern eintragen mit der Named-Group `(?P<zinv_number>\d+)`
-2. Im Block „Pattern testen“ ein Beispiel-Betreff eingeben
-3. Wenn die Oberfläche `Match: zinv_number=XXXXX (aus subject)` meldet → Speichern
+2. Im Block „Muster testen“ ein Beispiel-Betreff eingeben
+3. Wenn die Oberfläche `Erkannt: Rechnungsnummer XXXXX (aus Betreff)` meldet → bei „Erkennung und Anhang“ speichern
 4. Server-Neustart **nicht** nötig – wirkt im nächsten Poll-Lauf
 
 ## Pfad-Layout

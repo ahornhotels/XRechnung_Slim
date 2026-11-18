@@ -35,6 +35,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 system_router = APIRouter(prefix="/api/system", tags=["system"])
+# Fuer jede angemeldete Rolle: nur Beschreibungen und Standardwerte, keine Werte
+handbuch_router = APIRouter(prefix="/api/handbuch", tags=["handbuch"])
 
 # Verkaeuferdaten, die die XML aus Suite8-WUSS bezieht (sql/invoice_header.sql)
 SELLER_FIELDS = (
@@ -129,6 +131,22 @@ def get_settings(page: Optional[str] = None):
         for s in sec.settings:
             data = files.setdefault(s.file, _load(s.file))
             fields.append(_field_view(s, data))
+        out.append({"id": sec.id, "label": sec.label, "page": sec.page, "fields": fields})
+    return {"sections": out}
+
+
+@handbuch_router.get("/einstellungen")
+def handbuch_einstellungen():
+    """Alle Einstellungen fuer das Handbuch: Beschriftung, Erklaerung,
+    Standardwert. Liest bewusst keine Konfigdatei - aktuelle Werte und
+    Geheimnisse sieht nur die Rolle 'verwalten' auf den Einstellungsseiten."""
+    out = []
+    for sec in schema.SECTIONS:
+        fields = [{"key": x.key, "label": x.label, "help": x.help, "type": x.type,
+                   "restart": x.restart, "choices": list(x.choices), "info": x.info,
+                   "minimum": x.minimum, "maximum": x.maximum,
+                   "default": None if x.type == "secret" else x.default}
+                  for x in sec.settings]
         out.append({"id": sec.id, "label": sec.label, "page": sec.page, "fields": fields})
     return {"sections": out}
 

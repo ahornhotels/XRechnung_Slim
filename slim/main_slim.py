@@ -114,6 +114,7 @@ app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
 app.include_router(settings_api_module.router)
 app.include_router(settings_api_module.system_router)
+app.include_router(settings_api_module.handbuch_router)
 
 
 def _setup_done() -> bool:
@@ -158,6 +159,16 @@ async def settings_pages():
 @app.get("/archiv")
 async def archiv_page():
     return FileResponse(str(_SLIM_DIR / "frontend" / "archiv.html"))
+
+
+@app.get("/handbuch")
+async def handbuch_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "handbuch.html"))
+
+
+@app.get("/konfig_technik.js")
+async def konfig_technik_js():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "konfig_technik.js"), media_type="application/javascript")
 
 
 @app.get("/nav.js")
