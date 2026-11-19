@@ -113,8 +113,15 @@ def deposit_allowances(lines: list) -> tuple[list, list, list]:
     groups: dict = {}
     for ln in remaining:
         key = _cat_key(ln.get("classifiedtaxcategoryid"), ln.get("classifiedtaxcategorypercent"))
-        g = groups.setdefault(key, {"net": Decimal(0), "refs": []})
+        g = groups.setdefault(key, {"net": Decimal(0), "refs": [], "vat": Decimal(0)})
         g["net"] += _net(ln)
+        # Abgesetzte Steuer = was Suite8 je Anzahlung gebucht hat (Brutto - Netto).
+        # Netto x Satz auf die Summe weicht davon um Cents ab (Endbetrag).
+        try:
+            g["vat"] = (None if g["vat"] is None or ln.get("lineextensionamount") in (None, "")
+                        else g["vat"] + Decimal(str(ln["lineextensionamount"])) - _net(ln))
+        except (InvalidOperation, ValueError):
+            g["vat"] = None
         ref = (str(ln.get("depositinvoicenumber") or "").strip(), ln.get("depositinvoicedate"))
         if ref not in g["refs"]:
             g["refs"].append(ref)
@@ -128,7 +135,9 @@ def deposit_allowances(lines: list) -> tuple[list, list, list]:
         reason = (f"Abzüglich Anzahlungsrechnung{plural} "
                   + ", ".join(f"Nr. {nr} vom {_de_date(d)}" for nr, d in g_refs))
         allowances.append({"amount": str(-g["net"]), "category": cat,
-                           "percent": pct, "reason": reason})
+                           "percent": pct, "reason": reason,
+                           **({} if g["vat"] is None or str(cat).upper() != "S"
+                              else {"vatparts": str(g["vat"].quantize(Decimal("0.01")))})})
         for nr, d in g_refs:
             if nr and {"id": nr, "issuedate": d} not in refs:
                 refs.append({"id": nr, "issuedate": d})

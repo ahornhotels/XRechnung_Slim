@@ -148,32 +148,59 @@ def attach_xml_to_wmai(
         raise
 
 
-def find_pending_wmai(conn, limit: int = 50) -> list[dict]:
+_PENDING_SQL = """
+        SELECT WMAI_ID, WMAI_ATTACHMENT_FILE_NAME, WMAI_SUBJECT, WMAI_TO
+          FROM WMAI
+         WHERE WMAI_BLOCKSEND=1
+           AND WMAI_SENT=0{extra}
+         ORDER BY WMAI_ID
+         FETCH FIRST :lim ROWS ONLY
+        """
+
+
+def find_pending_wmai(conn, limit: int = 50, neue_zuerst: bool = False,
+                      nach_fehler_id: int = 0) -> list[dict]:
     """Sucht WMAI-Mails die auf einen XRechnung-Anhang warten.
 
     Kriterium: WMAI_BLOCKSEND=1 AND WMAI_SENT=0. Liefert die
     Felder die der Pattern-Parser braucht.
 
+    neue_zuerst=False: die aeltesten `limit` Mails nach WMAI_ID (Anzeige,
+    "Neu versuchen").
+
+    neue_zuerst=True (Poller): zuerst Mails ohne Fehlertext (WMAI_ERROR leer,
+    also neu oder zum erneuten Versuch freigegeben), die restlichen Plaetze
+    gehen reihum an Mails mit Fehlertext - weiter hinter `nach_fehler_id`,
+    am Ende wieder von vorn. So halten dauerhaft scheiternde Mails neuere
+    nicht auf und werden trotzdem regelmaessig neu versucht.
+
     Returns:
-        Liste von Dicts: {wmai_id, filename, subject, to}
+        Liste von Dicts: {wmai_id, filename, subject, to} - mit neue_zuerst
+        zusaetzlich hatte_fehler (bool).
     """
+    limit = int(limit)
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT WMAI_ID, WMAI_ATTACHMENT_FILE_NAME, WMAI_SUBJECT, WMAI_TO
-          FROM WMAI
-         WHERE WMAI_BLOCKSEND=1
-           AND WMAI_SENT=0
-         ORDER BY WMAI_ID
-         FETCH FIRST :lim ROWS ONLY
-        """,
-        {"lim": int(limit)},
-    )
-    rows = cur.fetchall()
-    return [
-        {"wmai_id": r[0], "filename": r[1] or "", "subject": r[2] or "", "to": r[3] or ""}
-        for r in rows
-    ]
+
+    def _hole(extra: str, binds: dict, **mehr) -> list[dict]:
+        if binds["lim"] <= 0:
+            return []
+        cur.execute(_PENDING_SQL.format(extra=extra), binds)
+        return [
+            {"wmai_id": r[0], "filename": r[1] or "", "subject": r[2] or "",
+             "to": r[3] or "", **mehr}
+            for r in cur.fetchall()
+        ]
+
+    if not neue_zuerst:
+        return _hole("", {"lim": limit})
+
+    nach = int(nach_fehler_id or 0)
+    out = _hole(" AND WMAI_ERROR IS NULL", {"lim": limit}, hatte_fehler=False)
+    out += _hole(" AND WMAI_ERROR IS NOT NULL AND WMAI_ID > :nach",
+                 {"lim": limit - len(out), "nach": nach}, hatte_fehler=True)
+    out += _hole(" AND WMAI_ERROR IS NOT NULL AND WMAI_ID <= :nach",
+                 {"lim": limit - len(out), "nach": nach}, hatte_fehler=True)
+    return out
 
 
 # Suchfenster hinter der Freigabegrenze: deckt ab, dass Slim bis zu einer Woche

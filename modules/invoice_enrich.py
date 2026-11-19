@@ -258,7 +258,17 @@ def _build_position(members: list[dict], multi: bool) -> dict:
     if str(pos.get("classifiedtaxcategoryid") or "").upper() in _ZERO_CATS:
         pct = Decimal(0)          # wie xml_builder._norm_z_pct: Z/E/O tragen keine Steuer
     if pct is not None:
-        pos["vatparts"] = str(sum((n * pct / 100).quantize(cent) for n in nets).quantize(cent))
+        # Steuer der Position = was Suite8 je Buchung gebucht hat (Brutto - Netto,
+        # das Netto kommt in sql/invoice_lines.sql aus dem Brutto). Netto x Satz
+        # weicht davon je Buchung um bis zu 1 Cent ab und verschiebt den
+        # Endbetrag, sobald der Builder die Steuer aus den Positionen neu aufbaut.
+        if pct == 0:
+            vat = Decimal(0)
+        elif any(_blank(m.get("lineextensionamount")) for m in members):
+            vat = sum((n * pct / 100).quantize(cent) for n in nets)
+        else:
+            vat = gross - net
+        pos["vatparts"] = str(Decimal(vat).quantize(cent))
     # Suite8 legt das Vorzeichen mal in die Menge, mal in den Preis (auch in
     # beide). Massgeblich ist der Betrag: Menge = sign(Betrag) * |Menge|,
     # der Preis wird dadurch immer positiv.
