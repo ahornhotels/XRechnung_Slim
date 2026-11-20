@@ -289,3 +289,19 @@ def test_gutschrift_mit_anzahlungszeilen_wird_geblockt():
     ], gross=-160.50, net=-150.00, tax=-10.50)
     issues = invoice_validator.validate(inv)
     assert any(i["field"] == "deposit" and i["severity"] == "error" for i in issues)
+
+
+def test_erstatteter_anzahlungsueberhang_weist_auszahlung_aus():
+    """Anzahlung hoeher als die Leistung, Ueberhang an den Gast ausgezahlt
+    (SPAY_CL 0): BT-113 = -Ueberhang, BT-115 = 0. Ohne BT-113 verletzt die
+    Rechnung BR-CO-16 (Zahlbetrag = Endbetrag - gezahlter Betrag)."""
+    inv = _invoice([
+        _line("Uebernachtung", 107.00, 100.00, 7),
+        _line("Deposit 7%", -108.07, -101.00, 7, ANZ_1),
+    ], gross=-1.07, net=-1.00, tax=-0.07)
+    inv["header"]["prepaidamount"], inv["header"]["payableamount"] = "-1.07", "0.00"
+    _, doc = _render(inv)
+    tot = doc.find("cac:LegalMonetaryTotal", NS)
+    assert tot.findtext("cbc:TaxInclusiveAmount", namespaces=NS) == "-1.07"
+    assert tot.findtext("cbc:PrepaidAmount", namespaces=NS) == "-1.07"
+    assert tot.findtext("cbc:PayableAmount", namespaces=NS) == "0.00"

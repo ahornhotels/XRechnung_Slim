@@ -174,7 +174,9 @@
     {% set _spay = (totals.spay_cl|default(0))|float %}
     {% set _prepaid = (header.get('prepaidamount') if header.get('prepaidamount') is not none else (_gross - _spay)) %}
     {% set _payable = (header.get('payableamount') if header.get('payableamount') is not none else _spay) %}
-    {% if _prepaid|float > 0 %}
+    {# Auch negativ: ein an den Gast ausgezahlter Anzahlungsueberhang ist ein
+       negativer gezahlter Betrag. Ohne BT-113 verletzt das BR-CO-16. #}
+    {% if (_prepaid|float)|abs >= 0.005 %}
     <cbc:PrepaidAmount currencyID="{{ header.documentcurrencycode }}">{{ _prepaid|fmt }}</cbc:PrepaidAmount>
     {% endif %}
     <cbc:PayableAmount currencyID="{{ header.documentcurrencycode }}">{{ _payable|fmt }}</cbc:PayableAmount>

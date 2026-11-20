@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 # (Default-Intervall 30s) holt den Rest.
 _PENDING_LIMIT_PER_RUN = 10
 
+# Stelle in der Reihe der bereits gescheiterten Mails (letzte WMAI_ID, die
+# erneut versucht wurde). Nur im Speicher: nach einem Neustart beginnt die
+# Reihe wieder vorn.
+_fehler_cursor = 0
+
 
 _letzter_trigger_state: Optional[str] = None
 
@@ -168,7 +173,15 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
             if tstate == "inaktiv":
                 summary["skipped_trigger"] = True
                 return summary
-            pending = find_pending_wmai(conn=conn, limit=_PENDING_LIMIT_PER_RUN)
+            # Neue Mails zuerst, gescheiterte reihum auf den restlichen
+            # Plaetzen - sonst blockieren zehn Dauerfehler alle neueren Mails.
+            global _fehler_cursor
+            pending = find_pending_wmai(conn=conn, limit=_PENDING_LIMIT_PER_RUN,
+                                        neue_zuerst=True,
+                                        nach_fehler_id=_fehler_cursor)
+            wiederholt = [r["wmai_id"] for r in pending if r.get("hatte_fehler")]
+            if wiederholt:
+                _fehler_cursor = wiederholt[-1]
     except Exception as e:
         logger.exception("Konnte Pending-WMAIs nicht abfragen")
         audit_jsonl.record_safe(
