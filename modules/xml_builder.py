@@ -696,15 +696,26 @@ def _make_positive_for_credit_note(invoice: dict) -> dict:
                 pass
         out["lines"].append(ln)
 
-    # Breakdown: taxableamount + taxamount abs()'d
+    # Breakdown: Betraege positiv - ausser die (schon umgedrehten) Positionen
+    # der Kategorie ergeben zusammen einen negativen Betrag. Bei einer
+    # gemischten Gutschrift (Erstattung 7 % minus Gebuehr 0 %) traegt die
+    # Gruppe der Gegenbuchung dann das Minus wie ihre Positionen, sonst
+    # passt die Gruppe nicht zur Positionssumme (BR-Z-08 / BR-S-08).
+    je_kategorie: dict = {}
+    for ln in out["lines"]:
+        key = _cat_key(ln.get("classifiedtaxcategoryid"), ln.get("classifiedtaxcategorypercent"))
+        je_kategorie[key] = je_kategorie.get(key, Decimal(0)) + _net_of(ln)
     out["tax_breakdown"] = []
     for b in norm_breakdown:
+        key = _cat_key(b.get("taxcategoryid"), b.get("taxcategorypercent"))
+        sign = Decimal(-1) if je_kategorie.get(key, Decimal(0)) < 0 else Decimal(1)
         for key in ("taxableamount", "taxamount"):
             v = b.get(key)
             if v is None:
                 continue
             try:
-                b[key] = str(abs(Decimal(str(v))))
+                d = abs(Decimal(str(v)))
+                b[key] = str(d * sign if d else d)      # kein "-0.00"
             except (InvalidOperation, ValueError):
                 pass
         out["tax_breakdown"].append(b)

@@ -95,3 +95,28 @@ def test_storno_datum_verlaengert_rechnungszeitraum_nicht():
     lines = ie.group_lines([_b(), _b(gross=-107.0, net=-100.0, qty=-1, unit=107.0, day="2026-03-10")], merge=True)
     ie.extend_invoice_period(h, lines)
     assert h["enddate"] == "2026-03-04"
+
+
+def test_gemischte_gutschrift_steuergruppe_behaelt_vorzeichen():
+    """Erstattung -255,00 (7 %) und Gebuehr +229,50 (0 %): Die Positionen
+    werden gemeinsam umgedreht, die Steuergruppe Z muss mit (-229,50) -
+    sonst BR-Z-08 (Gruppe = Summe der Positionen der Kategorie)."""
+    lines = [_b(item="Erstattung", gross=-255.0, net=-238.32, qty=-1, unit=255.0, code="ERS"),
+             _b(item="Gebuehr", gross=229.5, net=229.5, pct=0, code="GEB")]
+    inv = _base_invoice(3)
+    inv["lines"] = ie.group_lines(lines, merge=True)
+    inv["tax_breakdown"] = [
+        {"taxcategoryid": "S", "taxcategorypercent": "7.00", "taxableamount": "-238.32", "taxamount": "-16.68"},
+        {"taxcategoryid": "Z", "taxcategorypercent": "0.00", "taxableamount": "229.50", "taxamount": "0.00"}]
+    inv["totals"] = {"invoicegross": -25.5, "invoicenet": -8.82, "invoicetaxtotal": -16.68, "spay_cl": 0}
+    doc = etree.fromstring(xml_builder.render(inv))
+    gruppen = {s.findtext("cac:TaxCategory/cbc:ID", namespaces=NS): s.findtext("cbc:TaxableAmount", namespaces=NS)
+               for s in doc.findall("cac:TaxTotal/cac:TaxSubtotal", NS)}
+    assert gruppen == {"S": "238.32", "Z": "-229.50"}
+    assert b">-0.00<" not in xml_builder.render(inv)
+    je_kat = {}
+    for l in doc.findall("cac:CreditNoteLine", NS):
+        k = l.findtext("cac:Item/cac:ClassifiedTaxCategory/cbc:ID", namespaces=NS)
+        je_kat[k] = je_kat.get(k, Decimal(0)) + Decimal(l.findtext("cbc:LineExtensionAmount", namespaces=NS))
+    assert {k: str(v) for k, v in je_kat.items()} == gruppen
+    assert doc.findtext("cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount", namespaces=NS) == "25.50"
