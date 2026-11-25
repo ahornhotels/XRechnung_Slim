@@ -181,6 +181,40 @@ def _buyer_reference_aus_freitext(cur, zinv_id: int, aktiv: list[int]) -> Option
     return None
 
 
+# --- Kanal AHORN: Voucher-Nummer des Reiseveranstalters (BT-13) -------------
+# Die Nummer steht an der Reservierung (YRCF). Der Weg von der Rechnung zur
+# Reservierung laeuft ueber die Buchungen (ZPIL -> ZPOS_ORIGINATED_YRES_ID),
+# damit eine Sammelrechnung alle Reservierungen erfasst.
+_VOUCHER_SQL = """
+select distinct c.yrcf_voucherno
+  from zpil p, zpos z, yrcf c
+ where p.zpil_zinv_id = :zinv_id
+   and z.zpos_id = p.zpil_zpos_id
+   and z.zpos_cdt = 1
+   and c.yrcf_yres_id = z.zpos_originated_yres_id
+   and c.yrcf_voucherno is not null
+"""
+
+
+def _voucher_nummern(cur, zinv_id: int) -> Optional[str]:
+    """Voucher-Nummern aller Reservierungen der Rechnung, ohne Doppelte,
+    sortiert und durch Komma getrennt. None, wenn es keine gibt.
+
+    Fehlt Tabelle oder Spalte in dieser Suite8-Version, bleibt die Rechnung
+    ohne BT-13, statt zu haengen. Andere Datenbankfehler werden gemeldet."""
+    try:
+        cur.execute(_VOUCHER_SQL, {"zinv_id": zinv_id})
+        rows = cur.fetchall()
+    except Exception as e:
+        msg = str(e).upper()
+        if "ORA-00904" in msg or "ORA-00942" in msg:
+            logger.warning("Voucher-Nummer nicht lesbar (zinv_id=%s): %s", zinv_id, e)
+            return None
+        raise
+    nummern = sorted({str(r[0]).strip() for r in rows if r[0] is not None and str(r[0]).strip()})
+    return ", ".join(nummern) or None
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -344,6 +378,11 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         ref = _buyer_reference_aus_freitext(cur, zinv_id, _bt10_freitexte())
         if ref:
             header["buyerreference"] = ref
+
+        # Kanal AHORN: Voucher-Nummer des Reiseveranstalters als BT-13
+        voucher = _voucher_nummern(cur, zinv_id)
+        if voucher:
+            header["orderreferenceid"] = voucher
 
         lines = _fetch_lines(cur, zinv_id)
         # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel
