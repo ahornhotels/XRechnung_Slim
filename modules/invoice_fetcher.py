@@ -181,6 +181,112 @@ def _buyer_reference_aus_freitext(cur, zinv_id: int, aktiv: list[int]) -> Option
     return None
 
 
+# --- Bestellnummer des Kaeufers (BT-13) aus einem waehlbaren Suite8-Feld -----
+# Der Installer waehlt unter Konfiguration XRechnung -> Bestellnummer (BT-13)
+# ein Feld der Reservierung (YRES) oder ihrer Zusatzfelder (YRCF), z. B. die
+# Voucher-Nummer eines Reiseveranstalters. Gespeichert als "TABELLE.SPALTE",
+# leer = aus.
+BT13_FELD_STANDARD = ""
+
+# Tabelle -> Spalte, die auf die Reservierung zeigt
+_BT13_TABELLEN = {"YRES": "YRES_ID", "YRCF": "YRCF_YRES_ID"}
+_BT13_SPALTE = re.compile(r"[A-Z][A-Z0-9_]{0,29}")
+_BT13_TYPEN = {"VARCHAR2": "Text", "NVARCHAR2": "Text", "CHAR": "Text", "NUMBER": "Zahl"}
+
+
+def bt13_feld_pruefen(wert) -> Optional[tuple[str, str]]:
+    """'TABELLE.SPALTE' -> (Tabelle, Spalte). None fuer leer. ValueError, wenn
+    es keine der erlaubten Tabellen oder kein sauberer Spaltenname ist - der
+    Wert landet im SQL, deshalb gilt hier eine feste Positivliste."""
+    if wert is None or wert == "":
+        return None
+    tabelle, _, spalte = str(wert).partition(".")
+    if tabelle not in _BT13_TABELLEN or not _BT13_SPALTE.fullmatch(spalte):
+        raise ValueError("erwartet wird ein Feld der Tabellen YRES oder YRCF, z. B. YRCF.YRCF_VOUCHERNO")
+    return tabelle, spalte
+
+
+def _bt13_feld() -> Optional[tuple[str, str]]:
+    """Gewaehltes Feld aus hotel.json 'bt13_feld'; None = kein BT-13. Ein
+    ungueltiger Eintrag (von Hand geaendert) gilt als aus."""
+    hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
+    wert = hotel.get("bt13_feld", BT13_FELD_STANDARD)
+    if not isinstance(wert, str):
+        return None
+    try:
+        return bt13_feld_pruefen(wert.strip().upper())
+    except ValueError:
+        logger.warning("bt13_feld %r ist kein Feld aus YRES/YRCF - BT-13 bleibt leer", wert)
+        return None
+
+
+def bt13_feldauswahl() -> list[tuple[str, str]]:
+    """Text- und Zahlenfelder von YRES und YRCF, so wie sie diese Suite8 gerade
+    hat: [(Wert, Beschriftung)]. Nur SELECT auf den Datenkatalog. Ohne
+    Datenbank eine leere Liste."""
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "select table_name, column_name, data_type, data_length from user_tab_columns "
+                "where table_name in ('YRES', 'YRCF') order by table_name, column_name")
+            rows = cur.fetchall()
+    except Exception as e:
+        logger.warning("Felder fuer BT-13 nicht lesbar: %s", e)
+        return []
+    out = []
+    for tabelle, spalte, typ, laenge in rows:
+        art = _BT13_TYPEN.get(str(typ))
+        if not art or tabelle not in _BT13_TABELLEN or not _BT13_SPALTE.fullmatch(str(spalte)):
+            continue
+        out.append((f"{tabelle}.{spalte}", f"{tabelle}.{spalte} – {art}" + (f" ({laenge})" if art == "Text" else "")))
+    return sorted(out)
+
+
+# Der Weg von der Rechnung zur Reservierung laeuft ueber die Buchungen
+# (ZPIL -> ZPOS_ORIGINATED_YRES_ID), damit eine Sammelrechnung alle
+# Reservierungen erfasst.
+_BT13_SQL = """
+select distinct c.{spalte}
+  from zpil p, zpos z, {tabelle} c
+ where p.zpil_zinv_id = :zinv_id
+   and z.zpos_id = p.zpil_zpos_id
+   and z.zpos_cdt = 1
+   and c.{schluessel} = z.zpos_originated_yres_id
+   and c.{spalte} is not null
+"""
+
+
+def _bt13_text(wert) -> str:
+    if wert is None:
+        return ""
+    if isinstance(wert, float) and wert.is_integer():
+        wert = int(wert)
+    return str(wert).strip()
+
+
+def _bt13_werte(cur, zinv_id: int, tabelle: str, spalte: str) -> Optional[str]:
+    """Werte des Feldes fuer alle Reservierungen der Rechnung, ohne Doppelte,
+    sortiert und durch Komma getrennt. None, wenn es keine gibt.
+
+    Fehlt Tabelle oder Spalte in dieser Suite8, bleibt die Rechnung ohne
+    BT-13, statt zu haengen. Andere Datenbankfehler werden gemeldet."""
+    if bt13_feld_pruefen(f"{tabelle}.{spalte}") is None:
+        raise ValueError("kein Feld angegeben")
+    sql = _BT13_SQL.format(tabelle=tabelle, spalte=spalte, schluessel=_BT13_TABELLEN[tabelle])
+    try:
+        cur.execute(sql, {"zinv_id": zinv_id})
+        rows = cur.fetchall()
+    except Exception as e:
+        msg = str(e).upper()
+        if "ORA-00904" in msg or "ORA-00942" in msg:
+            logger.warning("BT-13-Feld %s.%s nicht lesbar (zinv_id=%s): %s", tabelle, spalte, zinv_id, e)
+            return None
+        raise
+    werte = sorted({t for t in (_bt13_text(r[0]) for r in rows) if t})
+    return ", ".join(werte) or None
+
+
 _warned_xml_only_query = False
 _XML_ONLY_SQL = """
 select 1 from zinv, zwin, xmnr, xmty
@@ -344,6 +450,13 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         ref = _buyer_reference_aus_freitext(cur, zinv_id, _bt10_freitexte())
         if ref:
             header["buyerreference"] = ref
+
+        # BT-13: Bestellnummer aus dem gewaehlten Reservierungsfeld
+        feld = _bt13_feld()
+        if feld:
+            bestellnummer = _bt13_werte(cur, zinv_id, *feld)
+            if bestellnummer:
+                header["orderreferenceid"] = bestellnummer
 
         lines = _fetch_lines(cur, zinv_id)
         # 0 % ohne Steuerbuchung nur fuer freigegebene Auslage-Artikel

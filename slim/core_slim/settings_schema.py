@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from modules.invoice_fetcher import BT13_FELD_STANDARD, bt13_feld_pruefen, bt13_feldauswahl
+
 
 class SettingError(ValueError):
     pass
@@ -31,6 +33,10 @@ class Setting:
     check: Optional[Callable[[Any], None]] = None
     default: Any = None
     info: str = ""               # ausfuehrliche Erklaerung (HTML aus diesem Modul) hinter dem (!)-Knopf
+    # Auswahl, die erst zur Laufzeit feststeht (z. B. Felder aus der Datenbank):
+    # liefert [(Wert, Beschriftung)]. Dann prueft `check` den Wert, nicht `choices`.
+    choices_from: Optional[Callable[[], list]] = None
+    labels: tuple = ()           # feste Beschriftungen ((Wert, Text), ...) fuer `choices`
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,13 @@ def _local_dir(value: str) -> None:
 def _email(value: str) -> None:
     if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
         raise SettingError("keine gültige E-Mail-Adresse")
+
+
+def _bt13_feld(value: str) -> None:
+    try:
+        bt13_feld_pruefen(value)
+    except ValueError as e:
+        raise SettingError(str(e))
 
 
 C, H, A, U = "connection.json", "hotel.json", "app_settings.json", "update.json"
@@ -193,6 +206,51 @@ sind – dann als Käuferreferenz.</li>
 """
 
 
+_INFO_BT13 = """
+<p><b>Nur für Installer.</b> Wer hier ein Feld wählt, muss die Suite8-Datenbank
+kennen. Für das Hotelpersonal ist diese Einstellung nicht gedacht.</p>
+<h3>Was ist BT-13?</h3>
+<p>BT-13 ist die <b>Bestellnummer des Käufers</b>: die Nummer, unter der der
+Rechnungsempfänger die Leistung bei sich bestellt oder gebucht hat. Sein
+Buchhaltungssystem ordnet die Rechnung damit dem eigenen Vorgang zu und kann
+sie ohne Rückfrage prüfen und bezahlen. Das Feld ist freiwillig.</p>
+<h3>Wofür ist es hier gedacht?</h3>
+<p>Typischer Fall ist die Abrechnung mit <b>Reiseveranstaltern</b>: Der
+Veranstalter gibt zu jeder Buchung eine Voucher-Nummer mit und sucht die
+Rechnung später darüber. Genauso passt jede andere Nummer, die der Empfänger
+zur Buchung vergeben hat, etwa eine Auftrags- oder Bestellnummer.</p>
+<h3>Welches Feld wählen?</h3>
+<p>Die Auswahl zeigt die Text- und Zahlenfelder der Tabellen <b>YRES</b>
+(Reservierung) und <b>YRCF</b> (Zusatzfelder der Reservierung), so wie diese
+Suite8 sie gerade hat. Slim liest die Liste bei jedem Öffnen der Seite aus der
+Datenbank. Angepasste Felder, die es nur in diesem Haus gibt, stehen deshalb
+mit in der Liste.</p>
+<ol>
+<li><b>Prüfen, ob das Feld schon genutzt wird.</b> Ein Feld, das bereits für
+etwas anderes gefüllt wird, liefert falsche Bestellnummern.</li>
+<li><b>Das Feld per Screen Painting in die Reservierungsmaske einbinden</b>,
+damit Reservierung oder Rezeption die Nummer eintragen können.</li>
+<li><b>Hier auswählen und speichern.</b> Die Wahl gilt für jede Rechnung ab
+dem nächsten Abruf.</li>
+</ol>
+<h3>Wie kommt der Wert in die Rechnung?</h3>
+<ul>
+<li>Slim liest das Feld für jede Reservierung, deren Buchungen auf der
+Rechnung stehen.</li>
+<li>Bei mehreren Reservierungen stehen alle Werte in BT-13, ohne Doppelte,
+durch Komma getrennt.</li>
+<li>Ist das Feld bei keiner Reservierung gefüllt, bleibt BT-13 weg. Die
+Rechnung geht trotzdem raus.</li>
+<li>Gibt es das gewählte Feld in der Datenbank nicht mehr, bleibt BT-13
+ebenfalls weg; im Protokoll des Dienstes steht eine Warnung.</li>
+</ul>
+<h3>Was es nicht ist</h3>
+<p>BT-13 ersetzt nicht die Käuferreferenz (<b>BT-10</b>, bei Behörden die
+<b>Leitweg-ID</b>). BT-10 ist Pflicht und sagt, an welche Stelle beim Empfänger
+die Rechnung geht. BT-13 sagt, zu welcher Bestellung sie gehört.</p>
+"""
+
+
 SECTIONS: tuple[Section, ...] = (
     Section("erkennung", "Erkennung und Anhang", (
         Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
@@ -213,6 +271,9 @@ SECTIONS: tuple[Section, ...] = (
         Setting("bt10_freitext2", H, "Freitext 2", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext3", H, "Freitext 3", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext4", H, "Freitext 4", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+    ), page="xrechnung"),
+    Section("bestellnummer", "Bestellnummer (BT-13)", (
+        Setting("bt13_feld", H, "Feld für die Bestellnummer (nur für Installer)", "Suite8-Feld der Reservierung (Tabelle YRES oder YRCF), dessen Inhalt als Bestellnummer des Käufers (BT-13) in der XRechnung steht – zum Beispiel die Voucher-Nummer eines Reiseveranstalters. aus = kein BT-13. Einstellung für Installer: Vorher prüfen, ob das Feld nicht schon anders genutzt wird, und es per Screen Painting in die Reservierungsmaske einbinden.", type="select", choices=("",), labels=(("", "aus – kein BT-13"),), choices_from=bt13_feldauswahl, check=_bt13_feld, default=BT13_FELD_STANDARD, info=_INFO_BT13),
     ), page="xrechnung"),
     Section("pruefung", "Prüfung", (
         Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),
@@ -292,7 +353,7 @@ def coerce(setting: Setting, value: Any) -> Any:
         v = [str(i).strip() for i in items if str(i).strip()]
     elif t == "select":
         v = str(value)
-        if v not in setting.choices:
+        if setting.choices_from is None and v not in setting.choices:
             raise SettingError("erlaubt: " + ", ".join(setting.choices))
     else:
         v = "" if value is None else str(value).strip()

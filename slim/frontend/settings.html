@@ -106,7 +106,7 @@ function input(f) {
   if (f.type === "select") {
     // Ein Altwert ausserhalb der Auswahl bleibt waehlbar, sonst sprang er beim Speichern still auf die erste Option.
     const opts = (f.value == null || f.choices.includes(f.value)) ? f.choices : [f.value, ...f.choices];
-    return `<select id="${id}">${opts.map(c => `<option${c === f.value ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
+    return `<select id="${id}">${opts.map(c => `<option value="${esc(c)}"${c === f.value ? " selected" : ""}>${esc((f.labels || {})[c] ?? c)}</option>`).join("")}</select>`;
   }
   if (f.type === "int") return `<input type="number" id="${id}" value="${esc(f.value)}">`;
   if (f.type === "list") return `<textarea id="${id}" placeholder="durch Komma getrennt">${esc((f.value || []).join(", "))}</textarea>`;
