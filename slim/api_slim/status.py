@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from core.config_loader import load_hotel_config
 from core.db_connector import get_connection
 from modules.suite8_mailer import find_pending_wmai, get_wmai_error
+from modules.suite8_pattern import ist_rechnungsmail
 
 from slim.core_slim import audit_jsonl
 from slim.core_slim.clock import now_local
@@ -88,6 +89,12 @@ def status(state: dict = Depends(get_state)):
 def pending():
     """Liefert die aktuellen WMAI-Einträge mit BLOCKSEND=1 + WMAI_ERROR."""
     try:
+        cfg = load_hotel_config() or {}
+    except Exception:
+        cfg = {}
+    fn_pat = cfg.get("suite8_recognize_filename_pattern", "") or ""
+    sub_pat = cfg.get("suite8_recognize_subject_pattern", "") or ""
+    try:
         with get_connection() as conn:
             rows = find_pending_wmai(conn=conn, limit=50)
             enriched = []
@@ -103,6 +110,10 @@ def pending():
                     "subject": r["subject"],
                     "to": r["to"],
                     "error": err,
+                    # fremd = nicht von der XRechnung gesperrt (kein Rechnungsmuster)
+                    "fremd": not ist_rechnungsmail(
+                        filename=r["filename"], subject=r["subject"],
+                        filename_pattern=fn_pat, subject_pattern=sub_pat),
                 })
             return {"items": enriched, "count": len(enriched)}
     except Exception as e:

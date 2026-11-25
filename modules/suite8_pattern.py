@@ -31,6 +31,11 @@ class PatternMatchError(Exception):
     """Pattern hat nichts getroffen oder ist syntaktisch kaputt."""
 
 
+class NoPatternHit(PatternMatchError):
+    """Die Muster sind in Ordnung, treffen aber weder Betreff noch Dateiname:
+    Die Mail ist keine Rechnungsmail."""
+
+
 class AmbiguousMatchError(Exception):
     """Filename- und Subject-Pattern liefern unterschiedliche Werte
     (entweder andere Zahl oder andere Group-Art)."""
@@ -103,11 +108,32 @@ def extract_zinv_number(
         )
     result = from_fn or from_sub
     if result is None:
-        raise PatternMatchError(
+        raise NoPatternHit(
             f"Kein Pattern hat getroffen "
             f"(filename={filename!r}, subject={subject!r})"
         )
     return result
+
+
+def ist_rechnungsmail(*, filename: str, subject: str,
+                      filename_pattern: str, subject_pattern: str) -> bool:
+    """True, wenn die Mail auf das Erkennungsmuster passt - also vom
+    XRechnung-Trigger gesperrt wurde und Slim gehoert.
+
+    False nur, wenn die Muster in Ordnung sind und nichts trifft: Dann hat
+    etwas anderes die Mail gesperrt (Suite8 selbst haelt gelegentlich
+    Reservierungskorrespondenz an). Bei fehlendem oder kaputtem Muster gilt
+    die Mail weiter als Rechnungsmail, damit der Fehler sichtbar bleibt und
+    nicht alle Rechnungen still liegen bleiben."""
+    try:
+        extract_zinv_number(filename=filename, subject=subject,
+                            filename_pattern=filename_pattern,
+                            subject_pattern=subject_pattern)
+    except NoPatternHit:
+        return False
+    except (PatternMatchError, AmbiguousMatchError):
+        return True
+    return True
 
 
 def generate_pattern_from_example(
