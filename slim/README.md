@@ -46,6 +46,7 @@ Wichtige Schalter in `hotel.json` (Standardwerte in `config/hotel.json.example`)
 | `auslagen_artikel` | `["AUS", "DUR"]` | Artikel-Kurznamen, die ohne Steuerbuchung mit 0 % gelten |
 | `xml_only_membership` | `PDF` | Membership-Kurzbezeichnung für Nur-XML; leer = aus |
 | `xml_only_all` | `false` | Nur-XML für alle Rechnungen |
+| `bt13_feld` | `""` | Suite8-Feld der Reservierung als Bestellnummer des Käufers (BT-13), als `TABELLE.SPALTE` aus `YRES` oder `YRCF`, z. B. `YRCF.YRCF_VOUCHERNO` für die Voucher-Nummer eines Reiseveranstalters. Die Oberfläche bietet die vorhandenen Felder zur Auswahl an. Mehrere Reservierungen kommagetrennt, leer = kein BT-13. Für Installer |
 | `bt10_freitext1` … `bt10_freitext4` | `false` | ZWIN-Freitext 1–4 als Käuferreferenz (BT-10), wenn keine DXR-Mitgliedschaft am Rechnungsempfänger hängt; der erste gefüllte eingeschaltete gilt (1 → 4), sonst der Profilname |
 | `rundungsausgleich` | `abschlag` | Steuer je Satz vom Brutto neu (Bemessung = Positionen exakt, für strenge Empfänger wie SAP); Rest als Abschlag/Zuschlag „Rundungsausgleich“ (`abschlag`) bzw. in der größten Position (`position`). `aus` = Werte wie aus Suite8. Endbetrag bleibt gleich |
 
