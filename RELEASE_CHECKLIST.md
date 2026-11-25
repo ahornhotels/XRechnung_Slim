@@ -50,3 +50,16 @@ Schrittfolge, um eine neue Version zu veröffentlichen. `X.Y.Z` jeweils ersetzen
 - **Erstmigration der Alt-Hotels:** Instanzen, die noch die alte Slim aus
   `Suite8XRechnung` (ZIP-Updater) laufen haben, müssen **einmalig manuell** auf
   dieses Repo umgestellt werden; danach greift der inkrementelle Updater.
+
+## Kanal AHORN nachziehen (nach jedem Standard-Release)
+Der Branch `AHORN` enthält immer den Standard (`master`) plus Zusätze, die nur
+die AHORN-Häuser brauchen. Häuser mit Update-Kanal `AHORN` (System → Update)
+bekommen nur Releases mit dem Tag-Anhang `-ahorn`.
+
+- [ ] `git checkout AHORN && git merge --no-ff master` (Konflikte nur in `VERSION` erwartet)
+- [ ] `VERSION` auf `X.Y.Z-ahorn` setzen, Tests grün
+- [ ] `git tag -a vX.Y.Z-ahorn -m "Release X.Y.Z-ahorn"`, Branch und Tag pushen
+- [ ] `scripts/gh_release.sh vX.Y.Z-ahorn "vX.Y.Z-ahorn — Titel" notes.md kanal`
+      (legt eine **Vorabversion** an, nie „Latest" – sonst bekämen alle Häuser den Kanal)
+- [ ] Nur-AHORN-Korrektur zwischen zwei Standard-Releases: `X.Y.Z-ahorn.1`, `.2`, …
+- [ ] Zusätze möglichst in eigenen Dateien halten, damit der Merge konfliktfrei bleibt

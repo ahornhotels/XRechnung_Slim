@@ -111,6 +111,24 @@ def _parse_version(tag: str) -> tuple:
     return tuple(int(p) for p in parts[:3]) + (0,) * (3 - len(parts[:3]))
 
 
+def _split_tag(tag: str) -> tuple:
+    """'v2.4.3-ahorn.2' -> ((2, 4, 3), 'ahorn', 2).
+
+    Ohne Kanal-Anhang ist der Kanal '' (Standard) und die Baunummer 0. Die
+    Baunummer zaehlt Kanal-Releases zwischen zwei Standard-Versionen."""
+    s = (tag or "").strip().lstrip("vV")
+    haupt, _, anhang = s.partition("-")
+    m = re.fullmatch(r"([A-Za-z0-9]+?)(?:\.(\d+))?", anhang)
+    kanal = m.group(1).lower() if m else ""
+    bau = int(m.group(2)) if m and m.group(2) else 0
+    return _parse_version(haupt), kanal, bau
+
+
+def _kanal(cfg: dict) -> str:
+    """Gewuenschter Update-Kanal aus der Konfiguration, '' = Standard."""
+    return str(cfg.get("channel") or "").strip().lower()
+
+
 def load_state() -> dict:
     """Letzter Update-Zustand. Tolerant bei Fehlern."""
     if not STATE_FILE.exists():
@@ -198,6 +216,41 @@ def fetch_latest_release(cfg: Optional[dict] = None) -> dict:
     return resp.json()
 
 
+def fetch_latest_channel_release(cfg: dict) -> dict:
+    """Neuestes Release eines Kanals. Kanal-Releases sind Vorabversionen
+    (damit /releases/latest sie den Standard-Haeusern nie liefert), deshalb
+    wird die Release-Liste gelesen und nach dem Tag-Anhang gefiltert."""
+    kanal = _kanal(cfg)
+    owner = cfg.get("owner") or DEFAULT_OWNER
+    repo = cfg.get("repo") or DEFAULT_REPO
+    url = f"{GITHUB_API}/repos/{owner}/{repo}/releases?per_page=100"
+    logger.info("GitHub: GET %s", url)
+    try:
+        resp = httpx.get(url, headers=_gh_headers(cfg), timeout=15.0,
+                         follow_redirects=True)
+    except httpx.HTTPError as e:
+        raise UpdateError(f"GitHub nicht erreichbar: {e}")
+    if resp.status_code == 401:
+        raise UpdateError("PAT ungueltig (401)")
+    if resp.status_code == 403:
+        raise UpdateError("Rate-Limit oder fehlende Rechte (403)")
+    if resp.status_code >= 400:
+        raise UpdateError(f"GitHub API {resp.status_code}: {resp.text[:200]}")
+
+    passend = [r for r in (resp.json() or [])
+               if not r.get("draft") and _split_tag(r.get("tag_name") or "")[1] == kanal]
+    if not passend:
+        raise UpdateError(
+            f"Kein Release für den Update-Kanal {kanal.upper()} im Repo {owner}/{repo} gefunden."
+        )
+
+    def schluessel(r):
+        nums, _k, bau = _split_tag(r["tag_name"])
+        return nums + (bau,)
+
+    return max(passend, key=schluessel)
+
+
 def check_for_update(cfg: Optional[dict] = None) -> dict:
     """Liefert {current_version, latest_version, latest_tag, available,
     release_url, release_notes, error?}. Reine Versions-Pruefung — der
@@ -212,13 +265,16 @@ def check_for_update(cfg: Optional[dict] = None) -> dict:
         "release_url": None,
         "release_notes": None,
         "available": False,
+        "channel": _kanal(cfg),
+        "channel_switch": False,
     }
     if not cfg.get("enabled"):
         result["error"] = "Updates sind deaktiviert"
         return result
 
     try:
-        release = fetch_latest_release(cfg)
+        release = (fetch_latest_channel_release(cfg) if _kanal(cfg)
+                   else fetch_latest_release(cfg))
     except UpdateError as e:
         result["error"] = str(e)
         return result
@@ -229,9 +285,22 @@ def check_for_update(cfg: Optional[dict] = None) -> dict:
     result["release_url"] = release.get("html_url")
     result["release_notes"] = (release.get("body") or "")[:2000]
 
-    cur = _parse_version(result["current_version"])
-    latest = _parse_version(result["latest_version"])
-    result["available"] = latest > cur
+    cur_nums, cur_kanal, cur_bau = _split_tag(result["current_version"])
+    neu_nums, neu_kanal, neu_bau = _split_tag(tag)
+    if cur_kanal == neu_kanal:
+        result["available"] = neu_nums + (neu_bau,) > cur_nums + (cur_bau,)
+    elif neu_nums >= cur_nums:
+        # Kanalwechsel: auch bei gleicher Versionsnummer, damit die Zusaetze
+        # des Kanals kommen bzw. beim Weg zurueck wieder verschwinden.
+        result["available"] = True
+        result["channel_switch"] = True
+    else:
+        ziel = neu_kanal.upper() or "Standard"
+        result["error"] = (
+            f"Der Update-Kanal {ziel} steht erst auf {result['latest_version']}, "
+            f"installiert ist {result['current_version']}. Der Wechsel folgt mit "
+            "dem nächsten Release des Kanals."
+        )
     return result
 
 
@@ -491,6 +560,30 @@ def _resolve_base_ref(cfg: dict) -> Optional[str]:
     return f"v{cur}"
 
 
+def _kanalwechsel_dateien(base: str, head: str, cfg: dict) -> list:
+    """Dateiliste fuer einen Kanalwechsel.
+
+    Die Compare-API liefert nur, was `head` seit dem gemeinsamen Vorfahren
+    geaendert hat. Beim Wechsel zwischen zwei Zweigen fehlt damit alles, was
+    nur der bisherige Zweig geaendert hat (z. B. die Kanal-Zusaetze beim Weg
+    zurueck in den Standard). Deshalb wird auch rueckwaerts verglichen: Jede
+    dort genannte Datei wird aus `head` neu geholt oder, wenn es sie in
+    `head` nicht gibt, geloescht."""
+    dateien = {f["filename"]: f for f in compare_changed_files(base, head, cfg)}
+    rueck = compare_changed_files(head, base, cfg)
+    if rueck:
+        im_ziel = set(list_repo_files(head, cfg))
+        for f in rueck:
+            for name in (f["filename"], f.get("previous_filename")):
+                if name and name not in dateien:
+                    dateien[name] = {
+                        "filename": name,
+                        "status": "modified" if name in im_ziel else "removed",
+                        "previous_filename": None,
+                    }
+    return list(dateien.values())
+
+
 def perform_full_update(cfg: Optional[dict] = None) -> dict:
     """Check + (Compare-Diff oder Tree-Fallback) + Apply + State + Restart."""
     if cfg is None:
@@ -512,7 +605,8 @@ def perform_full_update(cfg: Optional[dict] = None) -> dict:
     files = None
     if base:
         try:
-            files = compare_changed_files(base, head, cfg)
+            files = (_kanalwechsel_dateien(base, head, cfg) if check.get("channel_switch")
+                     else compare_changed_files(base, head, cfg))
         except CompareUnavailable:
             files = None
     if files is None:

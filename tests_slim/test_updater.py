@@ -312,3 +312,113 @@ def test_neustart_ohne_dienst_beendet_nicht(monkeypatch):
 
 def test_dienst_erkennung_liefert_bool():
     assert updater._running_as_service() in (True, False)
+
+
+# ─────────────────────────── Update-Kanal ───────────────────────────
+# Ein Kanal (z. B. AHORN) ist ein Branch mit Zusaetzen. Seine Releases
+# tragen das Tag v<Version>-<kanal>[.<n>] und sind als Vorabversion
+# markiert, damit /releases/latest (Standard-Haeuser) sie nie liefert.
+
+def test_split_tag_standard_und_kanal():
+    assert updater._split_tag("v2.4.3") == ((2, 4, 3), "", 0)
+    assert updater._split_tag("2.4.3-ahorn") == ((2, 4, 3), "ahorn", 0)
+    assert updater._split_tag("v2.4.3-AHORN.2") == ((2, 4, 3), "ahorn", 2)
+
+
+def _kanal_releases():
+    return [
+        {"tag_name": "v2.4.4", "html_url": "u1", "body": "", "prerelease": False},
+        {"tag_name": "v2.4.3-ahorn", "html_url": "u2", "body": "", "prerelease": True},
+        {"tag_name": "v2.4.4-ahorn", "html_url": "u3", "body": "AHORN", "prerelease": True},
+        {"tag_name": "v2.4.4-ahorn.1", "html_url": "u4", "body": "AHORN fix", "prerelease": True},
+        {"tag_name": "v9.0.0-ahorn", "html_url": "u5", "body": "", "draft": True},
+        {"tag_name": "v9.0.0-anderes", "html_url": "u6", "body": "", "prerelease": True},
+    ]
+
+
+def _cfg_kanal():
+    return {"enabled": True, "owner": "x", "repo": "y", "channel": "AHORN"}
+
+
+def test_kanal_nimmt_hoechstes_release_des_kanals():
+    fake = MagicMock(status_code=200, json=_kanal_releases)
+    with patch.object(updater.httpx, "get", return_value=fake) as get, \
+         patch.object(updater, "current_version", return_value="2.4.3-ahorn"):
+        r = updater.check_for_update(_cfg_kanal())
+    assert "/releases?" in get.call_args[0][0]
+    assert r["latest_tag"] == "v2.4.4-ahorn.1"
+    assert r["available"] is True
+    assert r["channel_switch"] is False
+
+
+def test_kanal_aktuell_kein_update():
+    fake = MagicMock(status_code=200, json=_kanal_releases)
+    with patch.object(updater.httpx, "get", return_value=fake), \
+         patch.object(updater, "current_version", return_value="2.4.4-ahorn.1"):
+        r = updater.check_for_update(_cfg_kanal())
+    assert r["available"] is False
+
+
+def test_wechsel_in_den_kanal_bei_gleicher_version():
+    fake = MagicMock(status_code=200, json=_kanal_releases)
+    with patch.object(updater.httpx, "get", return_value=fake), \
+         patch.object(updater, "current_version", return_value="2.4.4"):
+        r = updater.check_for_update(_cfg_kanal())
+    assert r["available"] is True
+    assert r["channel_switch"] is True
+
+
+def test_wechsel_in_den_kanal_nie_rueckwaerts():
+    fake = MagicMock(status_code=200, json=_kanal_releases)
+    with patch.object(updater.httpx, "get", return_value=fake), \
+         patch.object(updater, "current_version", return_value="2.5.0"):
+        r = updater.check_for_update(_cfg_kanal())
+    assert r["available"] is False
+    assert "2.4.4" in r["error"] and "2.5.0" in r["error"]
+
+
+def test_kanal_ohne_release_meldet_fehler():
+    fake = MagicMock(status_code=200, json=lambda: [{"tag_name": "v2.4.4"}])
+    with patch.object(updater.httpx, "get", return_value=fake):
+        r = updater.check_for_update(_cfg_kanal())
+    assert r["available"] is False
+    assert "AHORN" in r["error"]
+
+
+def test_zurueck_in_den_standard_bei_gleicher_version():
+    release = {"tag_name": "v2.4.4", "html_url": "u", "body": ""}
+    fake = MagicMock(status_code=200, json=lambda: release)
+    with patch.object(updater.httpx, "get", return_value=fake) as get, \
+         patch.object(updater, "current_version", return_value="2.4.4-ahorn.1"):
+        r = updater.check_for_update({"enabled": True, "owner": "x", "repo": "y"})
+    assert get.call_args[0][0].endswith("/releases/latest")
+    assert r["available"] is True
+    assert r["channel_switch"] is True
+
+
+def test_kanalwechsel_dateien_nimmt_beide_richtungen():
+    # Zurueck in den Standard: vorwaerts ist der Diff leer (der Kanal enthaelt
+    # den Standard), die Zusaetze stehen nur im Rueckwaerts-Diff.
+    def cmp(base, head, cfg):
+        if (base, head) == ("v2.4.4-ahorn", "v2.4.4"):
+            return []
+        return [{"filename": "modules/ahorn_extra.py", "status": "added", "previous_filename": None},
+                {"filename": "modules/xml_builder.py", "status": "modified", "previous_filename": None},
+                {"filename": "VERSION", "status": "modified", "previous_filename": None}]
+    with patch.object(updater, "compare_changed_files", side_effect=cmp), \
+         patch.object(updater, "list_repo_files",
+                      return_value=["modules/xml_builder.py", "VERSION"]):
+        files = updater._kanalwechsel_dateien("v2.4.4-ahorn", "v2.4.4", {})
+    status = {f["filename"]: f["status"] for f in files}
+    assert status == {"modules/ahorn_extra.py": "removed",
+                      "modules/xml_builder.py": "modified",
+                      "VERSION": "modified"}
+
+
+def test_update_kanal_feld_erlaubt_leer_und_namen():
+    from slim.core_slim import settings_schema as s
+    feld = next(f for f in s.section("update").settings if f.key == "channel")
+    feld.check("")
+    feld.check("AHORN")
+    with pytest.raises(s.SettingError):
+        feld.check("AHORN/../x")

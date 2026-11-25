@@ -82,6 +82,12 @@ def _github_name(value: str) -> None:
         raise SettingError("nur Buchstaben, Ziffern, Punkt, Bindestrich, Unterstrich (max. 100)")
 
 
+def _kanal(value: str) -> None:
+    """Update-Kanal: leer = Standard, sonst ein kurzer Name wie AHORN."""
+    if value and not re.fullmatch(r"[A-Za-z0-9]{1,30}", value):
+        raise SettingError("nur Buchstaben und Ziffern (max. 30), leer = Standard")
+
+
 def _local_dir(value: str) -> None:
     """Nur lokale absolute Ordner: Aus dem Client-Ordner lädt Slim
     Programmbibliotheken, ein Netzwerkpfad wäre ein Einfallstor."""
@@ -245,6 +251,8 @@ SECTIONS: tuple[Section, ...] = (
         Setting("enabled", U, "Automatische Updates", "Neue Versionen von GitHub einspielen.", type="bool", default=True),
         Setting("owner", U, "GitHub-Besitzer", "Besitzer des Repositorys.", default="ahornhotels", check=_github_name),
         Setting("repo", U, "GitHub-Repository", "Name des Repositorys.", default="XRechnung_Slim", check=_github_name),
+        Setting("channel", U, "Update-Kanal", "Leer = Standard. Ein Name wie AHORN holt nur die Versionen dieses Kanals (Standard plus Zusätze für diese Häuser).", default="", check=_kanal,
+                info="Ein Kanal ist ein eigener Zweig des Programms: Er enthält immer den Standard und dazu Zusätze, die nur bestimmte Häuser brauchen. Seine Versionen heißen z. B. 2.4.4-ahorn. Nach dem Eintragen zeigt „Update prüfen“ den Wechsel an, auch wenn die Versionsnummer gleich ist. Feld leeren und erneut aktualisieren stellt das Haus zurück auf den Standard, die Zusätze werden dabei entfernt. Ein Kanal wird nie auf eine ältere Version zurückgestellt."),
         Setting("pat_token", U, "Zugriffstoken", "Nur nötig, wenn das Repository privat ist (Leserecht auf Inhalte). Wird verschlüsselt gespeichert und nie angezeigt. Leer lassen = unverändert.", type="secret"),
     ), page="system"),
 )
