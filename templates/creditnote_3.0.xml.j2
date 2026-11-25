@@ -23,6 +23,14 @@
   </cac:InvoicePeriod>
   {% endif %}
 
+  {# Kanal AHORN: BT-13 Bestellnummer des Kaeufers = Voucher-Nummer des
+     Reiseveranstalters (YRCF_VOUCHERNO). #}
+  {% if header.orderreferenceid %}
+  <cac:OrderReference>
+    <cbc:ID>{{ header.orderreferenceid|e }}</cbc:ID>
+  </cac:OrderReference>
+  {% endif %}
+
   <cac:BillingReference>
     <cac:InvoiceDocumentReference>
       <cbc:ID>{{ header.billingreferenceid|e }}</cbc:ID>

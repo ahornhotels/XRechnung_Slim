@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from modules.invoice_fetcher import BT13_VOUCHER_STANDARD
+
 
 class SettingError(ValueError):
     pass
@@ -193,6 +195,31 @@ sind – dann als Käuferreferenz.</li>
 """
 
 
+_INFO_BT13 = """
+<h3>Was ist BT-13?</h3>
+<p>BT-13 ist die <b>Bestellnummer des Käufers</b>: die Nummer, unter der der
+Rechnungsempfänger die Leistung bei sich bestellt oder gebucht hat. Sein
+Buchhaltungssystem ordnet die Rechnung damit dem eigenen Vorgang zu und kann
+sie ohne Rückfrage prüfen und bezahlen. Das Feld ist freiwillig.</p>
+<h3>Wofür ist es hier gedacht?</h3>
+<p>Für die Abrechnung mit <b>Reiseveranstaltern</b>: Der Veranstalter gibt zu
+jeder Buchung eine Voucher-Nummer mit und sucht die Rechnung später darüber.
+Eingeschaltet schreibt Slim diese Nummer als BT-13 in die XRechnung.</p>
+<h3>Woher kommt die Nummer?</h3>
+<ul>
+<li>Aus dem Feld <b>Voucher</b> an der <b>Reservierung</b> in Suite8.</li>
+<li>Bei einer Rechnung über mehrere Reservierungen stehen alle Nummern in
+BT-13, ohne Doppelte, durch Komma getrennt.</li>
+<li>Hat keine Reservierung der Rechnung eine Voucher-Nummer, bleibt BT-13 leer.
+Die Rechnung geht trotzdem raus.</li>
+</ul>
+<h3>Was es nicht ist</h3>
+<p>BT-13 ersetzt nicht die Käuferreferenz (<b>BT-10</b>, bei Behörden die
+<b>Leitweg-ID</b>). BT-10 ist Pflicht und sagt, an welche Stelle beim Empfänger
+die Rechnung geht. BT-13 sagt, zu welcher Bestellung sie gehört.</p>
+"""
+
+
 SECTIONS: tuple[Section, ...] = (
     Section("erkennung", "Erkennung und Anhang", (
         Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
@@ -213,6 +240,9 @@ SECTIONS: tuple[Section, ...] = (
         Setting("bt10_freitext2", H, "Freitext 2", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext3", H, "Freitext 3", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext4", H, "Freitext 4", "Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen (Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+    ), page="xrechnung"),
+    Section("bestellnummer", "Bestellnummer (BT-13)", (
+        Setting("bt13_voucher", H, "Voucher-Nummer", "Ein: Die Voucher-Nummer der Reservierung steht als Bestellnummer des Käufers (BT-13) in der XRechnung. Gedacht für die Abrechnung mit Reiseveranstaltern, die ihre Rechnungen über die Voucher-Nummer zuordnen. Ohne Voucher-Nummer bleibt das Feld leer.", type="bool", default=BT13_VOUCHER_STANDARD, info=_INFO_BT13),
     ), page="xrechnung"),
     Section("pruefung", "Prüfung", (
         Setting("kosit_validation", A, "KoSIT-Prüfung", "Jede XRechnung vor dem Versand mit dem KoSIT-Validator prüfen.", type="bool", default=True),
