@@ -29,7 +29,7 @@ from modules.suite8_mailer import (
     set_wmai_error, get_wmai_error, WMAI_ERROR_MAX,
 )
 from modules.suite8_pattern import (
-    extract_zinv_number, PatternMatchError, AmbiguousMatchError,
+    extract_zinv_number, ist_rechnungsmail, PatternMatchError, AmbiguousMatchError,
 )
 
 from slim.core_slim import audit_jsonl, archive_fs, overrides, trigger_state, verarbeitung
@@ -175,10 +175,17 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 return summary
             # Neue Mails zuerst, gescheiterte reihum auf den restlichen
             # Plaetzen - sonst blockieren zehn Dauerfehler alle neueren Mails.
+            # Nur Rechnungsmails (Erkennungsmuster trifft). Was etwas anderes
+            # gesperrt hat, bleibt unangetastet: kein Fehlertext, keine Freigabe.
+            def _ist_rechnungsmail(r: dict) -> bool:
+                return ist_rechnungsmail(filename=r["filename"], subject=r["subject"],
+                                         filename_pattern=fn_pat, subject_pattern=sub_pat)
+
             global _fehler_cursor
             pending = find_pending_wmai(conn=conn, limit=_PENDING_LIMIT_PER_RUN,
                                         neue_zuerst=True,
-                                        nach_fehler_id=_fehler_cursor)
+                                        nach_fehler_id=_fehler_cursor,
+                                        nur=_ist_rechnungsmail)
             wiederholt = [r["wmai_id"] for r in pending if r.get("hatte_fehler")]
             if wiederholt:
                 _fehler_cursor = wiederholt[-1]
@@ -380,7 +387,10 @@ def _freigabe_nach_tagen(data_dir: Path, cfg: dict, summary: dict,
         return
     try:
         with get_connection() as conn:
-            freigegeben = release_overdue_wmai(conn, tage)
+            freigegeben = release_overdue_wmai(
+                conn, tage,
+                nur=lambda r: ist_rechnungsmail(filename=r["filename"], subject=r["subject"],
+                                                filename_pattern=fn_pat, subject_pattern=sub_pat))
     except Exception as e:
         logger.exception("Freigabe nach %d Tagen fehlgeschlagen", tage)
         audit_jsonl.record_safe(data_dir, "poller_db_error",

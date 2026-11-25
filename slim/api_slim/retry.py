@@ -6,6 +6,8 @@ Retry-/Override-Endpoints:
   POST /api/wmai/{wmai_id}/retry        - WMAI_ERROR=NULL für eine WMAI
   POST /api/wmai/retry-all              - WMAI_ERROR=NULL für ALLE pending
                                           mit aktuell gesetztem Error
+  POST /api/wmai/{wmai_id}/freigeben    - fremde Sperre (keine Rechnungsmail)
+                                          von Hand aufheben
 
   GET  /api/wmai/{wmai_id}/override     - aktuelle Override-Werte lesen
   POST /api/wmai/{wmai_id}/override     - Override-Werte schreiben
@@ -20,8 +22,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam
 from pydantic import BaseModel, Field
 
+from core.config_loader import load_hotel_config
 from core.db_connector import get_connection
-from modules.suite8_mailer import set_wmai_error, find_pending_wmai, get_wmai_error
+from modules.suite8_mailer import (
+    set_wmai_error, find_pending_wmai, get_wmai_error, get_blocked_wmai, release_wmai,
+)
+from modules.suite8_pattern import ist_rechnungsmail
 
 from slim.core_slim import audit_jsonl, overrides
 from slim.api_slim.status import get_state
@@ -52,6 +58,49 @@ def retry_wmai(
             Path(data_dir), "retry_triggered",
             wmai_id=wmai_id, zinv_number=None,
             details={"source": "api"},
+        )
+    return {"ok": True, "wmai_id": wmai_id}
+
+
+# ─────────────────────────── Fremde Sperre freigeben ───────────────────────────
+
+@router.post("/wmai/{wmai_id}/freigeben")
+def freigeben_fremde_sperre(
+    wmai_id: int = PathParam(..., ge=1),
+    state: dict = Depends(get_state),
+):
+    """Hebt die Sperre einer Mail auf, die NICHT die XRechnung gesperrt hat
+    (kein Rechnungsmuster) - Suite8 verschickt sie dann. Rechnungsmails lassen
+    sich so nicht freigeben: sie warten auf ihre XRechnung."""
+    cfg = load_hotel_config() or {}
+    try:
+        with get_connection() as conn:
+            mail = get_blocked_wmai(conn, wmai_id)
+            if mail is None:
+                raise HTTPException(404, "Diese Mail ist nicht (mehr) gesperrt.")
+            if ist_rechnungsmail(
+                    filename=mail["filename"], subject=mail["subject"],
+                    filename_pattern=cfg.get("suite8_recognize_filename_pattern", "") or "",
+                    subject_pattern=cfg.get("suite8_recognize_subject_pattern", "") or ""):
+                raise HTTPException(
+                    409, "Das ist eine Rechnungsmail. Sie wartet auf ihre XRechnung "
+                         "und wird nicht von Hand freigegeben.")
+            freigegeben = release_wmai(conn, wmai_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Freigabe der WMAI %s fehlgeschlagen", wmai_id)
+        raise HTTPException(status_code=503, detail=f"DB nicht erreichbar: {e}")
+    if not freigegeben:
+        raise HTTPException(404, "Diese Mail ist nicht (mehr) gesperrt.")
+
+    data_dir = state.get("data_dir")
+    if data_dir is not None:
+        audit_jsonl.record_safe(
+            Path(data_dir), "fremde_sperre_freigegeben",
+            wmai_id=wmai_id, zinv_number=None,
+            details={"source": "api", "betreff": mail["subject"][:200],
+                     "hoteldatum": mail["fideliodate"]},
         )
     return {"ok": True, "wmai_id": wmai_id}
 

@@ -158,8 +158,13 @@ _PENDING_SQL = """
         """
 
 
+# So viele fremde Sperren (keine Rechnungsmails) darf es geben, ohne dass sie
+# echte Rechnungsmails aus einer Runde verdraengen.
+FREMD_PUFFER = 200
+
+
 def find_pending_wmai(conn, limit: int = 50, neue_zuerst: bool = False,
-                      nach_fehler_id: int = 0) -> list[dict]:
+                      nach_fehler_id: int = 0, nur=None) -> list[dict]:
     """Sucht WMAI-Mails die auf einen XRechnung-Anhang warten.
 
     Kriterium: WMAI_BLOCKSEND=1 AND WMAI_SENT=0. Liefert die
@@ -174,6 +179,11 @@ def find_pending_wmai(conn, limit: int = 50, neue_zuerst: bool = False,
     am Ende wieder von vorn. So halten dauerhaft scheiternde Mails neuere
     nicht auf und werden trotzdem regelmaessig neu versucht.
 
+    nur: optionale Pruefung je Zeile (dict -> bool). Zeilen, die sie ablehnt,
+    werden uebersprungen und belegen keinen Platz. Der Poller reicht hier
+    "ist eine Rechnungsmail" herein, damit Mails, die etwas anderes gesperrt
+    hat, unangetastet bleiben.
+
     Returns:
         Liste von Dicts: {wmai_id, filename, subject, to} - mit neue_zuerst
         zusaetzlich hatte_fehler (bool).
@@ -182,14 +192,20 @@ def find_pending_wmai(conn, limit: int = 50, neue_zuerst: bool = False,
     cur = conn.cursor()
 
     def _hole(extra: str, binds: dict, **mehr) -> list[dict]:
-        if binds["lim"] <= 0:
+        wunsch = binds["lim"]
+        if wunsch <= 0:
             return []
+        if nur is not None:
+            binds = dict(binds, lim=wunsch + FREMD_PUFFER)
         cur.execute(_PENDING_SQL.format(extra=extra), binds)
-        return [
+        rows = [
             {"wmai_id": r[0], "filename": r[1] or "", "subject": r[2] or "",
              "to": r[3] or "", **mehr}
             for r in cur.fetchall()
         ]
+        if nur is not None:
+            rows = [r for r in rows if nur(r)]
+        return rows[:wunsch]
 
     if not neue_zuerst:
         return _hole("", {"lim": limit})
@@ -208,7 +224,38 @@ def find_pending_wmai(conn, limit: int = 50, neue_zuerst: bool = False,
 FREIGABE_FENSTER_TAGE = 7
 
 
-def release_overdue_wmai(conn, tage, limit: int = 200) -> list[dict]:
+def get_blocked_wmai(conn, wmai_id: int):
+    """Eine gesperrte, ungesendete Mail als Dict {wmai_id, filename, subject,
+    to, fideliodate} - oder None, wenn es sie so nicht (mehr) gibt."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT WMAI_ID, WMAI_ATTACHMENT_FILE_NAME, WMAI_SUBJECT, WMAI_TO, WMAI_FIDELIODATE "
+        "FROM WMAI WHERE WMAI_ID=:id AND WMAI_BLOCKSEND=1 AND WMAI_SENT=0",
+        {"id": int(wmai_id)},
+    )
+    r = cur.fetchone()
+    if r is None:
+        return None
+    d = r[4]
+    return {"wmai_id": r[0], "filename": r[1] or "", "subject": r[2] or "", "to": r[3] or "",
+            "fideliodate": d.date().isoformat() if hasattr(d, "date") else (str(d) if d else None)}
+
+
+def release_wmai(conn, wmai_id: int) -> bool:
+    """Entsperrt eine Mail (Suite8 verschickt sie dann). True, wenn dieser
+    Aufruf sie entsperrt hat - nur gesperrte, ungesendete Mails."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE WMAI SET WMAI_BLOCKSEND=0 WHERE WMAI_ID=:id "
+        "AND WMAI_BLOCKSEND=1 AND WMAI_SENT=0",
+        {"id": int(wmai_id)},
+    )
+    ok = cur.rowcount == 1
+    conn.commit()
+    return ok
+
+
+def release_overdue_wmai(conn, tage, limit: int = 200, nur=None) -> list[dict]:
     """Gibt gesperrte Mails frei, die seit `tage` Tagen auf die XRechnung
     warten: WMAI_BLOCKSEND=0, Suite8 verschickt sie dann ohne XRechnung.
     tage <= 0 oder leer = aus.
@@ -216,7 +263,11 @@ def release_overdue_wmai(conn, tage, limit: int = 200) -> list[dict]:
     Alter = Hoteldatum der Mail (WMAI_FIDELIODATE) gegen das aktuelle
     Hoteldatum aus WGBS - wie die bisherige manuelle Freigabe. Gesucht wird
     nur im Fenster [tage, tage + FREIGABE_FENSTER_TAGE]. Liefert nur die
-    Mails, die dieser Aufruf wirklich entsperrt hat."""
+    Mails, die dieser Aufruf wirklich entsperrt hat.
+
+    nur: optionale Pruefung je Zeile (dict mit filename, subject -> bool).
+    Abgelehnte Mails bleiben gesperrt - was nicht die XRechnung gesperrt hat,
+    gibt Slim nicht von selbst frei."""
     try:
         tage = int(tage or 0)
     except (TypeError, ValueError):
@@ -240,6 +291,8 @@ def release_overdue_wmai(conn, tage, limit: int = 200) -> list[dict]:
     rows = cur.fetchall()
     out = []
     for r in rows:
+        if nur is not None and not nur({"filename": r[1] or "", "subject": r[2] or ""}):
+            continue
         # Nur entsperren, was noch gesperrt und ungesendet ist (Slim oder ein
         # Mitarbeiter koennte die Mail inzwischen erledigt haben).
         cur.execute(
