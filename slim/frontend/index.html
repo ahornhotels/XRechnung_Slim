@@ -585,7 +585,7 @@ async function checkUpdate() {
     }
     const sizeText = r.asset_size_mb ? ` (${r.asset_size_mb} MB)` : "";
     banner.innerHTML = `<div class="alert-banner" style="background:#2a3c4a;border-color:#4a90c4;color:#a0d4f0">`
-      + `<strong>Update verfügbar:</strong> ${escapeHtml(r.current_version)} → ${escapeHtml(r.latest_version)}${sizeText}<br>`
+      + `<strong>${r.channel_switch ? "Wechsel des Update-Kanals" : "Update verfügbar"}:</strong> ${escapeHtml(r.current_version)} → ${escapeHtml(r.latest_version)}${sizeText}<br>`
       + `<small>${escapeHtml(r.release_notes || "").slice(0, 300)}</small><br>`
       + `<button class="primary" style="margin-top:8px" onclick="applyUpdate(this)" id="apply_update_btn">Jetzt aktualisieren</button>`
       + ` <a href="${escapeHtml(r.release_url || "#")}" target="_blank" style="margin-left:8px;color:var(--accent)">Release-Details</a>`

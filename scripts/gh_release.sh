@@ -7,17 +7,32 @@
 # NICHT ausgegeben. Das Ziel-Repo wird aus dem origin-Remote abgeleitet.
 #
 # Aufruf:
-#   scripts/gh_release.sh <tag> <name> <body-datei>
+#   scripts/gh_release.sh <tag> <name> <body-datei> [kanal]
 # Beispiel:
 #   scripts/gh_release.sh v1.10.5 "v1.10.5 — Titel" notes.md
+#   scripts/gh_release.sh v1.10.5-ahorn "v1.10.5-ahorn — Titel" notes.md kanal
+#
+# Mit 'kanal' wird das Release als Vorabversion und NICHT als "Latest"
+# angelegt. Nur so bleibt es fuer die Standard-Haeuser unsichtbar: deren
+# Updater fragt /releases/latest, und das liefert nie eine Vorabversion.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-if [ "$#" -ne 3 ]; then
-  echo "Aufruf: $0 <tag> <name> <body-datei>" >&2
+if [ "$#" -ne 3 ] && [ "$#" -ne 4 ]; then
+  echo "Aufruf: $0 <tag> <name> <body-datei> [kanal]" >&2
   exit 2
 fi
-TAG="$1"; NAME="$2"; BODY_FILE="$3"
+TAG="$1"; NAME="$2"; BODY_FILE="$3"; ART="${4:-}"
+if [ -n "$ART" ] && [ "$ART" != "kanal" ]; then
+  echo "FEHLER: viertes Argument darf nur 'kanal' sein" >&2
+  exit 2
+fi
+# Schutz gegen Verwechslung: Kanal-Tags tragen einen Anhang (v1.2.3-ahorn),
+# Standard-Tags nicht. Ein Kanal-Release als "Latest" ginge an alle Haeuser.
+case "$TAG" in
+  *-*) [ "$ART" = "kanal" ] || { echo "FEHLER: Tag '$TAG' hat einen Kanal-Anhang, aber 'kanal' fehlt" >&2; exit 2; } ;;
+  *)   [ -z "$ART" ] || { echo "FEHLER: 'kanal' angegeben, aber Tag '$TAG' hat keinen Anhang" >&2; exit 2; } ;;
+esac
 
 [ -f "$BODY_FILE" ] || { echo "FEHLER: Body-Datei nicht gefunden: $BODY_FILE" >&2; exit 2; }
 
@@ -35,8 +50,9 @@ TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed
 PAYLOAD=$(python -c "import json,sys
 d={'tag_name':sys.argv[1],'name':sys.argv[2],
    'body':open(sys.argv[3],encoding='utf-8').read(),
-   'draft':False,'prerelease':False,'make_latest':'true'}
-print(json.dumps(d))" "$TAG" "$NAME" "$BODY_FILE")
+   'draft':False,'prerelease':sys.argv[4]=='kanal',
+   'make_latest':'false' if sys.argv[4]=='kanal' else 'true'}
+print(json.dumps(d))" "$TAG" "$NAME" "$BODY_FILE" "$ART")
 
 # Body + HTTP-Status in einer Antwort einsammeln (keine Temp-Datei).
 RESP=$(curl -s -w $'\n%{http_code}' -X POST \
