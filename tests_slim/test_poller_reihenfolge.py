@@ -80,7 +80,7 @@ def test_poller_merkt_sich_die_stelle(tmp_path):
     cm.__exit__ = MagicMock(return_value=None)
     aufrufe = []
 
-    def fake(conn, limit, neue_zuerst=False, nach_fehler_id=0):
+    def fake(conn, limit, neue_zuerst=False, nach_fehler_id=0, nur=None):
         aufrufe.append((neue_zuerst, nach_fehler_id))
         return [{"wmai_id": 50, "filename": "", "subject": "", "to": "", "hatte_fehler": False},
                 {"wmai_id": 7, "filename": "", "subject": "", "to": "", "hatte_fehler": True},

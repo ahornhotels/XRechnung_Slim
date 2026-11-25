@@ -362,8 +362,11 @@ async function refreshPending() {
         <td>${escapeHtml(r.filename)}</td>
         <td>${escapeHtml((r.subject || "").slice(0, 80))}</td>
         <td>${escapeHtml(r.to)}</td>
-        <td class="err">${escapeHtml(r.error || "")}</td>
-        <td style="white-space:nowrap">${r.error ? `
+        <td class="${r.fremd ? "muted" : "err"}">${r.fremd
+          ? "Keine Rechnungsmail – nicht von der XRechnung gesperrt. Slim verarbeitet sie nicht."
+          : escapeHtml(r.error || "")}</td>
+        <td style="white-space:nowrap">${r.fremd ? `
+          <button onclick="freigeben(${r.wmai_id}, this)">Freigeben</button>` : r.error ? `
           <button onclick="retry(${r.wmai_id}, this)">Neu versuchen</button>
           <button onclick="openOverride(${r.wmai_id})"
                   style="background:var(--warning);color:#000;margin-left:4px">
@@ -420,6 +423,23 @@ async function retry(wmai_id, btn) {
   } catch (e) {
     btn.textContent = "Fehler";
     alert("Retry fehlgeschlagen: " + e.message);
+  }
+}
+
+async function freigeben(wmai_id, btn) {
+  const betreff = btn.closest("tr").children[2].textContent;
+  if (!confirm("Diese Mail jetzt versenden lassen?\n\n" + betreff + "\n\n"
+             + "Sie wurde nicht von der XRechnung gesperrt, sondern von Suite8 oder von Hand. "
+             + "Nach der Freigabe verschickt Suite8 sie sofort – auch wenn sie schon alt ist.")) return;
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    await fetchJSON(`/api/wmai/${wmai_id}/freigeben`, {method: "POST"});
+    setTimeout(refreshAll, 500);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Freigeben";
+    alert("Freigabe fehlgeschlagen: " + e.message);
   }
 }
 
