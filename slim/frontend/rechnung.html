@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rechnung – XRechnung Slim</title>
+<style>
+  :root { --bg:#f4f5f7; --fg:#1a1a1a; --accent:#2d7a3c; --accent-fg:#fff; --error:#b13a2c; --warn:#b7791f;
+          --panel:#fff; --border:#d8dce2; --muted:#6a7280; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111; --fg:#e8e8e8; --accent:#b6d100; --accent-fg:#000; --error:#e06a50; --warn:#e0b050;
+            --panel:#1c1c1c; --border:#2a2a2a; --muted:#999; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0; } h2 { font-size:17px; margin:0 0 10px; } h3 { font-size:15px; margin:16px 0 6px; }
+  .muted { color:var(--muted); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:18px; }
+  .suche { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .suche label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); gap:4px; }
+  input { padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; font-size:14px; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:var(--accent-fg); cursor:pointer; font-size:14px; }
+  button[disabled] { opacity:.55; cursor:default; }
+  button.secondary, a.btn { background:transparent; color:var(--fg); border:1px solid var(--border); padding:6px 12px; font-size:14px; border-radius:6px; text-decoration:none; display:inline-block; }
+  .kopf { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+  .zustand { font-weight:700; font-size:13px; padding:3px 12px; border-radius:14px; color:#fff; white-space:nowrap; }
+  .z-wartet { background:#b7791f; } .z-gesendet { background:#1a7f37; } .z-nie_erzeugt, .z-archiviert { background:#6a7280; }
+  .z-nachtraeglich { background:#2b6cb0; }
+  .meldung { border-left:5px solid var(--warn); padding:10px 14px; background:var(--bg); border-radius:6px; margin:10px 0; }
+  .meldung.fehler { border-left-color:var(--error); } .meldung.gut { border-left-color:var(--accent); }
+  .aktionen { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+  .tabelle { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  td.zahl, th.zahl { text-align:right; white-space:nowrap; }
+  dl.fakten { display:grid; grid-template-columns:170px 1fr; gap:4px 14px; margin:0; }
+  dl.fakten dt { color:var(--muted); } dl.fakten dd { margin:0; word-break:break-word; }
+  .ok { color:var(--accent); font-weight:600; } .bad { color:var(--error); font-weight:600; }
+  .marke { font-size:11px; padding:1px 6px; border-radius:4px; border:1px solid var(--border); margin-left:4px; white-space:nowrap; }
+  .parteien { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:8px 0 14px; }
+  .parteien div { border:1px solid var(--border); border-radius:8px; padding:10px; }
+  pre { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:10px; border-radius:6px; font-size:12px; max-height:50vh; overflow:auto; }
+  ul.befunde { margin:6px 0 0; padding-left:20px; }
+  @media (max-width: 640px) { .parteien { grid-template-columns:1fr; } dl.fakten { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <form class="suche" id="suche">
+      <label>Rechnungsnummer<input id="nr" type="text" placeholder="z. B. 123456" autocomplete="off"></label>
+      <button type="submit">Anzeigen</button>
+      <span class="muted">Sucht im Archiv und in Suite8 – auch Rechnungen, die nie eine XRechnung bekommen haben.</span>
+    </form>
+  </div>
+  <div id="inhalt"><p class="muted">Bitte eine Rechnungsnummer eingeben.</p></div>
+</main>
+<script src="/nav.js"></script>
+<script src="/ansicht.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const {esc, datum, zeit, geld} = SlimAnsicht;
+const datei = (rel) => "/api/archive/file?path=" + encodeURIComponent(rel);
+let rolle = null, aktuell = null;
+
+const ZUSTAND = {
+  wartet: "WARTET", gesendet: "GESENDET", nachtraeglich: "NACHTRÄGLICH ERZEUGT",
+  archiviert: "IM ARCHIV, VERSAND NICHT BELEGT", nie_erzeugt: "KEINE XRECHNUNG",
+};
+// Protokoll in Worten; unbekannte Ereignisse erscheinen mit ihrem Namen.
+const EREIGNIS = {
+  attach_ok: "XRechnung an die Mail gehängt",
+  validator_fail: "Prüfung fehlgeschlagen: Pflichtfelder fehlen",
+  kosit_fail: "KoSIT-Prüfung nicht bestanden",
+  xml_build_fail: "XRechnung nicht baubar",
+  zinv_not_found: "Rechnung in Suite8 nicht gefunden",
+  attach_fail: "Anhängen fehlgeschlagen",
+  retry_triggered: "Neu versuchen ausgelöst",
+  override_saved: "Override gespeichert",
+  override_deleted: "Override gelöscht",
+  freigegeben_ohne_xrechnung: "Nach Wartefrist ohne XRechnung freigegeben (nur PDF)",
+  nachtraeglich_erzeugt: "Nachträglich erzeugt und im Archiv abgelegt (nicht versendet)",
+  archiv_status_fehler: "Archivstatus konnte nicht geschrieben werden",
+};
+
+async function api(url, opts) {
+  const r = await fetch(url, Object.assign({cache: "no-store"}, opts || {}));
+  if (r.status === 401) { location.href = "/login"; throw new Error("Nicht angemeldet"); }
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Fehler " + r.status);
+  return j;
+}
+
+function echtheit(e) {
+  if (e === true) return '<span class="ok">✔ unverändert</span>';
+  if (e === false) return '<span class="bad">✘ verändert</span>';
+  return '<span class="muted">kein Prüfwert</span>';
+}
+
+function abfrage(extra) {
+  const p = new URLSearchParams(location.search), q = new URLSearchParams();
+  if (aktuell && aktuell.nr) q.set("nr", aktuell.nr);
+  else if (p.get("nr")) q.set("nr", p.get("nr"));
+  else if (p.get("wmai_id")) q.set("wmai_id", p.get("wmai_id"));
+  for (const [k, v] of Object.entries(extra || {})) q.set(k, v);
+  return q;
+}
+
+function kopf(d) {
+  const f = (d.ansicht || {}).fakten || {};
+  const teile = [f.art || "Rechnung", d.nr].join(" ");
+  const zusatz = [f.rechnungsdatum ? datum(f.rechnungsdatum) : null,
+                  f.betrag != null ? geld(f.betrag, f.waehrung) : null].filter(Boolean).join(" · ");
+  return `<div class="kopf"><h1>${esc(teile)}${zusatz ? ` <span class="muted" style="font-weight:400;font-size:16px">· ${esc(zusatz)}</span>` : ""}</h1>
+          <span class="zustand z-${esc(d.zustand)}">${esc(ZUSTAND[d.zustand] || d.zustand)}</span></div>`;
+}
+
+function hinweisZustand(d) {
+  const verwalter = rolle === "verwalten";
+  const w = d.wartend;
+  if (d.zustand === "wartet") {
+    const ov = w.override && Object.keys(w.override).length
+      ? `<p>Override für diese Mail: ${Object.entries(w.override).map(([k, v]) => `<code>${esc(k)}</code> = <b>${esc(v)}</b>`).join(", ")}</p>` : "";
+    return `<div class="meldung ${w.error ? "fehler" : ""}">
+        ${w.error ? `<b>Die Mail hängt:</b> ${esc(w.error)}` : "Die Mail wartet auf ihre XRechnung. Slim verarbeitet sie beim nächsten Durchlauf."}
+        ${ov}
+        ${verwalter ? `<div class="aktionen">
+          <button id="b-retry">Neu versuchen</button>
+          <a class="btn" href="/#override-${esc(w.wmai_id)}">Override bearbeiten</a>
+          <span class="muted" id="retry-meldung"></span></div>` : ""}
+      </div>`;
+  }
+  if (d.zustand === "gesendet") {
+    return d.quelle === "vorschau"
+      ? `<div class="meldung">Sie sehen den <b>heutigen Stand aus Suite8</b>, nicht die versendete Datei. Hier wird nichts gespeichert.
+           <div class="aktionen"><a class="btn" href="/rechnung?${abfrage()}">Versendete Fassung zeigen</a></div></div>`
+      : `<div class="meldung gut">Sie sehen die <b>versendete Datei</b> aus dem Archiv. Für eine erneute Übersendung
+           an den Kunden die XML herunterladen und unverändert schicken – nicht neu erzeugen.</div>`;
+  }
+  if (d.zustand === "nachtraeglich") {
+    return `<div class="meldung">Diese XRechnung wurde <b>nachträglich erzeugt</b> und nicht von Slim versendet.
+      Sie liegt zum Herunterladen im Archiv.</div>`;
+  }
+  if (d.zustand === "archiviert") {
+    return `<div class="meldung">Die Datei liegt im Archiv, ein Versand ist im Protokoll nicht belegt.</div>`;
+  }
+  const blockiert = d.pruefung && (d.pruefung.pflichtfelder.length || d.pruefung.bau_fehler);
+  return `<div class="meldung">Für diese Rechnung gibt es <b>keine XRechnung</b> im Archiv. Unten sehen Sie eine Vorschau
+      aus Suite8. ${verwalter ? "Sie können die XRechnung nachträglich erzeugen; sie wird geprüft, im Archiv abgelegt und steht dann zum Herunterladen bereit. Versendet wird nichts."
+                              : "Ein Benutzer mit der Rolle „verwalten“ kann sie nachträglich erzeugen."}
+      ${verwalter ? `<div class="aktionen"><button id="b-erzeugen" ${blockiert ? "disabled" : ""}>Nachträglich erzeugen und ablegen</button>
+        <span class="muted" id="erzeugen-meldung">${blockiert ? "Erst möglich, wenn die Prüfung fehlerfrei ist." : ""}</span></div>` : ""}
+    </div>`;
+}
+
+function mailKarte(d) {
+  const w = d.wartend;
+  if (!w) return "";
+  return `<div class="card"><h2>E-Mail in Suite8</h2><dl class="fakten">
+      <dt>Betreff</dt><dd>${esc(w.subject || "–")}</dd>
+      <dt>Empfänger</dt><dd>${esc(w.to || "–")}</dd>
+      <dt>Anhang</dt><dd>${esc(w.filename || "–")}</dd>
+      <dt>Mail-Nummer (WMAI)</dt><dd>${esc(w.wmai_id)}</dd></dl></div>`;
+}
+
+function archivKarte(d) {
+  if (!d.archiv.length) return "";
+  return `<div class="card"><h2>Im Archiv</h2><div class="tabelle"><table>
+    <thead><tr><th>Datei</th><th>Status</th><th>Angehängt / abgelegt am</th><th>Empfänger-Mail</th><th>Echtheit</th><th></th></tr></thead>
+    <tbody>${d.archiv.map(a => `<tr>
+      <td>${esc(a.name)}${a.version ? '<span class="marke">ältere Version</span>' : ""}</td>
+      <td>${esc(a.status)}${a.erzeugt_von ? ` <span class="muted">(${esc(a.erzeugt_von)})</span>` : ""}</td>
+      <td>${esc(zeit(a.angehaengt_am || a.archiviert_am))}</td>
+      <td>${esc(a.empfaenger || "–")}</td>
+      <td>${echtheit(a.echt)}</td>
+      <td style="white-space:nowrap"><a class="btn" href="${esc(datei(a.rel_path))}">XML herunterladen</a>
+        ${a.kosit_report ? `<a class="btn" href="${esc(datei(a.kosit_report))}">Prüfbericht</a>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div>
+    ${d.zustand === "gesendet" && d.quelle === "archiv" && d.in_suite8
+      ? `<div class="aktionen"><a class="btn" href="/rechnung?${abfrage({fassung: "aktuell"})}">Heutigen Stand aus Suite8 ansehen</a>
+         <span class="muted">Nur zur Ansicht – die Archivdatei bleibt, wie sie ist.</span></div>` : ""}
+  </div>`;
+}
+
+function pruefKarte(d) {
+  if (!d.pruefung) return "";
+  const p = d.pruefung;
+  const pflicht = p.pflichtfelder.length
+    ? `<span class="bad">✘ ${p.pflichtfelder.length} fehlen</span><ul class="befunde">${p.pflichtfelder.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`
+    : '<span class="ok">✔ vollständig</span>';
+  const bau = p.bau_fehler ? `<span class="bad">✘ ${esc(p.bau_fehler)}</span>`
+    : (p.pflichtfelder.length ? '<span class="muted">erst nach den Pflichtfeldern</span>' : '<span class="ok">✔ baubar und schemagerecht</span>');
+  return `<div class="card"><h2>Prüfung des heutigen Stands</h2><dl class="fakten">
+      <dt>Pflichtfelder</dt><dd>${pflicht}</dd>
+      <dt>Aufbau der XRechnung</dt><dd>${bau}</dd>
+      <dt>KoSIT-Prüfung</dt><dd id="kosit"><button class="secondary" id="b-kosit">KoSIT prüfen</button>
+        <span class="muted">dauert einige Sekunden</span></dd></dl></div>`;
+}
+
+function ansichtKarte(d) {
+  if (!d.ansicht) {
+    return `<div class="card"><h2>Rechnung</h2><p class="muted">${d.db_fehler
+      ? "Suite8 ist nicht erreichbar, daher keine Vorschau." : "Keine lesbare Darstellung möglich."}</p></div>`;
+  }
+  const titel = d.quelle === "archiv" ? "Rechnung – so wurde sie abgelegt" : "Rechnung – Vorschau aus Suite8 (nicht gespeichert)";
+  return `<div class="card"><h2>${titel}</h2>${SlimAnsicht.html(d.ansicht)}</div>`;
+}
+
+function verlaufKarte(d) {
+  if (!d.verlauf.length) return `<div class="card"><h2>Verlauf</h2><p class="muted">Keine Protokolleinträge zu dieser Rechnung.</p></div>`;
+  return `<div class="card"><h2>Verlauf</h2><div class="tabelle"><table>
+    <thead><tr><th>Zeit</th><th>Ereignis</th><th>Einzelheiten</th></tr></thead>
+    <tbody>${d.verlauf.slice().reverse().map(e => {
+      const det = e.details || {};
+      const text = [det.by ? "von " + det.by : null, det.error || null,
+                    det.xml_only ? "nur XML" : null, e.wmai_id ? "Mail " + e.wmai_id : null].filter(Boolean).join(" · ");
+      return `<tr><td style="white-space:nowrap">${esc(zeit(e.ts))}</td><td>${esc(EREIGNIS[e.event] || e.event)}</td><td>${esc(text)}</td></tr>`;
+    }).join("")}</tbody></table></div></div>`;
+}
+
+function zeigen(d) {
+  aktuell = d;
+  document.title = `Rechnung ${d.nr} – XRechnung Slim`;
+  $("nr").value = d.nr;
+  $("inhalt").innerHTML = `<div class="card">${kopf(d)}
+      ${d.db_fehler ? `<div class="meldung fehler">Suite8 ist gerade nicht erreichbar (${esc(d.db_fehler)}). Angezeigt wird, was im Archiv liegt.</div>` : ""}
+      ${hinweisZustand(d)}</div>
+    ${mailKarte(d)}${archivKarte(d)}${ansichtKarte(d)}${pruefKarte(d)}${verlaufKarte(d)}`;
+  const b = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
+  b("b-kosit", kosit); b("b-retry", neuVersuchen); b("b-erzeugen", erzeugen);
+}
+
+async function laden() {
+  const q = abfrage(new URLSearchParams(location.search).get("fassung") === "aktuell" ? {fassung: "aktuell"} : {});
+  if (!q.get("nr") && !q.get("wmai_id")) return;
+  $("inhalt").innerHTML = '<p class="muted">Lädt …</p>';
+  try { zeigen(await api("/api/rechnung?" + q)); }
+  catch (e) { $("inhalt").innerHTML = `<div class="card"><p class="bad">${esc(e.message)}</p></div>`; }
+}
+
+async function kosit() {
+  const el = $("kosit");
+  el.innerHTML = '<span class="muted">KoSIT prüft …</span>';
+  try {
+    const k = await api("/api/rechnung/kosit?" + abfrage());
+    if (k.ok === true) el.innerHTML = '<span class="ok">✔ ohne Befund</span>';
+    else if (k.ok === null) el.innerHTML = `<span class="muted">${esc(k.hinweis)}</span>`;
+    else el.innerHTML = `<span class="bad">✘ ${k.befunde.length} Befund(e)</span><ul class="befunde">${k.befunde.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`;
+  } catch (e) { el.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
+
+async function neuVersuchen() {
+  const m = $("retry-meldung");
+  $("b-retry").disabled = true;
+  try {
+    await api(`/api/wmai/${aktuell.wartend.wmai_id}/retry`, {method: "POST"});
+    m.textContent = "Ausgelöst. Slim versucht es beim nächsten Durchlauf erneut – Seite in etwa einer Minute neu laden.";
+  } catch (e) { m.textContent = e.message; $("b-retry").disabled = false; }
+}
+
+async function erzeugen() {
+  if (!confirm(`XRechnung für Rechnung ${aktuell.nr} nachträglich erzeugen und im Archiv ablegen?\n\n` +
+               "Sie wird aus dem heutigen Stand in Suite8 gebaut und geprüft. Versendet wird nichts.")) return;
+  const m = $("erzeugen-meldung");
+  $("b-erzeugen").disabled = true;
+  m.textContent = "Wird erzeugt und geprüft …";
+  try {
+    await api("/api/rechnung/erzeugen", {method: "POST", headers: {"Content-Type": "application/json"},
+                                         body: JSON.stringify({nr: aktuell.nr})});
+    history.replaceState(null, "", "/rechnung?nr=" + encodeURIComponent(aktuell.nr));
+    await laden();
+  } catch (e) { m.textContent = e.message; $("b-erzeugen").disabled = false; }
+}
+
+$("suche").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const nr = $("nr").value.trim();
+  if (!nr) return;
+  aktuell = null;
+  history.pushState(null, "", "/rechnung?nr=" + encodeURIComponent(nr));
+  laden();
+});
+window.addEventListener("popstate", () => { aktuell = null; laden(); });
+
+(async function start() {
+  try { rolle = (await (await fetch("/api/auth/state", {cache: "no-store"})).json()).role || null; } catch (e) {}
+  const p = new URLSearchParams(location.search);
+  if (p.get("nr")) $("nr").value = p.get("nr");
+  laden();
+})();
+</script>
+</body>
+</html>

@@ -216,3 +216,44 @@ def test_handbuch_inhalt():
                 "Archiv", "Leitweg-ID", "XRechnung AUS", "Nur XML", "Override"):
         assert txt in src, txt
 
+
+
+# ── Detailseite einer Rechnung ──
+
+def test_rechnungsseite_route_und_menue():
+    import inspect
+    import slim.main_slim as m
+    src = inspect.getsource(m)
+    for route in ('"/rechnung"', '"/ansicht.js"'):
+        assert f"@app.get({route}" in src, route
+    assert "rechnung_api_module.router" in src
+    assert '["/rechnung", "Rechnung", false]' in (FRONT / "nav.js").read_text(encoding="utf-8")
+
+
+def test_rechnungsseite_zustaende_und_aktionen():
+    src = (FRONT / "rechnung.html").read_text(encoding="utf-8")
+    assert "401" in src and 'location.href = "/login"' in src
+    for txt in ('<script src="/nav.js"></script>', '<script src="/ansicht.js"></script>',
+                "/api/rechnung?", "/api/rechnung/kosit?", "/api/rechnung/erzeugen", "/retry",
+                "Heutigen Stand aus Suite8 ansehen", "Nachträglich erzeugen und ablegen",
+                "XML herunterladen", "Versendet wird nichts", "unverändert schicken"):
+        assert txt in src, txt
+
+
+def test_rechnungsseite_hat_keinen_versandknopf():
+    """Slim verschickt von der Detailseite nichts - nur Download."""
+    src = (FRONT / "rechnung.html").read_text(encoding="utf-8")
+    assert "senden\"" not in src.lower() and "/senden" not in src
+
+
+def test_archiv_und_uebersicht_fuehren_zur_rechnung():
+    archiv = (FRONT / "archiv.html").read_text(encoding="utf-8")
+    assert "/rechnung?nr=" in archiv and "SlimAnsicht.html(a)" in archiv
+    index = (FRONT / "index.html").read_text(encoding="utf-8")
+    assert "/rechnung?wmai_id=" in index and "#override-" in index
+
+
+def test_handbuch_erklaert_kopie_und_nachtraeglich():
+    src = (FRONT / "handbuch.html").read_text(encoding="utf-8")
+    for txt in ("Nachträglich erzeugen", "kein Kennzeichen „Kopie“", "unverändert", "Slim verschickt sie"):
+        assert txt in src, txt
