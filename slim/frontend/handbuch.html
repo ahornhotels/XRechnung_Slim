@@ -138,7 +138,7 @@
       <tr><td>BT-5</td><td>Währung</td><td>Suite8-Basiswährung</td><td>Hoteldaten → Währung (nur Ersatz)</td></tr>
       <tr><td>BT-9</td><td>Fälligkeit</td><td>Suite8-Zahlungsziel</td><td>Hoteldaten → Zahlungsziel (nur Ersatz)</td></tr>
       <tr><td><b>BT-10</b></td><td><b>Käuferreferenz / Leitweg-ID</b> – nach deutscher Regel immer Pflicht (BR-DE-15)</td>
-          <td>DXR-Mitgliedschaft am Profil, sonst Freitexte, sonst Profilname</td>
+          <td>Eingeschaltete Freitexte der Rechnung, sonst DXR-Mitgliedschaft am Profil, sonst Profilname</td>
           <td>Konfiguration XRechnung → Käuferreferenz (Freitexte 1–4); Override</td></tr>
       <tr><td>BT-13</td><td>Bestellnummer des Käufers – freiwillig; der Empfänger ordnet die Rechnung damit seinem Vorgang zu</td>
           <td>Ein Feld der Reservierung, das der Installer wählt (z. B. Voucher-Nummer eines Reiseveranstalters)</td>
@@ -245,9 +245,10 @@
         etwa 30 Sekunden) und die Mail geht raus. Sie müssen die Rechnung dafür <b>nicht</b> neu verschicken.</dd>
       <dt>Leitweg-ID / Käuferreferenz für Behörden und Firmen</dt>
       <dd>Verlangt ein Empfänger eine Leitweg-ID (Behörden) oder eine Bestell- bzw. Käuferreferenz, tragen Sie sie im
-        Profil als <b>DXR-Mitgliedschaft</b> ein. Dieser Wert wird immer zuerst genommen. Je nach Einstellung des Hauses
-        können auch die Freitexte 1–4 der Rechnung (Rechtsklick im Rechnungsfenster → „Bearbeite gewähltes Fenster“ →
-        Reiter „Text“) als Käuferreferenz dienen.</dd>
+        Profil als <b>DXR-Mitgliedschaft</b> ein. Je nach Einstellung des Hauses können auch die Freitexte 1–4 der
+        Rechnung (Rechtsklick im Rechnungsfenster → „Bearbeite gewähltes Fenster“ → Reiter „Text“) als Käuferreferenz
+        dienen. Ist ein solcher Freitext eingeschaltet und gefüllt, <b>hat er Vorrang</b> vor der DXR-Mitgliedschaft –
+        so lässt sich für eine einzelne Rechnung eine andere Referenz angeben. Ist er leer, gilt die DXR-Mitgliedschaft.</dd>
       <dt>Voucher- oder Bestellnummer für Reiseveranstalter</dt>
       <dd>Rechnet Ihr Haus mit Reiseveranstaltern ab, kann die XRechnung deren Voucher-Nummer als
         <b>Bestellnummer des Käufers (BT-13)</b> tragen. Der Veranstalter ordnet die Rechnung damit seiner Buchung zu.

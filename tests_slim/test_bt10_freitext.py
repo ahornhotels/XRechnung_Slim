@@ -1,4 +1,5 @@
-"""Tests: BT-10 (Kaeuferreferenz) aus ZWIN-Freitext 1-4, immer erst nach DXR."""
+"""Tests: BT-10 (Kaeuferreferenz) aus ZWIN-Freitext 1-4. Ein eingeschalteter,
+gefuellter Freitext hat Vorrang vor der DXR-Mitgliedschaft."""
 import logging
 from contextlib import contextmanager
 
@@ -18,9 +19,19 @@ class _Cur:
         return self.row
 
 
-def test_dxr_hat_vorrang():
+def test_freitext_hat_vorrang_vor_dxr():
     cur = _Cur(row=("LEITWEG-1", "A", "B", None, None))
+    assert invoice_fetcher._buyer_reference_aus_freitext(cur, 7, [1, 2]) == "A"
+
+
+def test_dxr_bleibt_wenn_eingeschaltete_freitexte_leer():
+    cur = _Cur(row=("LEITWEG-1", "  ", None, "C", None))
     assert invoice_fetcher._buyer_reference_aus_freitext(cur, 7, [1, 2]) is None
+
+
+def test_dxr_bleibt_wenn_gefuellter_freitext_nicht_eingeschaltet():
+    cur = _Cur(row=("LEITWEG-1", "A", None, None, None))
+    assert invoice_fetcher._buyer_reference_aus_freitext(cur, 7, [2, 3]) is None
 
 
 def test_erster_gefuellter_in_reihenfolge():
@@ -102,7 +113,7 @@ def test_fetch_invoice_setzt_buyerreference(monkeypatch):
 
         def fetchone(self):
             if "zwin_freetext1" in self.sql:
-                return (None, "Hinweis", "4711-0815", None, None)
+                return ("LEITWEG-1", "Hinweis", "4711-0815", None, None)
             return None
 
     class _Conn:

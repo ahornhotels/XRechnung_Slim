@@ -160,8 +160,9 @@ select (select max(xmnr_value) from xmnr, xmty
 
 
 def _buyer_reference_aus_freitext(cur, zinv_id: int, aktiv: list[int]) -> Optional[str]:
-    """BT-10-Ersatz: DXR-Mitgliedschaft hat immer Vorrang (dann None = Kopf
-    bleibt), sonst der erste gefuellte eingeschaltete Freitext 1 -> 4."""
+    """BT-10 aus dem Rechnungsfenster: der erste gefuellte eingeschaltete
+    Freitext 1 -> 4 hat Vorrang vor der DXR-Mitgliedschaft. Ist keiner
+    gefuellt: None, der Kopf (DXR, sonst Profilname) bleibt."""
     if not aktiv:
         return None
     try:
@@ -171,8 +172,6 @@ def _buyer_reference_aus_freitext(cur, zinv_id: int, aktiv: list[int]) -> Option
         logger.warning("BT-10-Freitexte nicht lesbar (zinv_id=%s): %s", zinv_id, e)
         return None
     if not row:
-        return None
-    if str(row[0] or "").strip():
         return None
     for n in aktiv:
         value = str(row[n] or "").strip()
@@ -447,7 +446,7 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
         header = header_rows[0]
         # Verkaeuferdaten aus der Oberflaeche ueberschreiben Suite8 (WUSS)
         _apply_seller_overrides(header)
-        # BT-10: ohne DXR-Mitgliedschaft der erste eingeschaltete Freitext
+        # BT-10: ein gefuellter eingeschalteter Freitext geht vor DXR
         ref = _buyer_reference_aus_freitext(cur, zinv_id, _bt10_freitexte())
         if ref:
             header["buyerreference"] = ref

@@ -339,15 +339,15 @@ def test_bt10_freitexte_standard_aus_und_erklaert(env):
     for n in (1, 2, 3, 4):
         f = _field(data, "kaeuferreferenz", f"bt10_freitext{n}")
         assert f["type"] == "bool" and f["value"] is False and f["label"] == f"Freitext {n}"
-        for wort in ("DXR", "Leitweg-ID bzw. Käuferreferenz", "wenn gefüllt", "1 → 4", "Bearbeite gewähltes Fenster", "Text", "Name des Profils"):
+        for wort in ("DXR", "Leitweg-ID bzw. Käuferreferenz", "Vorrang vor der DXR-Mitgliedschaft", "1 → 4", "Bearbeite gewähltes Fenster", "Text", "Name des Profils"):
             assert wort in f["info"], wort
 
 
 def test_freitext_hinweistexte():
     sec = settings_schema.section("kaeuferreferenz")
     by = {s.key: s for s in sec.settings}
-    vorrang = ("Standardmäßig wird zuerst der Wert aus der DXR-Mitgliedschaft genommen "
-               "(Leitweg-ID bzw. Käuferreferenz), wenn gefüllt – erst danach die eingeschalteten Freitexte. ")
+    vorrang = ("Eingeschaltet und gefüllt hat der Freitext Vorrang vor der DXR-Mitgliedschaft "
+               "(Leitweg-ID bzw. Käuferreferenz); ist er leer, gilt die DXR-Mitgliedschaft. ")
     assert by["bt10_freitext1"].help == (vorrang + "Erscheint immer als Hinweis (BT-22) in der XRechnung, "
                                          "eingeschaltet zusätzlich als Käuferreferenz.")
     for n in (2, 3, 4):

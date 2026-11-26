@@ -181,11 +181,16 @@ mit der Einstellung 4 – nur dass Slim das bei jedem Abruf selbst erledigt.
 
 Die Käuferreferenz (bei Behörden die Leitweg-ID) kommt in dieser Reihenfolge:
 
-1. **DXR-Mitgliedschaft** am Rechnungsempfänger – hat immer Vorrang
-2. **Freitext 1 bis 4** aus dem Rechnungsfenster – nur die unter
+1. **Freitext 1 bis 4** aus dem Rechnungsfenster – nur die unter
    Konfiguration XRechnung → Käuferreferenz eingeschalteten, der erste
-   gefüllte in der Reihenfolge 1 → 4 (ab Werk alle aus)
+   gefüllte in der Reihenfolge 1 → 4 (ab Werk alle aus). Ein gefüllter
+   eingeschalteter Freitext hat Vorrang vor der DXR-Mitgliedschaft.
+2. **DXR-Mitgliedschaft** am Rechnungsempfänger – wenn kein eingeschalteter
+   Freitext gefüllt ist
 3. sonst wie bisher der Name des Profils
+
+Nur Freitexte einschalten, die das Haus wirklich für die Käuferreferenz
+nutzt: Steht dort etwas anderes, ersetzt es die Leitweg-ID aus dem Profil.
 
 Die Freitexte stehen in Suite8 hier: Rechtsklick im Rechnungsfenster →
 „Bearbeite gewähltes Fenster“ → Reiter „Text“, die vier Zeilen sind Freitext
