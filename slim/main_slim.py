@@ -49,6 +49,7 @@ from slim.api_slim import trigger_sql as trigger_sql_module
 from slim.api_slim import run_now as run_now_module
 from slim.api_slim import update_api as update_api_module
 from slim.api_slim import archive_api as archive_api_module
+from slim.api_slim import rechnung_api as rechnung_api_module
 from slim.api_slim import schalter_api as schalter_api_module
 from slim.api_slim import auth_api as auth_api_module
 from slim.api_slim import settings_api as settings_api_module
@@ -109,6 +110,7 @@ app.include_router(trigger_sql_module.router)
 app.include_router(run_now_module.router)
 app.include_router(update_api_module.router)
 app.include_router(archive_api_module.router)
+app.include_router(rechnung_api_module.router)
 app.include_router(schalter_api_module.router)
 app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
@@ -159,6 +161,16 @@ async def settings_pages():
 @app.get("/archiv")
 async def archiv_page():
     return FileResponse(str(_SLIM_DIR / "frontend" / "archiv.html"))
+
+
+@app.get("/rechnung")
+async def rechnung_page():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "rechnung.html"))
+
+
+@app.get("/ansicht.js")
+async def ansicht_js():
+    return FileResponse(str(_SLIM_DIR / "frontend" / "ansicht.js"), media_type="application/javascript")
 
 
 @app.get("/handbuch")

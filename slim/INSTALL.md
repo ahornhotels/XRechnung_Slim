@@ -109,6 +109,7 @@ sieht nur die Rolle „verwalten“; jede Einstellung hat einen Erklärtext.
 | Konfiguration XRechnung | Erkennung im Betreff/Dateinamen mit Muster-Assistent, Name des XML-Anhangs, **Nur-XML** · Gastzeile (BT-22), Positionen zusammenfassen, Auslage-Artikel, Rundungsausgleich · Käuferreferenz (BT-10) · KoSIT-Prüfung, XRechnung-Version · für Techniker/DBA: Trigger-SQL, Mapping und SQL-Quellen |
 | Hoteldaten | Verkäuferdaten aus Suite8 (abweichend festlegbar) · Hauskürzel, Hausname, Währung, Zahlungsziel · Ansprechpartner, Absender-E-Mail |
 | Archiv | alle gesendeten XRechnungen, Suche nach Rechnungsnummer und Rechnungsdatum |
+| Rechnung | Detailseite je Rechnungsnummer: wartend, gesendet oder ohne XRechnung, mit Vorschau, Prüfung und Verlauf |
 | System | Datenbank (mit Verbindungstest), Abrufintervall, Server, Update |
 | Benutzer | Anmeldungen und Rollen |
 | Handbuch | für Front Office und Buchhaltung: Weg einer Rechnungsmail, was bei hängenden Mails hilft, alle Einstellungen mit Erklärung und Standardwert (für alle Rollen, ohne die Werte des Hauses) |
@@ -209,6 +210,33 @@ per SHA-256, dass die Datei seit dem Archivieren nicht verändert wurde.
 „Ansehen“ zeigt die Rechnung lesbar, darunter die Original-XML; „XML“ lädt die
 Datei unverändert herunter. Wird eine Rechnung erneut erzeugt, bleibt jede
 Version mit eigenem Prüfwert erhalten.
+
+### Rechnung
+
+Unter **Rechnung** zeigt Slim alles zu einer Rechnungsnummer auf einer Seite.
+Gesucht wird im Archiv und in Suite8, auch nach Rechnungen, die Slim nie
+verarbeitet hat. Aus der Übersicht führt „Ansehen“, aus dem Archiv „Details“
+dorthin.
+
+| Zustand | Was die Seite zeigt |
+|---|---|
+| **Wartet** | Fehlertext der Mail, Vorschau der Rechnung live aus Suite8 (mit Override), Prüfung; für Verwalter „Neu versuchen“ und „Override bearbeiten“ |
+| **Gesendet** | die Archivdatei, so wie sie verschickt wurde, mit Empfänger, Zeitpunkt und Echtheit; „Heutigen Stand aus Suite8 ansehen“ baut nur zur Ansicht |
+| **Keine XRechnung** | Vorschau aus Suite8; Verwalter können die XRechnung **nachträglich erzeugen** |
+
+Ansehen schreibt nichts: Vorschau, „Heutiger Stand“ und die KoSIT-Prüfung auf
+Knopfdruck legen keine Datei und keinen Protokolleintrag an. Die Archivdatei
+einer gesendeten Rechnung wird nie ersetzt.
+
+**Nachträglich erzeugen** baut die XRechnung aus dem heutigen Stand in Suite8,
+prüft Pflichtfelder und KoSIT und legt sie mit dem Status „nachträglich
+erzeugt“ ins Archiv (Protokoll `nachtraeglich_erzeugt` mit Benutzer). Slim
+**verschickt sie nicht** – sie steht zum Herunterladen bereit. Gesperrt, wenn
+für die Nummer schon eine Archivdatei liegt oder ihre Mail noch wartet.
+
+**Kunde möchte die XRechnung noch einmal:** die Archivdatei herunterladen und
+unverändert schicken. Die XRechnung hat kein Kennzeichen „Kopie“. Ist der
+Inhalt falsch, in Suite8 stornieren und neu berechnen.
 
 Vor jedem Speichern legt die App eine Sicherung der Datei an
 (`<datei>.<zeitstempel>.sicherung`, die letzten 20 bleiben). Einstellungen mit

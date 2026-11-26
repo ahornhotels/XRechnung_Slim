@@ -103,6 +103,10 @@ def _entry(p: Path, root: Path, meta: dict) -> dict:
         "empfaenger": meta.get("empfaenger"),
         "angehaengt_am": meta.get("angehaengt_am"),
         "status": _status(meta),
+        "nachtraeglich": bool(meta.get("nachtraeglich")),
+        "erzeugt_von": meta.get("erzeugt_von"),
+        "archiviert_am": meta.get("archiviert_am"),
+        "wmai_id": meta.get("wmai_id"),
         "_meta_status": meta.get("status"),
         "version": bool(archive_fs._VERSIONED_SUFFIX.search(p.name)),
         "kosit_report": kosit.relative_to(root).as_posix() if has_kosit else None,
@@ -162,6 +166,9 @@ def _all_entries(root: Path, index: dict):
 def _status(meta: dict) -> str:
     if meta.get("status") == "gesendet":
         return "gesendet"
+    if meta.get("nachtraeglich"):
+        # ueber die Detailseite erzeugt, nicht von Slim an eine Mail gehaengt
+        return "nachträglich erzeugt"
     # Bestandsdatei ohne attach_ok im Protokoll: ob sie gesendet wurde, ist
     # nicht mehr belegbar (Protokoll evtl. schon geloescht)
     return "unbekannt" if meta.get("nachgetragen") else "nicht angehängt"

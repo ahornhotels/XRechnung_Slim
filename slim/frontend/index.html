@@ -366,11 +366,12 @@ async function refreshPending() {
           ? "Keine Rechnungsmail – nicht von der XRechnung gesperrt. Slim verarbeitet sie nicht."
           : escapeHtml(r.error || "")}</td>
         <td style="white-space:nowrap">${r.fremd ? `
-          <button onclick="freigeben(${r.wmai_id}, this)">Freigeben</button>` : r.error ? `
+          <button onclick="freigeben(${r.wmai_id}, this)">Freigeben</button>` : `
+          <a href="/rechnung?wmai_id=${r.wmai_id}" style="margin-right:6px">Ansehen</a>` + (r.error ? `
           <button onclick="retry(${r.wmai_id}, this)">Neu versuchen</button>
           <button onclick="openOverride(${r.wmai_id})"
                   style="background:var(--warning);color:#000;margin-left:4px">
-            Override</button>` : ""}</td>
+            Override</button>` : "")}</td>
       </tr>
     `).join("");
   } catch (e) {
@@ -581,6 +582,14 @@ async function refreshAudit() {
       `<span class="err">Audit nicht erreichbar: ${escapeHtml(e.message)}</span>`;
   }
 }
+
+// Sprung von der Detailseite einer Rechnung: /#override-<WMAI_ID> oeffnet den Override.
+(function overrideAusLink() {
+  const m = /^#override-(\d+)$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname);
+  window.addEventListener("load", () => openOverride(Number(m[1])));
+})();
 
 async function refreshAll() {
   await Promise.all([refreshStatus(), refreshPending(), refreshAudit()]);
