@@ -277,6 +277,25 @@
         Rechnungsnummer oder Rechnungsdatum. „Ansehen“ zeigt die Rechnung lesbar, „XML“ lädt die Originaldatei
         herunter (z. B. für einen Kunden, der sie erneut braucht). „✔ unverändert“ bestätigt, dass die Datei seit dem
         Versand nicht verändert wurde – wichtig für Prüfer.</dd>
+      <dt>Rechnung – Detailseite je Rechnung</dt>
+      <dd>Unter <a href="/rechnung">Rechnung</a> geben Sie eine Rechnungsnummer ein; aus der Übersicht führt „Ansehen“,
+        aus dem Archiv „Details“ dorthin. Die Seite zeigt je nach Zustand:
+        <b>Wartet</b> – die Mail hängt noch in Suite8; Sie sehen den Fehlertext, eine Vorschau der Rechnung aus Suite8
+        und die Prüfung. <b>Gesendet</b> – die Datei aus dem Archiv, genau so, wie sie verschickt wurde, mit Empfänger,
+        Zeitpunkt und „✔ unverändert“. <b>Keine XRechnung</b> – die Rechnung gibt es nur in Suite8 (zum Beispiel, weil
+        sie vor der Einführung entstand oder nur mit PDF hinausging). Darunter steht immer der Verlauf aus dem Protokoll.
+        Ansehen ändert nichts: Vorschau und „Heutigen Stand aus Suite8 ansehen“ speichern nichts.</dd>
+      <dt>Ein Kunde möchte die XRechnung noch einmal</dt>
+      <dd>Rechnung aufrufen, „XML herunterladen“ und die Datei <b>unverändert</b> per E-Mail schicken, im Text etwa
+        „erneute Übersendung der Rechnung Nr. … vom …“. Die XRechnung kennt kein Kennzeichen „Kopie“; maßgeblich ist,
+        dass der Kunde dieselbe Datei noch einmal bekommt und keine neu gebaute mit anderem Inhalt. Ist an der Rechnung
+        etwas falsch, hilft keine Kopie: dann Storno und neue Rechnung in Suite8.</dd>
+      <dt>Nachträglich erzeugen <span class="muted">(Rolle „verwalten“)</span></dt>
+      <dd>Hat eine Rechnung nie eine XRechnung bekommen, erzeugt der Knopf „Nachträglich erzeugen und ablegen“ sie aus
+        dem heutigen Stand in Suite8. Das geht nur, wenn Pflichtfelder und KoSIT-Prüfung fehlerfrei sind. Die Datei liegt
+        danach mit dem Status „nachträglich erzeugt“ im Archiv und lässt sich herunterladen. <b>Slim verschickt sie
+        nicht</b> – das Weiterleiten an den Kunden machen Sie selbst. Liegt für die Rechnung schon eine Datei im Archiv
+        oder wartet ihre Mail noch, ist der Knopf gesperrt.</dd>
       <dt>Neu versuchen <span class="muted">(Rolle „verwalten“)</span></dt>
       <dd>Auf der Übersicht neben einer Mail mit Fehler. Löscht den alten Fehlertext, Slim versucht es beim nächsten
         Durchlauf erneut. „Alle Fehler erneut versuchen“ macht das für alle wartenden Mails.</dd>

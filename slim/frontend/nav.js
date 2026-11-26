@@ -7,6 +7,7 @@
     ["/konfiguration", "Konfiguration XRechnung", true],
     ["/hoteldaten", "Hoteldaten", true],
     ["/archiv", "Archiv", false],
+    ["/rechnung", "Rechnung", false],
     ["/system", "System", true],
     ["/users", "Benutzer", true],
     ["/handbuch", "Handbuch", false],
