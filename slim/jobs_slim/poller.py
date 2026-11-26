@@ -113,6 +113,15 @@ def _audit_fail_with_spam_guard(
     return True
 
 
+def validator_fehlertext(issues: list) -> str:
+    """Fehlertext fuer WMAI_ERROR und Protokoll: alle Meldungen, ungekuerzt.
+
+    Frueher standen dort nur drei Meldungen zu je 80 Zeichen - der Text brach
+    mitten im Wort ab und verschwieg, was zu tun ist. Die Gesamtlaenge begrenzt
+    WMAI_ERROR_MAX beim Schreiben."""
+    return f"Validator-Fail: {len(issues)} Issues ({'; '.join(i['message'] for i in issues)})"
+
+
 def run_once(data_dir: Optional[Path] = None) -> dict:
     """Eine Polling-Runde.
 
@@ -271,10 +280,7 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
 
                 issues = invoice_validator.validate(inv)
                 if issues:
-                    msgs = "; ".join(i["message"][:80] for i in issues[:3])
-                    raise RuntimeError(
-                        f"Validator-Fail: {len(issues)} Issues ({msgs})"
-                    )
+                    raise RuntimeError(validator_fehlertext(issues))
 
                 xml = xml_builder.build_and_validate(inv)
 

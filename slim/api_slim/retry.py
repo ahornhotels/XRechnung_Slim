@@ -8,6 +8,8 @@ Retry-/Override-Endpoints:
                                           mit aktuell gesetztem Error
   POST /api/wmai/{wmai_id}/freigeben    - fremde Sperre (keine Rechnungsmail)
                                           von Hand aufheben
+  POST /api/wmai/{wmai_id}/ohne-xrechnung - haengende Rechnungsmail von Hand
+                                          ohne XRechnung freigeben (nur PDF)
 
   GET  /api/wmai/{wmai_id}/override     - aktuelle Override-Werte lesen
   POST /api/wmai/{wmai_id}/override     - Override-Werte schreiben
@@ -19,7 +21,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Path as PathParam
+from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Request
 from pydantic import BaseModel, Field
 
 from core.config_loader import load_hotel_config
@@ -27,7 +29,7 @@ from core.db_connector import get_connection
 from modules.suite8_mailer import (
     set_wmai_error, find_pending_wmai, get_wmai_error, get_blocked_wmai, release_wmai,
 )
-from modules.suite8_pattern import ist_rechnungsmail
+from modules.suite8_pattern import extract_zinv_number, ist_rechnungsmail
 
 from slim.core_slim import audit_jsonl, overrides
 from slim.api_slim.status import get_state
@@ -101,6 +103,64 @@ def freigeben_fremde_sperre(
             wmai_id=wmai_id, zinv_number=None,
             details={"source": "api", "betreff": mail["subject"][:200],
                      "hoteldatum": mail["fideliodate"]},
+        )
+    return {"ok": True, "wmai_id": wmai_id}
+
+
+# ─────────────────── Rechnungsmail ohne XRechnung freigeben ───────────────────
+
+@router.post("/wmai/{wmai_id}/ohne-xrechnung")
+def freigeben_ohne_xrechnung(
+    request: Request,
+    wmai_id: int = PathParam(..., ge=1),
+    state: dict = Depends(get_state),
+):
+    """Gibt eine HAENGENDE Rechnungsmail von Hand frei: Suite8 verschickt sie
+    dann ohne XRechnung, nur mit PDF. Fuer Rechnungen, die sich nicht als
+    XRechnung abbilden lassen (z. B. reine Umbuchung einer Anzahlung).
+
+    Nur mit Fehlertext: Eine Mail ohne Fehler bekommt ihre XRechnung beim
+    naechsten Durchlauf und soll nicht versehentlich ohne hinausgehen."""
+    cfg = load_hotel_config() or {}
+    fn_pat = cfg.get("suite8_recognize_filename_pattern", "") or ""
+    sub_pat = cfg.get("suite8_recognize_subject_pattern", "") or ""
+    try:
+        with get_connection() as conn:
+            mail = get_blocked_wmai(conn, wmai_id)
+            if mail is None:
+                raise HTTPException(404, "Diese Mail ist nicht (mehr) gesperrt.")
+            if not ist_rechnungsmail(filename=mail["filename"], subject=mail["subject"],
+                                     filename_pattern=fn_pat, subject_pattern=sub_pat):
+                raise HTTPException(
+                    409, "Das ist keine Rechnungsmail. Dafür gibt es auf der Übersicht „Freigeben“.")
+            fehler = (get_wmai_error(wmai_id, conn) or "").strip()
+            if not fehler:
+                raise HTTPException(
+                    409, "Diese Mail hat keinen Fehler. Sie bekommt ihre XRechnung beim "
+                         "nächsten Durchlauf und wird nicht ohne freigegeben.")
+            freigegeben = release_wmai(conn, wmai_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Freigabe ohne XRechnung fuer WMAI %s fehlgeschlagen", wmai_id)
+        raise HTTPException(status_code=503, detail=f"DB nicht erreichbar: {e}")
+    if not freigegeben:
+        raise HTTPException(404, "Diese Mail ist nicht (mehr) gesperrt.")
+
+    try:
+        _, nr = extract_zinv_number(filename=mail["filename"], subject=mail["subject"],
+                                    filename_pattern=fn_pat, subject_pattern=sub_pat)
+    except Exception:
+        nr = None
+    by = getattr(request.state, "user", None) or "?"
+    logger.warning("WMAI %s von Hand ohne XRechnung freigegeben (von %s)", wmai_id, by)
+    data_dir = state.get("data_dir")
+    if data_dir is not None:
+        audit_jsonl.record_safe(
+            Path(data_dir), "freigegeben_ohne_xrechnung",
+            wmai_id=wmai_id, zinv_number=str(nr) if nr else None,
+            details={"von_hand": True, "by": by, "hoteldatum": mail.get("fideliodate"),
+                     "letzter_fehler": fehler[:400]},
         )
     return {"ok": True, "wmai_id": wmai_id}
 
