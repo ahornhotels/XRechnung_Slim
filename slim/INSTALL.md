@@ -234,6 +234,13 @@ erzeugt“ ins Archiv (Protokoll `nachtraeglich_erzeugt` mit Benutzer). Slim
 **verschickt sie nicht** – sie steht zum Herunterladen bereit. Gesperrt, wenn
 für die Nummer schon eine Archivdatei liegt oder ihre Mail noch wartet.
 
+**Ohne XRechnung freigeben (nur PDF):** Für eine hängende Rechnungsmail, die
+sich nicht als XRechnung abbilden lässt (z. B. reine Umbuchung einer Anzahlung
+ohne Leistung), gibt es bei wartenden Rechnungen mit Fehlertext diesen Knopf,
+nur für Verwalter. Suite8 verschickt die Mail dann sofort ohne XRechnung. Nicht
+umkehrbar; Protokoll `freigegeben_ohne_xrechnung` mit `von_hand` und Benutzer.
+Ein Override hilft in solchen Fällen nicht, er ersetzt nur Kopffelder.
+
 **Kunde möchte die XRechnung noch einmal:** die Archivdatei herunterladen und
 unverändert schicken. Die XRechnung hat kein Kennzeichen „Kopie“. Ist der
 Inhalt falsch, in Suite8 stornieren und neu berechnen.

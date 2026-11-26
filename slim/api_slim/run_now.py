@@ -171,7 +171,7 @@ def run_now(state: dict = Depends(get_state)):
         # Validator
         issues = invoice_validator.validate(inv)
         if issues:
-            msgs = "; ".join(i["message"][:60] for i in issues[:3])
+            msgs = "; ".join(i["message"] for i in issues)
             _step(events, False, "validator", f"{len(issues)} Issues: {msgs}")
             wmai_trace["outcome"] = "validator_fail"
             result["summary"]["validator_fail"] += 1
