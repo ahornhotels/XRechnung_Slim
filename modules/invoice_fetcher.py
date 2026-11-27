@@ -434,6 +434,72 @@ def is_deposit_line(line: dict) -> bool:
         return False
 
 
+def apply_deposit_refund(invoice: dict) -> dict:
+    """Rueckbuchung einer Anzahlung -> Gutschrift zur Anzahlungsrechnung.
+
+    Wird eine Anzahlung storniert und erstattet, bucht Suite8 das negative
+    Paar aus Anzahlungsartikel und Steuer mit Verweis auf die
+    Anzahlungsrechnung (wie beim Check-in), aber ohne jede Leistung, und
+    checkt auf Debitor aus. Ein Abschlag ist das nicht - es gibt nichts,
+    wovon abzuziehen waere. Es ist die Korrektur der Anzahlungsrechnung.
+
+    Erkannt wird nur der eindeutige Fall: ausschliesslich negative
+    Anzahlungszeilen, jede mit Nummer und Datum ihrer Anzahlungsrechnung,
+    kein VOID-Storno. Dann verlieren die Zeilen ihre Kennzeichnung als
+    Anzahlungsabbuchung (sie sind jetzt die Positionen der Gutschrift), jede
+    Position nennt ihre Anzahlungsrechnung, und die Gutschrift bekommt je
+    Anzahlungsrechnung einen Bezug (BG-3) - auch mehrere. Alles andere
+    bleibt, wie es ist, und wird vom Validator geblockt.
+
+    Der Empfaenger wird nicht mit dem der Anzahlungsrechnung verglichen
+    (Entscheidung 26.11.2026: auch bei abweichender Kartei erzeugen).
+    Veraendert ``invoice`` und gibt es zurueck."""
+    header = invoice.get("header") or {}
+    lines = invoice.get("lines") or []
+    if not lines or is_void_storno(invoice):
+        return invoice
+    if not all(is_deposit_line(ln) for ln in lines):
+        return invoice
+    try:
+        if not all(float(ln.get("lineextensionamountnet") or 0) < 0 for ln in lines):
+            return invoice
+    except (TypeError, ValueError):
+        return invoice
+    refs = set()
+    for ln in lines:
+        nr = str(ln.get("depositinvoicenumber") or "").strip()
+        datum = str(ln.get("depositinvoicedate") or "").strip()[:10]
+        if not nr or not datum:
+            return invoice
+        refs.add((datum, nr))
+    refs = sorted(refs)
+
+    for ln in lines:
+        nr = str(ln["depositinvoicenumber"]).strip()
+        j, m, t = str(ln["depositinvoicedate"])[:10].split("-")
+        ln["itemname"] = f"{ln.get('itemname') or 'Anzahlung'} (Anzahlungsrechnung Nr. {nr} vom {t}.{m}.{j})"
+        ln["depositzinvid"] = None
+        # Suite8 bucht je nach Weg "1 x -Preis" oder "-1 x +Preis". Die
+        # Gutschrift dreht spaeter das Vorzeichen der Menge um und nimmt den
+        # Preis als Betrag - dafuer muss die MENGE das Minus tragen, sonst
+        # steht dort -1 x Preis = +Betrag (PEPPOL-EN16931-R120).
+        try:
+            menge, preis = float(ln.get("invoicedquantity") or 1), float(ln.get("priceamount") or 0)
+            if preis < 0 < menge:
+                ln["invoicedquantity"] = f"{-menge:g}"
+                ln["priceamount"] = f"{-preis:.2f}"
+        except (TypeError, ValueError):
+            pass
+    header["billingreferenceid"] = refs[0][1]
+    header["billingreferenceissuedate"] = refs[0][0]
+    header["invoicetypecode"] = "381"
+    invoice["billing_references"] = [{"id": nr, "issuedate": datum} for datum, nr in refs]
+    invoice["deposit_refund"] = True
+    logger.info("Rueckbuchung von Anzahlungsrechnung(en) %s -> Gutschrift",
+                ", ".join(nr for _, nr in refs))
+    return invoice
+
+
 def fetch_invoice(zinv_id: int) -> Optional[dict]:
     """Holt alle Daten zu einer Rechnung. Gibt None zurueck wenn Header leer (Rechnung nicht gefunden)."""
     with get_connection() as conn:
@@ -525,6 +591,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             "header": header, "lines": lines,
             "tax_breakdown": tax_breakdown, "totals": totals,
         }
+        # Reine Rueckbuchung einer Anzahlung: Gutschrift zur Anzahlungsrechnung
+        deposit_refund = bool(apply_deposit_refund(_provisional).get("deposit_refund"))
         if is_credit_note(_provisional):
             header["invoicetypecode"] = "381"
 
@@ -537,6 +605,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             "tax_breakdown": tax_breakdown,
             "totals": totals,
             "xml_only": _xml_only_reason(cur, zinv_id),
+            **({"deposit_refund": True,
+                "billing_references": _provisional["billing_references"]} if deposit_refund else {}),
             "rundungsausgleich": _rundungsausgleich(),
         }
 

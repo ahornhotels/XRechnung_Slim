@@ -134,6 +134,11 @@ def validate(xml_bytes: bytes, version: str = "3.0.2") -> None:
             errors.append("Kein Szenario gematched - CustomizationID/Namespace pruefen")
 
         if not errors:
+            # Ein Pruefschritt kann allein wegen Warnungen ungueltig sein
+            # (z. B. PEPPOL-EN16931-R120) - dann diese nennen.
+            for m in report.xpath("//rep:message[@level='warning']", namespaces=ns):
+                errors.append(f"Warnung {m.get('code', '')}: {(m.text or '').strip()[:400]}")
+        if not errors:
             # Fallback: irgendetwas ist falsch, aber keine spezifische Meldung
             errors.append(f"Validierung fehlgeschlagen (valid={valid_attr}), aber keine Detail-Meldungen gefunden")
         raise KositValidationError(errors)

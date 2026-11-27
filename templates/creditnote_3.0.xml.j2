@@ -31,6 +31,18 @@
   </cac:OrderReference>
   {% endif %}
 
+  {% if billing_references %}
+  {% for br in billing_references %}
+  <cac:BillingReference>
+    <cac:InvoiceDocumentReference>
+      <cbc:ID>{{ br.id|e }}</cbc:ID>
+      {% if br.issuedate %}
+      <cbc:IssueDate>{{ br.issuedate }}</cbc:IssueDate>
+      {% endif %}
+    </cac:InvoiceDocumentReference>
+  </cac:BillingReference>
+  {% endfor %}
+  {% else %}
   <cac:BillingReference>
     <cac:InvoiceDocumentReference>
       <cbc:ID>{{ header.billingreferenceid|e }}</cbc:ID>
@@ -39,6 +51,7 @@
       {% endif %}
     </cac:InvoiceDocumentReference>
   </cac:BillingReference>
+  {% endif %}
 
   <cac:AccountingSupplierParty>
     <cac:Party>
