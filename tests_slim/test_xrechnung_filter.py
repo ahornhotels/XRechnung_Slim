@@ -202,3 +202,45 @@ def test_poller_protokolliert_nichts_wenn_die_mail_schon_frei_war(tmp_path):
 def test_detailseite_zeigt_grund():
     html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "rechnung.html").read_text(encoding="utf-8")
     assert "p.ausschluss" in html and "det.grund" in html
+
+
+# ───────────────────────── Anzeige der Typen aus Suite8 ─────────────────────────
+
+def test_karteitypen_liste_zeigt_jede_kategorie_aus_suite8():
+    from unittest.mock import MagicMock, patch
+    cur = MagicMock()
+    cur.fetchall.return_value = [(1, "Firma", 0, 1558), (1, "Firma alt", 1, 3), (2, "Reisebüro/Agentur", 0, 946),
+                                 (None, "kaputt", 0, 1)]
+    cm = MagicMock()
+    cm.__enter__ = MagicMock(return_value=MagicMock(cursor=MagicMock(return_value=cur)))
+    cm.__exit__ = MagicMock(return_value=None)
+    with patch.object(xf, "get_connection", return_value=cm):
+        r = xf.karteitypen_liste()
+    assert r["fehler"] is None
+    assert r["zeilen"] == [
+        {"typ": "1", "name": "Firma", "bezeichnung": "Firma", "anzahl": 1558, "inaktiv": False},
+        {"typ": "1", "name": "Firma", "bezeichnung": "Firma alt", "anzahl": 3, "inaktiv": True},
+        {"typ": "2", "name": "Reisebüro/Agentur", "bezeichnung": "Reisebüro/Agentur", "anzahl": 946, "inaktiv": False}]
+    assert cur.execute.call_args[0][0].lstrip().lower().startswith("select")
+
+
+def test_karteitypen_liste_ohne_datenbank_nennt_den_grund_ohne_oracle_text():
+    from unittest.mock import patch
+    with patch.object(xf, "get_connection", side_effect=RuntimeError("ORA-12541 geheim")):
+        r = xf.karteitypen_liste()
+    assert r["zeilen"] == [] and r["fehler"] and "ORA-" not in r["fehler"]
+
+
+def test_api_und_seite_zeigen_die_typen_live():
+    from pathlib import Path
+    from unittest.mock import patch
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from slim.api_slim import auth_api, settings_api
+    app = FastAPI()
+    app.include_router(settings_api.router)
+    with patch.object(xf, "karteitypen_liste", return_value={"zeilen": [{"typ": "1"}], "fehler": None}):
+        assert TestClient(app).get("/api/settings/karteitypen").json() == {"zeilen": [{"typ": "1"}], "fehler": None}
+    assert auth_api._needs_admin("GET", "/api/settings/karteitypen") is True
+    html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "settings.html").read_text(encoding="utf-8")
+    assert "/api/settings/karteitypen" in html and "live gelesen" in html and "Neu lesen" in html
