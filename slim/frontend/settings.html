@@ -201,6 +201,35 @@ $("abrechnung-senden").addEventListener("click", async () => {
   } catch (err) { st.className = "status bad"; st.textContent = err.message; }
 });
 
+// Karteitypen, wie sie jetzt in Suite8 stehen - unter der Auswahl "Karteitypen mit XRechnung".
+async function ladeKarteitypen() {
+  const feld = $("f-xrechnung_karteitypen");
+  if (!feld) return;
+  let box = $("karteitypen-live");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "karteitypen-live";
+    box.style.cssText = "margin-top:8px;padding:8px 10px;border:1px solid #d5d9de;border-radius:6px;font-size:13px;max-width:560px";
+    feld.insertAdjacentElement("afterend", box);
+  }
+  box.innerHTML = `<span class="muted">Liest Karteitypen aus Suite8 …</span>`;
+  let t;
+  try { t = await api("/api/settings/karteitypen"); }
+  catch (err) { t = { zeilen: [], fehler: err.message }; }
+  const zeit = new Date().toLocaleTimeString("de-DE");
+  const kopf = `<b>Karteitypen in Suite8</b> <span class="muted">live gelesen um ${zeit}</span>
+    <button type="button" class="secondary" id="karteitypen-neu" style="float:right;padding:2px 8px">Neu lesen</button>`;
+  const zahl = n => Number(n).toLocaleString("de-DE");
+  box.innerHTML = kopf + (t.fehler
+    ? `<p class="status bad" style="margin:6px 0 0">${esc(t.fehler)}</p>`
+    : !t.zeilen.length ? `<p class="muted" style="margin:6px 0 0">Suite8 kennt keine Karteitypen.</p>`
+    : `<table style="margin-top:6px;width:100%"><tr><th>Typ</th><th>Bezeichnung in Suite8</th><th style="text-align:right">Karteien</th></tr>` +
+      t.zeilen.map(z => `<tr${z.inaktiv ? ' class="muted"' : ""}><td>${esc(z.name)}</td>
+        <td>${esc(z.bezeichnung || "–")}${z.inaktiv ? " (inaktiv)" : ""}</td>
+        <td style="text-align:right">${zahl(z.anzahl)}</td></tr>`).join("") + `</table>`);
+  $("karteitypen-neu").addEventListener("click", ladeKarteitypen);
+}
+
 function showInfo(key) {
   for (const sec of window._sections || []) {
     const f = sec.fields.find(x => x.key === key);
@@ -284,11 +313,11 @@ $("seller-save").addEventListener("click", async () => {
   $("titel").textContent = TITEL;
   try { render((await api("/api/settings?page=" + PAGE)).sections); }
   catch (err) { $("sections").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
-  if (PAGE === "xrechnung") triggerWarnung();
   if (PAGE === "system") {
     $("abrechnung-card").style.display = "";
     try { await ladeAbrechnung(); } catch (err) { $("abrechnung").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
   }
+  if (PAGE === "xrechnung") { triggerWarnung(); ladeKarteitypen(); }
   if (PAGE !== "hotel") return;
   $("seller-card").style.display = "";
   try { await loadSeller(); } catch (err) { $("seller").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
