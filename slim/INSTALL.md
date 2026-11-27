@@ -264,6 +264,13 @@ Konfiguration → XRechnung, wenn er nicht dem Standard entspricht: anderer
 Auslöser, zusätzliche Tabellen, Abfragen ohne Fehlerbehandlung, andere
 Erkennung als die eingestellten Muster.
 
+**Vermerk in Suite8:** Hat Slim die XRechnung angehängt und die Mail
+freigegeben, steht in `WMAI_ERROR` der Text `XRechnung OK`. Das heißt:
+angehängt und zum Versand freigegeben. Ob Suite8 die Mail verschickt hat, zeigt
+`WMAI_SENT`; meldet der Mailservice einen Versandfehler, überschreibt er den
+Vermerk mit seiner Fehlermeldung. Ohne XRechnung freigegebene Mails bekommen
+keinen Vermerk.
+
 **Kunde möchte die XRechnung noch einmal:** die Archivdatei herunterladen und
 unverändert schicken. Die XRechnung hat kein Kennzeichen „Kopie“. Ist der
 Inhalt falsch, in Suite8 stornieren und neu berechnen.
