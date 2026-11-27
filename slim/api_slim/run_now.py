@@ -168,6 +168,15 @@ def run_now(state: dict = Depends(get_state)):
         # Override anwenden
         inv = overrides.apply_to_invoice(data_dir, wmai_id, inv)
 
+        # Einstellung "Wer bekommt eine XRechnung"
+        from modules import xrechnung_filter
+        grund = xrechnung_filter.ausschlussgrund(inv, cfg)
+        if grund:
+            _step(events, True, "filter", "ohne XRechnung (nur PDF): " + grund["text"])
+            wmai_trace["outcome"] = "ohne_xrechnung"
+            result["wmais"].append(wmai_trace)
+            continue
+
         # Validator
         issues = invoice_validator.validate(inv)
         if issues:

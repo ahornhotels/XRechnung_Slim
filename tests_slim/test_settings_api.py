@@ -311,7 +311,7 @@ def test_mail_strategy_nicht_mehr_in_oberflaeche():
 def test_seiten_aufteilung():
     pages = {s.id: s.page for s in settings_schema.SECTIONS}
     assert pages == {"erkennung": "xrechnung", "inhalt": "xrechnung", "kaeuferreferenz": "xrechnung",
-                     "bestellnummer": "xrechnung",
+                     "empfaenger": "xrechnung", "bestellnummer": "xrechnung",
                      "pruefung": "xrechnung", "hotel": "hotel", "ansprechpartner": "hotel",
                      "datenbank": "system", "abruf": "system", "server": "system", "update": "system"}
     keys = lambda sid: [x.key for x in settings_schema.section(sid).settings]

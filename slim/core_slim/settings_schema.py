@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from modules.invoice_fetcher import BT13_FELD_STANDARD, bt13_feld_pruefen, bt13_feldauswahl
+from modules.xrechnung_filter import karteitypen_auswahl
 
 
 class SettingError(ValueError):
@@ -25,7 +26,7 @@ class Setting:
     file: str
     label: str
     help: str
-    type: str = "str"            # str | int | bool | list | select | secret
+    type: str = "str"            # str | int | bool | list | select | multi | secret
     restart: bool = False
     choices: tuple = ()
     minimum: Optional[int] = None
@@ -107,6 +108,17 @@ def _local_dir(value: str) -> None:
 def _email(value: str) -> None:
     if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
         raise SettingError("keine gültige E-Mail-Adresse")
+
+
+def _karteitypen(values: list) -> None:
+    for v in values:
+        if not re.fullmatch(r"\d{1,6}", str(v)):
+            raise SettingError(f"{v!r} ist kein Karteityp")
+
+
+def _mindestbetrag(value: str) -> None:
+    if value and not re.fullmatch(r"\d{1,9}\.\d{2}", value):
+        raise SettingError("Betrag erwartet, z. B. 250 oder 249,99 (leer = keine Grenze)")
 
 
 def _bt13_feld(value: str) -> None:
@@ -254,6 +266,41 @@ die Rechnung geht. BT-13 sagt, zu welcher Bestellung sie gehört.</p>
 """
 
 
+_INFO_EMPFAENGER = """
+<h3>Wie die Auswahl wirkt</h3>
+<p>Suite8 sperrt jede Rechnungsmail, bis Slim sie bearbeitet hat. Slim liest
+die Rechnung und entscheidet dann:</p>
+<ol>
+<li><b>Mitgliedschaft geht vor.</b> Hat der Rechnungsempfänger die
+DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz) oder die
+Nur-XML-Mitgliedschaft, bekommt er immer eine XRechnung.</li>
+<li><b>Karteityp.</b> Sind Typen angekreuzt und der Typ des
+Rechnungsempfängers ist nicht dabei, gibt Slim die Mail sofort frei.</li>
+<li><b>Mindestbetrag.</b> Ist ein Betrag eingetragen und die Rechnung liegt
+brutto darunter, gibt Slim die Mail sofort frei.</li>
+<li>Sonst hängt Slim wie bisher die XRechnung an.</li>
+</ol>
+<p>Eine freigegebene Mail verschickt Suite8 sofort, nur mit PDF. Jede solche
+Freigabe steht mit Grund im Protokoll und im Verlauf der Rechnung. Auf der
+Seite „Rechnung“ lässt sich die XRechnung für eine solche Rechnung bei Bedarf
+nachträglich erzeugen.</p>
+<h3>Karteitypen</h3>
+<p>Die Liste kommt aus dieser Suite8 (Kategorie der Kartei). Firma, Reisebüro
+und Reservierungsstelle sind dort getrennte Typen; Gäste stehen unter
+„Individuell“. Maßgeblich ist die Kartei, auf die die Rechnung ausgestellt
+ist.</p>
+<h3>Mindestbetrag</h3>
+<p>Verglichen wird der Bruttobetrag der Rechnung, nicht der noch offene
+Zahlbetrag. Rechnungen bis 250 Euro brutto sind Kleinbetragsrechnungen und
+von der Pflicht zur E-Rechnung ausgenommen. Ob das Haus solche Rechnungen
+trotzdem als XRechnung verschicken will, entscheidet es hier.</p>
+<h3>Was es nicht ist</h3>
+<p>Die Auswahl ändert nichts am Trigger in Suite8. Enthält der Trigger eigene
+Filter, sieht Slim die dort durchgelassenen Mails nie; darauf weist die
+Warnung oben auf dieser Seite hin.</p>
+"""
+
+
 SECTIONS: tuple[Section, ...] = (
     Section("erkennung", "Erkennung und Anhang", (
         Setting("suite8_recognize_subject_pattern", H, "Erkennung im Betreff", "Regulärer Ausdruck, der die Rechnungsnummer aus dem Mail-Betreff liest, mit (?P<zinv_number>...).", check=_regex_with_group, default=r"Rechnung\s+Nr\.?\s*(?P<zinv_number>\d+)"),
@@ -274,6 +321,10 @@ SECTIONS: tuple[Section, ...] = (
         Setting("bt10_freitext2", H, "Freitext 2", "Eingeschaltet und gefüllt hat der Freitext Vorrang vor der DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz); ist er leer, gilt die DXR-Mitgliedschaft. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext3", H, "Freitext 3", "Eingeschaltet und gefüllt hat der Freitext Vorrang vor der DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz); ist er leer, gilt die DXR-Mitgliedschaft. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
         Setting("bt10_freitext4", H, "Freitext 4", "Eingeschaltet und gefüllt hat der Freitext Vorrang vor der DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz); ist er leer, gilt die DXR-Mitgliedschaft. Erscheint nur in der XRechnung, wenn hier eingeschaltet – dann als Käuferreferenz.", type="bool", default=False, info=_INFO_BT10),
+    ), page="xrechnung"),
+    Section("empfaenger", "Wer bekommt eine XRechnung", (
+        Setting("xrechnung_karteitypen", H, "Karteitypen mit XRechnung", "Nur Rechnungen an Karteien dieser Typen bekommen eine XRechnung. Alle anderen gibt Slim sofort frei: Suite8 verschickt sie ohne XRechnung, nur mit PDF. Nichts angekreuzt = alle Typen. Ausnahme: Hat der Rechnungsempfänger die DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz) oder die Nur-XML-Mitgliedschaft, bekommt er immer eine XRechnung.", type="multi", default=[], check=_karteitypen, choices_from=karteitypen_auswahl, info=_INFO_EMPFAENGER),
+        Setting("xrechnung_mindestbetrag", H, "Keine XRechnung unter Betrag (brutto)", "Rechnungen mit einem Bruttobetrag unter diesem Wert gehen ohne XRechnung hinaus, nur mit PDF. Genau dieser Betrag bekommt eine XRechnung. Gilt nur für Rechnungen (Art 380), nicht für Gutschriften und nicht für Beträge von 0,00 oder darunter. Leer oder 0 = keine Grenze. Gleiche Ausnahme wie beim Karteityp.", check=_mindestbetrag, default="", info=_INFO_EMPFAENGER),
     ), page="xrechnung"),
     Section("bestellnummer", "Bestellnummer (BT-13)", (
         Setting("bt13_feld", H, "Feld für die Bestellnummer (nur für Installer)", "Suite8-Feld der Reservierung (Tabelle YRES oder YRCF), dessen Inhalt als Bestellnummer des Käufers (BT-13) in der XRechnung steht – zum Beispiel die Voucher-Nummer eines Reiseveranstalters. aus = kein BT-13. Einstellung für Installer: Vorher prüfen, ob das Feld nicht schon anders genutzt wird, und es per Screen Painting in die Reservierungsmaske einbinden.", type="select", choices=("",), labels=(("", "aus – kein BT-13"),), choices_from=bt13_feldauswahl, check=_bt13_feld, default=BT13_FELD_STANDARD, info=_INFO_BT13),
@@ -354,6 +405,9 @@ def coerce(setting: Setting, value: Any) -> Any:
     elif t == "list":
         items = value if isinstance(value, list) else str(value or "").replace("\n", ",").split(",")
         v = [str(i).strip() for i in items if str(i).strip()]
+    elif t == "multi":
+        items = value if isinstance(value, list) else str(value or "").replace("\n", ",").split(",")
+        v = sorted({str(i).strip() for i in items if str(i).strip()}, key=lambda x: (len(x), x))
     elif t == "select":
         v = str(value)
         if setting.choices_from is None and v not in setting.choices:
@@ -362,6 +416,13 @@ def coerce(setting: Setting, value: Any) -> Any:
         v = "" if value is None else str(value).strip()
         if len(v) > 500:
             raise SettingError("höchstens 500 Zeichen")
+    if setting.key == "xrechnung_mindestbetrag" and v:
+        try:                                     # 250 / 12,5 -> 250.00 / 12.50
+            v = f"{float(v.replace(',', '.')):.2f}" if re.fullmatch(r"\d+([.,]\d{1,2})?", v) else v
+        except ValueError:
+            pass
+        if v == "0.00":
+            v = ""
     if setting.check:
         setting.check(v)
     return v
