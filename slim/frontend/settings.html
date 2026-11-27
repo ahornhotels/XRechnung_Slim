@@ -157,11 +157,7 @@ async function triggerWarnung() {
   if (!t.angepasst) return;
   const w = $("trigger-warnung");
   w.innerHTML = `<b>Achtung: angepasster Trigger in Suite8.</b>
-    Der Trigger WMAI_XRECHNUNG_BLOCK entspricht nicht dem Standard von Slim:
-    <ul>${t.abweichungen.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
-    Slim entscheidet nur über Mails, die der Trigger sperrt. Was er durchlässt, geht ohne XRechnung hinaus
-    und erscheint weder in der Übersicht noch im Protokoll. Die Einstellungen auf dieser Seite wirken nur
-    auf gesperrte Mails.
+    Der Trigger WMAI_XRECHNUNG_BLOCK entspricht nicht dem Standard von Slim.
     <details><summary>Trigger aus Suite8 anzeigen</summary><pre style="white-space:pre-wrap">${esc(t.quelltext)}</pre></details>`;
   w.style.display = "block";
 }
