@@ -221,6 +221,13 @@ def _suite8_land(cur) -> Optional[str]:
     return row[0] if row else None
 
 
+@router.get("/karteitypen")
+def get_karteitypen() -> dict:
+    """Kartei-Kategorien aus Suite8, bei jedem Aufruf neu gelesen (nur SELECT)."""
+    from modules import xrechnung_filter
+    return xrechnung_filter.karteitypen_liste()
+
+
 @router.get("/seller")
 def get_seller():
     suite8 = _suite8_seller_values()
