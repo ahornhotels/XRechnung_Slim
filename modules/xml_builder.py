@@ -58,6 +58,41 @@ class XmlBuildError(Exception):
 from modules.invoice_enrich import de_date as _de_date  # noqa: E402
 
 
+def ohne_storno_paare(deps: list) -> list:
+    """Anzahlungszeilen ohne die Paare, die sich aufheben (+x / -x, gleiche
+    Kategorie und gleicher Satz): Suite8 bucht den Storno einer Anzahlungs-
+    abbuchung als Plus-Zeile mit gleichem Betrag dazu."""
+    def _net(ln) -> Decimal:
+        try:
+            return Decimal(str(ln.get("lineextensionamountnet") or 0)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+
+    remaining = list(deps)
+    for pos in [ln for ln in deps if _net(ln) > 0]:
+        if not any(pos is r for r in remaining):
+            continue
+        key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
+        kandidaten = [neg for neg in remaining
+                      if _net(neg) == -_net(pos)
+                      and _cat_key(neg.get("classifiedtaxcategoryid"),
+                                   neg.get("classifiedtaxcategorypercent")) == key]
+        if not kandidaten:
+            continue
+        # Die Plus-Zeile nimmt eine Erstattung zurueck. Die Erstattung kann nur
+        # eine Anzahlung betreffen, die VOR ihr berechnet wurde - also gehoert
+        # die juengste Abbuchung dazu, deren Anzahlungsrechnung nicht juenger
+        # ist. Sonst bliebe der Bezug auf die falsche Anzahlungsrechnung stehen.
+        d_pos = str(pos.get("depositinvoicedate") or "")[:10]
+        frueher = [n for n in kandidaten
+                   if d_pos and str(n.get("depositinvoicedate") or "")[:10]
+                   and str(n.get("depositinvoicedate"))[:10] <= d_pos]
+        neg = (max(frueher, key=lambda n: str(n.get("depositinvoicedate"))[:10])
+               if frueher else kandidaten[0])
+        remaining = [r for r in remaining if r is not pos and r is not neg]
+    return remaining
+
+
 def deposit_allowances(lines: list) -> tuple[list, list, list]:
     """Anzahlungsabbuchungen der Schlussrechnung -> Abschlaege (OPERA-Muster).
 
@@ -89,18 +124,7 @@ def deposit_allowances(lines: list) -> tuple[list, list, list]:
         return [], [], []
 
     # Storno-Paare (+x / -x, gleiche Kategorie/Satz) aufheben.
-    remaining = list(deps)
-    for pos in [ln for ln in deps if _net(ln) > 0]:
-        if pos not in remaining:
-            continue
-        key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
-        for neg in remaining:
-            if (_net(neg) == -_net(pos)
-                    and _cat_key(neg.get("classifiedtaxcategoryid"),
-                                 neg.get("classifiedtaxcategorypercent")) == key):
-                remaining.remove(pos)
-                remaining.remove(neg)
-                break
+    remaining = ohne_storno_paare(deps)
 
     problems = []
     if any(_net(ln) > 0 for ln in remaining):
