@@ -154,8 +154,20 @@ function collect(sec) {
 async function triggerWarnung() {
   let t;
   try { t = await api("/api/trigger-pruefung"); } catch (e) { return; }
-  if (!t.angepasst) return;
   const w = $("trigger-warnung");
+  if (t.muster_veraltet) {
+    // Unveraenderter Standard-Trigger, aber mit anderen Mustern als jetzt eingestellt.
+    const m = t.muster_im_trigger, e = t.muster_eingestellt, z = v => v ? `<code>${esc(v)}</code>` : "–";
+    w.innerHTML = `<b>Achtung: Der Trigger in Suite8 passt nicht mehr zu den eingestellten Mustern.</b>
+      Bitte den Trigger-SQL neu erzeugen (Übersicht → Trigger-SQL) und in Suite8 ausführen.
+      <table style="margin-top:6px"><tr><th></th><th>Im Trigger</th><th>In Slim eingestellt</th></tr>
+        <tr><td>Betreff</td><td>${z(m.betreff)}</td><td>${z(e.betreff)}</td></tr>
+        <tr><td>Dateiname</td><td>${z(m.dateiname)}</td><td>${z(e.dateiname)}</td></tr></table>
+      <details><summary>Trigger aus Suite8 anzeigen</summary><pre style="white-space:pre-wrap">${esc(t.quelltext)}</pre></details>`;
+    w.style.display = "block";
+    return;
+  }
+  if (!t.angepasst) return;
   w.innerHTML = `<b>Achtung: angepasster Trigger in Suite8.</b>
     Der Trigger WMAI_XRECHNUNG_BLOCK entspricht nicht dem Standard von Slim.
     <details><summary>Trigger aus Suite8 anzeigen</summary><pre style="white-space:pre-wrap">${esc(t.quelltext)}</pre></details>`;

@@ -214,11 +214,46 @@ def trigger_abweichungen(event: str, body: str, fn_pat: str, sub_pat: str) -> li
     return out
 
 
+_FN, _SUB = "@@DATEINAME@@", "@@BETREFF@@"
+
+
+def muster_im_trigger(event: str, body: str):
+    """Ist der Trigger ein Standard-Trigger von Slim - gleich fuer welche
+    Muster -, liefert das die Muster, die in ihm stehen (Oracle-Schreibweise):
+    {"dateiname", "betreff"}, je None wenn nicht enthalten. Sonst None: Der
+    Trigger wurde von Hand veraendert."""
+    if set((event or "").upper().split()) - {"OR"} != {"INSERT", "UPDATE"}:
+        return None
+    ist_code, ist_texte = _norm(body)
+    for fn, sub in ((_FN, ""), ("", _SUB), (_FN, _SUB), ("", "")):
+        soll_code, soll_texte = _norm(_standard_rumpf(fn, sub))
+        if soll_code != ist_code or len(soll_texte) != len(ist_texte):
+            continue
+        gefunden = {"dateiname": None, "betreff": None}
+        passt = True
+        for soll, ist in zip(soll_texte, ist_texte):
+            if soll == _FN:
+                gefunden["dateiname"] = ist.replace("''", "'")
+            elif soll == _SUB:
+                gefunden["betreff"] = ist.replace("''", "'")
+            elif soll != ist:
+                passt = False
+                break
+        if not passt:
+            continue
+        if not fn and not sub:          # Trigger ohne eingestelltes Muster: fester Vorgabewert
+            gefunden["dateiname"] = "Folio.*\\.pdf$"
+        return gefunden
+    return None
+
+
 @router.get("/trigger-pruefung")
 def get_trigger_pruefung() -> dict:
     """Liest den Trigger aus Suite8 (nur SELECT) und vergleicht ihn mit dem
     Standard zu den eingestellten Mustern. angepasst: True/False, oder None,
-    wenn der Trigger fehlt oder nicht lesbar ist."""
+    wenn der Trigger fehlt oder nicht lesbar ist. muster_veraltet: True, wenn
+    es der unveraenderte Standard-Trigger ist, aber mit anderen Mustern als
+    den jetzt eingestellten (Muster geaendert, Trigger nicht neu ausgefuehrt)."""
     hotel = load_json(CONFIG_DIR / "hotel.json", default={}) or {}
     fn_pat = hotel.get("suite8_recognize_filename_pattern", "") or ""
     sub_pat = hotel.get("suite8_recognize_subject_pattern", "") or ""
@@ -226,14 +261,21 @@ def get_trigger_pruefung() -> dict:
         with get_connection() as conn:
             q = trigger_state.read_source(conn)
     except Exception as e:
-        return {"state": "nicht_pruefbar", "angepasst": None, "abweichungen": [],
+        return {"state": "nicht_pruefbar", "angepasst": None, "muster_veraltet": None, "abweichungen": [],
                 "quelltext": None, "error": str(e)[:500]}
     if not q.get("body"):
-        return {"state": q["state"], "angepasst": None, "abweichungen": [],
+        return {"state": q["state"], "angepasst": None, "muster_veraltet": None, "abweichungen": [],
                 "quelltext": None, "error": q.get("error")}
     ab = trigger_abweichungen(q.get("event") or "", q["body"], fn_pat, sub_pat)
-    return {"state": q["state"], "angepasst": bool(ab), "abweichungen": ab,
-            "quelltext": q["body"], "error": None}
+    im_trigger = muster_im_trigger(q.get("event") or "", q["body"]) if ab else None
+    out = {"state": q["state"], "angepasst": bool(ab) and im_trigger is None,
+           "muster_veraltet": im_trigger is not None, "abweichungen": ab,
+           "quelltext": q["body"], "error": None}
+    if im_trigger is not None:
+        out["muster_im_trigger"] = im_trigger
+        out["muster_eingestellt"] = {"dateiname": _python_to_oracle_regex(fn_pat) or None,
+                                     "betreff": _python_to_oracle_regex(sub_pat) or None}
+    return out
 
 
 @router.get("/trigger-sql")
