@@ -229,7 +229,7 @@ def test_vor_einrichtung_wizard_api_erreichbar(setup):
 
 def test_ansehen_sieht_kein_trigger_sql_und_keine_overrides(setup):
     client, users, _ = setup
-    for p in ("/api/trigger-sql", "/api/overrides", "/api/wmai/5/override", "/api/setup/trigger-sql", "/setup"):
+    for p in ("/api/trigger-sql", "/api/trigger-pruefung", "/api/overrides", "/api/wmai/5/override", "/api/setup/trigger-sql", "/setup"):
         assert auth_api._needs_admin("GET", p), p
     assert not auth_api._needs_admin("GET", "/api/pending")
     assert not auth_api._needs_admin("GET", "/api/archive")

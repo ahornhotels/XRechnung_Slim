@@ -39,7 +39,7 @@ _PUBLIC = {"/healthz", "/login", "/api/auth/login", "/api/auth/state",
 _SELF = {"/api/auth/logout", "/api/auth/password"}
 # Auch lesend nur fuer 'verwalten'
 _ADMIN_PREFIXES = ("/api/sql", "/api/config", "/api/settings", "/api/users", "/api/system",
-                   "/api/trigger-sql", "/api/overrides", "/api/wmai/", "/api/setup", "/setup")
+                   "/api/trigger-sql", "/api/trigger-pruefung", "/api/overrides", "/api/wmai/", "/api/setup", "/setup")
 # Gleicher Aufwand wie eine echte Pruefung, damit unbekannte Benutzernamen
 # nicht an der Antwortzeit erkennbar sind.
 _DUMMY_HASH = auth.hash_password("dummy-passwort-zum-zeitausgleich")
