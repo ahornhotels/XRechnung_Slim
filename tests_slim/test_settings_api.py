@@ -313,7 +313,8 @@ def test_seiten_aufteilung():
     assert pages == {"erkennung": "xrechnung", "inhalt": "xrechnung", "kaeuferreferenz": "xrechnung",
                      "empfaenger": "xrechnung", "bestellnummer": "xrechnung",
                      "pruefung": "xrechnung", "hotel": "hotel", "ansprechpartner": "hotel",
-                     "datenbank": "system", "abruf": "system", "server": "system", "update": "system"}
+                     "datenbank": "system", "abruf": "system", "abrechnung": "system",
+                     "server": "system", "update": "system"}
     keys = lambda sid: [x.key for x in settings_schema.section(sid).settings]
     assert keys("erkennung") == ["suite8_recognize_subject_pattern", "suite8_recognize_filename_pattern",
                                  "suite8_attachment_name_template", "xml_only_all", "xml_only_membership",

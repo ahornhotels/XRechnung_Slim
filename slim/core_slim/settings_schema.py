@@ -355,6 +355,10 @@ SECTIONS: tuple[Section, ...] = (
     Section("abruf", "Abruf", (
         Setting("suite8_poll_interval_seconds", H, "Abrufintervall (Sekunden)", "Wie oft Slim nach neuen Rechnungsmails sucht.", type="int", minimum=5, maximum=3600, restart=True, default=30),
     ), page="system"),
+    Section("abrechnung", "Abrechnungsbericht", (
+        Setting("abrechnung_email", H, "E-Mail für den Monatsbericht", "An diese Adresse geht einmal im Monat ein kurzer Bericht über den letzten abgelaufenen Monat: Betrieb, Zeitraum, Anzahl der erstellten und der versendeten XRechnungen. Leer = kein Bericht.", check=_email),
+        Setting("abrechnung_tag", H, "Versandtag im Monat", "Ab diesem Tag des Monats (1 bis 28) geht der Bericht hinaus. Lief der Dienst an dem Tag nicht, holt Slim den Bericht beim nächsten Lauf nach.", type="int", minimum=1, maximum=28, default=1),
+    ), page="system"),
     Section("server", "Server", (
         Setting("host", A, "Adresse", "127.0.0.1 = nur am Server erreichbar, 0.0.0.0 = im Netzwerk (dann erlaubte Adressen pflegen).", type="select", choices=("127.0.0.1", "0.0.0.0"), restart=True, default="127.0.0.1"),
         Setting("port", A, "Port", "Port der Oberfläche.", type="int", minimum=1, maximum=65535, restart=True, default=8022),

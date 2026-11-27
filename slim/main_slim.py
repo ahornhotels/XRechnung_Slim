@@ -34,6 +34,8 @@ import threading
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
+from datetime import datetime, timedelta
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -53,6 +55,7 @@ from slim.api_slim import rechnung_api as rechnung_api_module
 from slim.api_slim import schalter_api as schalter_api_module
 from slim.api_slim import auth_api as auth_api_module
 from slim.api_slim import settings_api as settings_api_module
+from slim.api_slim import abrechnung_api as abrechnung_api_module
 from slim.core_slim import access
 from slim.core_slim import audit_jsonl
 from slim.core_slim.clock import now_local
@@ -115,6 +118,7 @@ app.include_router(schalter_api_module.router)
 app.include_router(auth_api_module.router)
 app.include_router(auth_api_module.users_router)
 app.include_router(settings_api_module.router)
+app.include_router(abrechnung_api_module.router)
 app.include_router(settings_api_module.system_router)
 app.include_router(settings_api_module.handbuch_router)
 
@@ -219,6 +223,15 @@ def _run_poller_safely():
     state["last_run_summary"] = summary
 
 
+def _run_abrechnung_safely():
+    """Stuendlich: sendet den Monatsbericht, sobald er faellig ist."""
+    from slim.jobs_slim import abrechnung
+    try:
+        abrechnung.run_once(DATA_DIR)
+    except Exception:
+        logger.exception("Abrechnungsbericht-Lauf abgebrochen")
+
+
 @app.on_event("startup")
 async def _startup():
     state = status_api.get_state()
@@ -252,6 +265,14 @@ async def _startup():
             trigger=IntervalTrigger(seconds=interval),
             id="slim_suite8_attach_poller",
             max_instances=1, coalesce=True, misfire_grace_time=60,
+            replace_existing=True,
+        )
+        _scheduler.add_job(
+            _run_abrechnung_safely,
+            trigger=IntervalTrigger(hours=1),
+            id="slim_abrechnung",
+            next_run_time=datetime.now() + timedelta(minutes=2),
+            max_instances=1, coalesce=True, misfire_grace_time=3600,
             replace_existing=True,
         )
         _scheduler.start()

@@ -71,6 +71,12 @@
     <div class="info-body" id="info-body"></div>
   </dialog>
 
+  <div class="card" id="abrechnung-card" style="display:none">
+    <h2>Abrechnungsbericht: Stand</h2>
+    <div id="abrechnung"><p class="muted">Lädt …</p></div>
+    <div class="actions"><button id="abrechnung-senden">Bericht für den letzten Monat jetzt senden</button><span class="status" id="abrechnung-status"></span></div>
+  </div>
+
   <div class="card" id="seller-card" style="display:none">
     <h2>Verkäuferdaten</h2>
     <p class="muted" style="margin-top:0">Die Werte kommen aus Suite8 (Hoteleinstellungen). Ein abweichender Wert hat in der XRechnung Vorrang; leer = Suite8 gilt. Slim schreibt nie nach Suite8.</p>
@@ -166,6 +172,35 @@ async function triggerWarnung() {
   w.style.display = "block";
 }
 
+// Abrechnungsbericht: Zahlen des letzten Monats und bisher gesendete Berichte.
+async function ladeAbrechnung() {
+  const a = await api("/api/abrechnung"), v = a.vorschau;
+  const de = iso => iso.split("-").reverse().join(".");
+  let h = a.aktiv
+    ? `<p>Der Bericht geht ab dem ${a.tag}. jedes Monats an <b>${esc(a.email)}</b>.</p>`
+    : `<p class="muted">Kein Empfänger eingetragen, es wird kein Bericht gesendet.</p>`;
+  h += v
+    ? `<p>${esc(v.haus)}, ${de(v.von)} bis ${de(v.bis)}: <b>${v.erstellt}</b> erstellte und <b>${v.versendet}</b> versendete XRechnungen.</p>`
+    : `<p class="status bad">${esc(a.fehler || "Keine Zahlen.")}</p>`;
+  const monate = Object.keys(a.gesendet).sort().reverse().slice(0, 12);
+  if (monate.length) {
+    h += `<table><tr><th>Monat</th><th>Gesendet am</th><th>An</th><th>Erstellt</th><th>Versendet</th></tr>` +
+      monate.map(m => { const g = a.gesendet[m]; return `<tr><td>${esc(m)}</td><td>${esc(de(String(g.ts).slice(0, 10)))}</td>
+        <td>${esc(g.an)}</td><td>${g.erstellt}</td><td>${g.versendet}</td></tr>`; }).join("") + `</table>`;
+  }
+  $("abrechnung").innerHTML = h;
+  $("abrechnung-senden").disabled = !a.aktiv;
+}
+$("abrechnung-senden").addEventListener("click", async () => {
+  const st = $("abrechnung-status");
+  if (!confirm("Bericht für den letzten Monat jetzt an die eingetragene Adresse senden?")) return;
+  try {
+    const r = await api("/api/abrechnung/senden", "POST", {});
+    st.className = "status ok"; st.textContent = `Bericht ${r.monat} liegt in der Suite8-Mailwarteschlange.`;
+    await ladeAbrechnung();
+  } catch (err) { st.className = "status bad"; st.textContent = err.message; }
+});
+
 function showInfo(key) {
   for (const sec of window._sections || []) {
     const f = sec.fields.find(x => x.key === key);
@@ -250,6 +285,10 @@ $("seller-save").addEventListener("click", async () => {
   try { render((await api("/api/settings?page=" + PAGE)).sections); }
   catch (err) { $("sections").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
   if (PAGE === "xrechnung") triggerWarnung();
+  if (PAGE === "system") {
+    $("abrechnung-card").style.display = "";
+    try { await ladeAbrechnung(); } catch (err) { $("abrechnung").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
+  }
   if (PAGE !== "hotel") return;
   $("seller-card").style.display = "";
   try { await loadSeller(); } catch (err) { $("seller").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }

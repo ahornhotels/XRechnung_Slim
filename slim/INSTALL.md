@@ -264,6 +264,16 @@ Konfiguration → XRechnung, wenn er nicht dem Standard entspricht: anderer
 Auslöser, zusätzliche Tabellen, Abfragen ohne Fehlerbehandlung, andere
 Erkennung als die eingestellten Muster.
 
+**Abrechnungsbericht (nur Kanal TBH):** Unter Konfiguration → System trägt
+der Verwalter die E-Mail und den Versandtag (1 bis 28) ein. Ab diesem Tag legt
+Slim einmal je Monat einen Textbericht über den letzten abgelaufenen Monat in
+die Suite8-Mailwarteschlange (WTXT + WMAI, nicht gesperrt): Betrieb, Zeitraum,
+Anzahl der erstellten XRechnungen (Mails des Zeitraums mit XML-Anhang) und der
+versendeten (davon `WMAI_SENT = 1`). Absender ist die Absender-E-Mail des
+Hauses. Stand in `data/abrechnung.json`, Protokoll `abrechnung_gesendet` bzw.
+`abrechnung_fehler`. Schlüssel in `hotel.json`: `abrechnung_email` (leer =
+aus), `abrechnung_tag`.
+
 **Kunde möchte die XRechnung noch einmal:** die Archivdatei herunterladen und
 unverändert schicken. Die XRechnung hat kein Kennzeichen „Kopie“. Ist der
 Inhalt falsch, in Suite8 stornieren und neu berechnen.
