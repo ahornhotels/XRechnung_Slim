@@ -63,6 +63,7 @@
     Einige gespeicherte Änderungen wirken erst nach einem Neustart des Dienstes.
     <button id="restart">Jetzt neu starten</button>
   </div>
+  <div class="banner" id="trigger-warnung"></div>
   <div id="sections"><p class="muted">Lädt …</p></div>
 
   <dialog class="info-dlg" id="info-dlg" aria-labelledby="info-title">
@@ -108,6 +109,10 @@ function input(f) {
     const opts = (f.value == null || f.choices.includes(f.value)) ? f.choices : [f.value, ...f.choices];
     return `<select id="${id}">${opts.map(c => `<option value="${esc(c)}"${c === f.value ? " selected" : ""}>${esc((f.labels || {})[c] ?? c)}</option>`).join("")}</select>`;
   }
+  if (f.type === "multi") {
+    if (!f.choices.length) return `<span class="muted" id="${id}">Keine Auswahl lesbar (Suite8 nicht erreichbar).</span>`;
+    return `<div id="${id}">${f.choices.map(c => `<label style="display:block;font-weight:normal"><input type="checkbox" value="${esc(c)}"${(f.value || []).includes(c) ? " checked" : ""}> ${esc((f.labels || {})[c] ?? "Typ " + c)}</label>`).join("")}</div>`;
+  }
   if (f.type === "int") return `<input type="number" id="${id}" value="${esc(f.value)}">`;
   if (f.type === "list") return `<textarea id="${id}" placeholder="durch Komma getrennt">${esc((f.value || []).join(", "))}</textarea>`;
   if (f.type === "secret") return `<input type="password" id="${id}" autocomplete="new-password" placeholder="${f.gesetzt ? "gesetzt – leer lassen = unverändert" : "nicht gesetzt"}">`;
@@ -135,9 +140,30 @@ function collect(sec) {
   for (const f of sec.fields) {
     const el = $("f-" + f.key);
     if (f.type === "secret") { if (el.value) values[f.key] = el.value; continue; }
+    if (f.type === "multi") {
+      // Ohne lesbare Auswahl nichts senden - sonst loescht Speichern die gewaehlten Typen.
+      if (f.choices.length) values[f.key] = [...el.querySelectorAll("input:checked")].map(i => i.value);
+      continue;
+    }
     values[f.key] = f.type === "bool" ? el.value === "true" : el.value;
   }
   return values;
+}
+
+// Warnung, wenn der Trigger in Suite8 nicht dem Standard von Slim entspricht.
+async function triggerWarnung() {
+  let t;
+  try { t = await api("/api/trigger-pruefung"); } catch (e) { return; }
+  if (!t.angepasst) return;
+  const w = $("trigger-warnung");
+  w.innerHTML = `<b>Achtung: angepasster Trigger in Suite8.</b>
+    Der Trigger WMAI_XRECHNUNG_BLOCK entspricht nicht dem Standard von Slim:
+    <ul>${t.abweichungen.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+    Slim entscheidet nur über Mails, die der Trigger sperrt. Was er durchlässt, geht ohne XRechnung hinaus
+    und erscheint weder in der Übersicht noch im Protokoll. Die Einstellungen auf dieser Seite wirken nur
+    auf gesperrte Mails.
+    <details><summary>Trigger aus Suite8 anzeigen</summary><pre style="white-space:pre-wrap">${esc(t.quelltext)}</pre></details>`;
+  w.style.display = "block";
 }
 
 function showInfo(key) {
@@ -223,6 +249,7 @@ $("seller-save").addEventListener("click", async () => {
   $("titel").textContent = TITEL;
   try { render((await api("/api/settings?page=" + PAGE)).sections); }
   catch (err) { $("sections").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }
+  if (PAGE === "xrechnung") triggerWarnung();
   if (PAGE !== "hotel") return;
   $("seller-card").style.display = "";
   try { await loadSeller(); } catch (err) { $("seller").innerHTML = `<p class="status bad">${esc(err.message)}</p>`; }

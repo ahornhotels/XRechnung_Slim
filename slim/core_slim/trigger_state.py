@@ -106,6 +106,33 @@ def read_state(conn) -> dict:
     return out
 
 
+def read_source(conn) -> dict:
+    """Ausloeser und Rumpf des Triggers, wie er in Suite8 steht (nur SELECT):
+    {"state", "event", "body", "error"}. body ist None, wenn der Trigger fehlt
+    oder nicht lesbar ist."""
+    st = read_state(conn)
+    out = {"state": st["state"], "event": None, "body": None, "error": st.get("error")}
+    if st["state"] not in ("aktiv", "inaktiv") or not st.get("owner"):
+        return out
+    letzter = None
+    for sicht in ("all_triggers", "sys.dba_triggers"):
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT triggering_event, trigger_body FROM {sicht} "
+                        "WHERE trigger_name = :n AND owner = :o",
+                        {"n": TRIGGER_NAME, "o": st["owner"]})
+            row = cur.fetchone()
+        except Exception as e:
+            letzter = str(e)[:300]
+            continue
+        if row and row[1]:
+            body = row[1].read() if hasattr(row[1], "read") else row[1]
+            out["event"], out["body"] = str(row[0] or "").strip(), str(body)
+            return out
+    out["error"] = letzter or "Quelltext des Triggers nicht sichtbar"
+    return out
+
+
 def set_enabled(conn, enabled: bool) -> dict:
     st = read_state(conn)
     if st["state"] == "fehlt":

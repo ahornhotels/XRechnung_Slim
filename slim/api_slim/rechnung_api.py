@@ -244,6 +244,12 @@ def detail(
         v = _vorschau(inv)
         ansicht, quelle = v["ansicht"], "vorschau"
         pruefung = {"pflichtfelder": v["pflichtfelder"], "bau_fehler": v["bau_fehler"]}
+        try:
+            from modules import xrechnung_filter
+            grund = xrechnung_filter.ausschlussgrund(inv, load_hotel_config() or {})
+            pruefung["ausschluss"] = grund["text"] if grund else None
+        except Exception:
+            logger.exception("Filter-Einstellung nicht auswertbar")
     elif haupt is not None:
         try:
             ansicht = xml_ansicht.lies((data_dir / "xml" / haupt["rel_path"]).read_bytes())

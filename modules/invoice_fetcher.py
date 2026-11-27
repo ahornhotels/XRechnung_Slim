@@ -299,6 +299,18 @@ select 1 from zinv, zwin, xmnr, xmty
 """
 
 
+def _hat_kaeuferreferenz_mitgliedschaft(cur, zinv_id: int) -> bool:
+    """Hat der Rechnungsempfaenger die DXR-Mitgliedschaft (Leitweg-ID bzw.
+    Kaeuferreferenz)? Dann will er die XRechnung - der Filter nach Karteityp
+    und Mindestbetrag (xrechnung_filter) greift nicht. Datenbankfehler = nein."""
+    try:
+        cur.execute(_XML_ONLY_SQL, {"zinv_id": zinv_id, "code": "DXR"})
+        return bool(cur.fetchone())
+    except Exception as e:
+        logger.warning("DXR-Mitgliedschaft fuer ZINV %s nicht pruefbar: %s", zinv_id, e)
+        return False
+
+
 def _xml_only_reason(cur, zinv_id: int) -> Optional[str]:
     """Nur-XML-Versand? 'global' (hotel.json xml_only_all), 'membership'
     (Rechnungsempfaenger hat das Membership mit Kurzbezeichnung
@@ -515,6 +527,9 @@ def apply_deposit_refund(invoice: dict) -> dict:
     return invoice
 
 
+from modules import xrechnung_filter  # noqa: E402
+
+
 def fetch_invoice(zinv_id: int) -> Optional[dict]:
     """Holt alle Daten zu einer Rechnung. Gibt None zurueck wenn Header leer (Rechnung nicht gefunden)."""
     with get_connection() as conn:
@@ -620,6 +635,8 @@ def fetch_invoice(zinv_id: int) -> Optional[dict]:
             "tax_breakdown": tax_breakdown,
             "totals": totals,
             "xml_only": _xml_only_reason(cur, zinv_id),
+            "karteityp": xrechnung_filter.karteityp_der_rechnung(cur, zinv_id),
+            "kaeuferreferenz_mitglied": _hat_kaeuferreferenz_mitgliedschaft(cur, zinv_id),
             **({"deposit_refund": True,
                 "billing_references": _provisional["billing_references"]} if deposit_refund else {}),
             "rundungsausgleich": _rundungsausgleich(),

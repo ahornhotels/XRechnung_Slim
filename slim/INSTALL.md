@@ -248,6 +248,22 @@ nur für Verwalter. Suite8 verschickt die Mail dann sofort ohne XRechnung. Nicht
 umkehrbar; Protokoll `freigegeben_ohne_xrechnung` mit `von_hand` und Benutzer.
 Ein Override hilft in solchen Fällen nicht, er ersetzt nur Kopffelder.
 
+**Wer bekommt eine XRechnung:** Unter Konfiguration → XRechnung wählt das Haus
+die Karteitypen (aus Suite8 gelesen: Firma, Reisebüro/Agentur,
+Reservierungsstelle, Individuell) und optional einen Mindestbetrag (brutto, nur
+Rechnungen 380). Was nicht dazugehört, gibt Slim sofort frei (nur PDF),
+Protokoll `freigegeben_ohne_xrechnung` mit `regel` und `grund`. Empfänger mit
+DXR- oder Nur-XML-Mitgliedschaft bekommen immer eine XRechnung. Schlüssel in
+`hotel.json`: `xrechnung_karteitypen` (Liste, leer = alle),
+`xrechnung_mindestbetrag` (leer = keine Grenze). Der Filter gehört in diese
+Einstellung, nicht in den Trigger.
+
+**Angepasster Trigger:** Slim liest den Trigger `WMAI_XRECHNUNG_BLOCK` aus
+Suite8 (`GET /api/trigger-pruefung`, nur SELECT) und warnt oben auf
+Konfiguration → XRechnung, wenn er nicht dem Standard entspricht: anderer
+Auslöser, zusätzliche Tabellen, Abfragen ohne Fehlerbehandlung, andere
+Erkennung als die eingestellten Muster.
+
 **Kunde möchte die XRechnung noch einmal:** die Archivdatei herunterladen und
 unverändert schicken. Die XRechnung hat kein Kennzeichen „Kopie“. Ist der
 Inhalt falsch, in Suite8 stornieren und neu berechnen.

@@ -321,6 +321,18 @@
       <dd>Der Schalter rechts oben. Bei <b>○ XRechnung AUS</b> gehen neue Rechnungsmails sofort ohne XRechnung raus
         (nur PDF) – gedacht für Störungen. Bereits angehaltene Mails bleiben angehalten, bis wieder eingeschaltet wird,
         und bekommen dann ihre XRechnung. Mails aus der Aus-Zeit bekommen nachträglich nichts.</dd>
+      <dt>Wer bekommt eine XRechnung <span class="muted">(Einstellung, Rolle „verwalten“)</span></dt>
+      <dd>Unter Konfiguration → XRechnung legt das Haus fest, welche Karteitypen (Firma, Reisebüro/Agentur,
+        Reservierungsstelle, Individuell) eine XRechnung bekommen und ab welchem Bruttobetrag. Die Typen liest Slim
+        aus Suite8. Was nicht dazugehört, gibt Slim sofort frei: Suite8 verschickt die Mail nur mit PDF, der Grund
+        steht im Protokoll und im Verlauf der Rechnung. Der Mindestbetrag gilt nur für Rechnungen, nicht für
+        Gutschriften. Hat der Empfänger die DXR-Mitgliedschaft (Leitweg-ID bzw. Käuferreferenz) oder die
+        Nur-XML-Mitgliedschaft, bekommt er immer eine XRechnung. Ohne Auswahl bleibt alles wie bisher.</dd>
+      <dt>Warnung „angepasster Trigger“</dt>
+      <dd>Slim liest den Trigger WMAI_XRECHNUNG_BLOCK aus Suite8 und vergleicht ihn mit seinem Standard. Weicht er
+        ab, steht oben auf Konfiguration → XRechnung eine Warnung mit den Abweichungen und dem Text des Triggers.
+        Filtert der Trigger selbst, sieht Slim die durchgelassenen Mails nie. Empfohlen ist der Standard-Trigger
+        (Übersicht → Trigger-SQL) zusammen mit der Einstellung „Wer bekommt eine XRechnung“.</dd>
       <dt>Ohne XRechnung freigeben nach X Tagen <span class="muted">(Einstellung, Rolle „verwalten“)</span></dt>
       <dd>Unter <a href="/konfiguration">Konfiguration XRechnung</a> einstellbar (0 = nie). Hängt eine Mail so viele Tage
         nach Hoteldatum, gibt Slim sie frei und Suite8 verschickt sie nur mit PDF – damit keine Rechnung ewig liegen

@@ -193,7 +193,9 @@ function pruefKarte(d) {
     : '<span class="ok">✔ vollständig</span>';
   const bau = p.bau_fehler ? `<span class="bad">✘ ${esc(p.bau_fehler)}</span>`
     : (p.pflichtfelder.length ? '<span class="muted">erst nach den Pflichtfeldern</span>' : '<span class="ok">✔ baubar und schemagerecht</span>');
-  return `<div class="card"><h2>Prüfung des heutigen Stands</h2><dl class="fakten">
+  return `<div class="card"><h2>Prüfung des heutigen Stands</h2>
+      ${p.ausschluss ? `<p class="muted">Laut Einstellung „Wer bekommt eine XRechnung“ geht diese Rechnung ohne XRechnung hinaus (nur PDF): ${esc(p.ausschluss)}.</p>` : ""}
+      <dl class="fakten">
       <dt>Pflichtfelder</dt><dd>${pflicht}</dd>
       <dt>Aufbau der XRechnung</dt><dd>${bau}</dd>
       <dt>KoSIT-Prüfung</dt><dd id="kosit"><button class="secondary" id="b-kosit">KoSIT prüfen</button>
@@ -216,7 +218,7 @@ function verlaufKarte(d) {
     <tbody>${d.verlauf.slice().reverse().map(e => {
       const det = e.details || {};
       const text = [det.by ? "von " + det.by : null, det.error || null,
-                    det.von_hand ? "von Hand" : null, det.tage ? "nach " + det.tage + " Tagen Wartefrist" : null,
+                    det.von_hand ? "von Hand" : null, det.grund || null, det.tage ? "nach " + det.tage + " Tagen Wartefrist" : null,
                     det.xml_only ? "nur XML" : null, e.wmai_id ? "Mail " + e.wmai_id : null].filter(Boolean).join(" · ");
       return `<tr><td style="white-space:nowrap">${esc(zeit(e.ts))}</td><td>${esc(EREIGNIS[e.event] || e.event)}</td><td>${esc(text)}</td></tr>`;
     }).join("")}</tbody></table></div></div>`;

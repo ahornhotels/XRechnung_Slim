@@ -22,10 +22,10 @@ from typing import Optional
 
 from core.config_loader import load_hotel_config
 from core.db_connector import get_connection
-from modules import invoice_fetcher, invoice_validator, xml_builder, kosit_validator
+from modules import invoice_fetcher, invoice_validator, xml_builder, kosit_validator, xrechnung_filter
 from modules.kosit_validator import KositValidationError
 from modules.suite8_mailer import (
-    find_pending_wmai, attach_xml_to_wmai, release_overdue_wmai,
+    find_pending_wmai, attach_xml_to_wmai, release_overdue_wmai, release_wmai,
     set_wmai_error, get_wmai_error, WMAI_ERROR_MAX,
 )
 from modules.suite8_pattern import (
@@ -277,6 +277,23 @@ def run_once(data_dir: Optional[Path] = None) -> dict:
                 # Kunden-E-Mail, BuyerReference) ohne dass Suite8
                 # nachgepflegt werden muss.
                 inv = overrides.apply_to_invoice(data_dir, wmai_id, inv)
+
+                # Einstellung "Wer bekommt eine XRechnung" (Karteityp,
+                # Mindestbetrag): Was ausgefiltert wird, geht sofort ohne
+                # XRechnung hinaus - VOR der Pruefung, damit fehlende
+                # Pflichtfelder eine solche Rechnung nicht aufhalten.
+                grund = xrechnung_filter.ausschlussgrund(inv, cfg)
+                if grund:
+                    if release_wmai(conn, wmai_id):
+                        summary["ohne_xrechnung"] = summary.get("ohne_xrechnung", 0) + 1
+                        logger.info("WMAI %s ohne XRechnung freigegeben: %s", wmai_id, grund["text"])
+                        audit_jsonl.record_safe(
+                            data_dir, "freigegeben_ohne_xrechnung",
+                            wmai_id=wmai_id, zinv_number=zinv_number,
+                            details={"regel": grund["regel"], "grund": grund["text"],
+                                     "hoteldatum": row.get("fideliodate")},
+                        )
+                    continue
 
                 issues = invoice_validator.validate(inv)
                 if issues:
