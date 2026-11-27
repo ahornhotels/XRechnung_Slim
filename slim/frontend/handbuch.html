@@ -331,7 +331,10 @@
       <dt>Warnung „angepasster Trigger“</dt>
       <dd>Slim liest den Trigger WMAI_XRECHNUNG_BLOCK aus Suite8 und vergleicht ihn mit seinem Standard. Weicht er
         ab, steht oben auf Konfiguration → XRechnung die Warnung „Achtung: angepasster Trigger in Suite8“; der Text
-        des Triggers lässt sich dort aufklappen. Empfohlen ist der Standard-Trigger
+        des Triggers lässt sich dort aufklappen. Ist es der unveränderte Standard-Trigger, aber mit anderen
+        Mustern als den jetzt eingestellten, heißt die Warnung stattdessen „Der Trigger in Suite8 passt nicht mehr
+        zu den eingestellten Mustern“ und zeigt beide Muster nebeneinander: Der Trigger enthält die Muster als
+        festen Text und muss nach jeder Änderung neu ausgeführt werden. Empfohlen ist der Standard-Trigger
         (Übersicht → Trigger-SQL) zusammen mit der Einstellung „Wer bekommt eine XRechnung“.</dd>
       <dt>Ohne XRechnung freigeben nach X Tagen <span class="muted">(Einstellung, Rolle „verwalten“)</span></dt>
       <dd>Unter <a href="/konfiguration">Konfiguration XRechnung</a> einstellbar (0 = nie). Hängt eine Mail so viele Tage

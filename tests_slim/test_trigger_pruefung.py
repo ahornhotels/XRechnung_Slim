@@ -165,6 +165,61 @@ def test_einstellungsseite_warnt_oben():
 
 def test_warnung_nennt_nur_die_tatsache_ohne_deutung():
     html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "settings.html").read_text(encoding="utf-8")
-    teil = html[html.index("async function triggerWarnung"):html.index('w.style.display = "block"')]
+    teil = html[html.index("if (!t.angepasst) return;"):html.index("// Karteitypen, wie sie jetzt")]
     assert "Achtung: angepasster Trigger in Suite8." in teil and "t.quelltext" in teil
     assert "abweichungen" not in teil and "durchlässt" not in teil
+
+
+# ───────────────────────── Muster geaendert, Trigger nicht neu ausgefuehrt ─────────────────────────
+
+NEU = r"Invoice\s+(?P<zinv_number>\d+)"
+
+
+def test_muster_im_trigger_liest_die_muster_aus_dem_standard_trigger():
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard()) == \
+        {"dateiname": None, "betreff": r"Rechnung\s+Nr\.?\s*(\d+)"}
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard(r"Folio_(?P<zinv_id>\d+)\.pdf$", SUB)) == \
+        {"dateiname": r"Folio_(\d+)\.pdf$", "betreff": r"Rechnung\s+Nr\.?\s*(\d+)"}
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard("", "")) == \
+        {"dateiname": r"Folio.*\.pdf$", "betreff": None}
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard("", "It's (?P<zinv_number>\\d+)"))["betreff"] == "It's (\\d+)"
+
+
+def test_von_hand_veraenderter_trigger_ist_kein_standard():
+    assert ts.muster_im_trigger("INSERT OR UPDATE", HAUS) is None
+    assert ts.muster_im_trigger("INSERT", _standard()) is None                       # anderer Ausloeser
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard().replace("'%.xml'", "'%.zip'")) is None
+    assert ts.muster_im_trigger("INSERT OR UPDATE", _standard().replace(
+        ":NEW.WMAI_BLOCKSEND := 1;", ":NEW.WMAI_BLOCKSEND := 1; :NEW.WMAI_ERROR := NULL;")) is None
+
+
+def _api_mit(client, quelle, cfg):
+    cm = MagicMock()
+    cm.__enter__ = MagicMock(return_value=MagicMock())
+    cm.__exit__ = MagicMock(return_value=None)
+    with patch.object(ts, "get_connection", return_value=cm), \
+         patch.object(ts.trigger_state, "read_source", return_value=quelle), \
+         patch.object(ts, "load_json", return_value=cfg):
+        return client.get("/api/trigger-pruefung").json()
+
+
+def test_api_meldet_veraltetes_muster_getrennt(client):
+    quelle = {"state": "aktiv", "event": "INSERT OR UPDATE", "body": _standard(), "error": None}
+    r = _api_mit(client, quelle, {"suite8_recognize_subject_pattern": NEU})
+    assert r["muster_veraltet"] is True and r["angepasst"] is False
+    assert r["muster_im_trigger"] == {"dateiname": None, "betreff": r"Rechnung\s+Nr\.?\s*(\d+)"}
+    assert r["muster_eingestellt"] == {"dateiname": None, "betreff": r"Invoice\s+(\d+)"}
+    # Muster passt: weder das eine noch das andere
+    r = _api_mit(client, quelle, {"suite8_recognize_subject_pattern": SUB})
+    assert r["muster_veraltet"] is False and r["angepasst"] is False and "muster_im_trigger" not in r
+    # von Hand veraendert: bleibt "angepasst"
+    r = _api_mit(client, {"state": "aktiv", "event": "INSERT", "body": HAUS, "error": None},
+                 {"suite8_recognize_subject_pattern": SUB})
+    assert r["angepasst"] is True and r["muster_veraltet"] is False
+
+
+def test_seite_meldet_veraltetes_muster_mit_beiden_mustern():
+    html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "settings.html").read_text(encoding="utf-8")
+    teil = html[html.index("async function triggerWarnung"):html.index("if (!t.angepasst) return;")]
+    assert "t.muster_veraltet" in teil and "passt nicht mehr zu den eingestellten Mustern" in teil
+    assert "Im Trigger" in teil and "In Slim eingestellt" in teil and "Trigger-SQL" in teil
