@@ -234,6 +234,13 @@ erzeugt“ ins Archiv (Protokoll `nachtraeglich_erzeugt` mit Benutzer). Slim
 **verschickt sie nicht** – sie steht zum Herunterladen bereit. Gesperrt, wenn
 für die Nummer schon eine Archivdatei liegt oder ihre Mail noch wartet.
 
+**Anzahlung storniert und erstattet:** Eine Rechnung, die nur negative
+Anzahlungsbuchungen mit Bezug auf Anzahlungsrechnungen trägt (keine Leistung),
+wird als Gutschrift (381) erzeugt: je Anzahlung eine Position, BG-3 je
+Anzahlungsrechnung, auch mehrere. Der Empfänger wird nicht mit dem der
+Anzahlungsrechnung verglichen. Fehlt Nummer oder Datum der Anzahlungsrechnung
+oder stehen Plus-Anzahlungszeilen dabei, bleibt die Rechnung gesperrt.
+
 **Ohne XRechnung freigeben (nur PDF):** Für eine hängende Rechnungsmail, die
 sich nicht als XRechnung abbilden lässt (z. B. reine Umbuchung einer Anzahlung
 ohne Leistung), gibt es bei wartenden Rechnungen mit Fehlertext diesen Knopf,

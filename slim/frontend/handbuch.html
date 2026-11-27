@@ -296,6 +296,13 @@
         danach mit dem Status „nachträglich erzeugt“ im Archiv und lässt sich herunterladen. <b>Slim verschickt sie
         nicht</b> – das Weiterleiten an den Kunden machen Sie selbst. Liegt für die Rechnung schon eine Datei im Archiv
         oder wartet ihre Mail noch, ist der Knopf gesperrt.</dd>
+      <dt>Anzahlung storniert und erstattet</dt>
+      <dd>Wird eine Anzahlung zurückgebucht (Minusbuchung der Anzahlung mit Bezug auf die Anzahlungsrechnung, ohne
+        weitere Leistung, Auschecken z. B. auf Debitor), erzeugt Slim eine <b>Gutschrift</b> zur Anzahlungsrechnung:
+        je Anzahlung eine Position mit Nummer und Datum der Anzahlungsrechnung, Steuer wie gebucht. Werden mehrere
+        Anzahlungen in einer Rechnung storniert, entsteht eine Gutschrift mit einem Bezug je Anzahlungsrechnung.
+        Die Gutschrift geht an den Empfänger dieser Rechnung – Slim prüft nicht, ob die Anzahlungsrechnung an
+        dieselbe Kartei ging. Bitte die Rückbuchung auf die Kartei der Anzahlungsrechnung buchen.</dd>
       <dt>Ohne XRechnung freigeben <span class="muted">(Rolle „verwalten“)</span></dt>
       <dd>Manche Rechnungen lassen sich nicht als XRechnung abbilden, etwa eine reine Umbuchung einer Anzahlung ohne
         Leistung. Ein Override hilft dann nicht, denn er ersetzt nur Angaben im Kopf (Anschrift, E-Mail, Referenz).
@@ -347,7 +354,7 @@
           <td>Verwalter: Hoteldaten in Suite8 oder unter <a href="/hoteldaten">Hoteldaten</a> ergänzen</td></tr>
       <tr><td>USt-Satz nicht ermittelbar</td><td>Eine Buchung hat keine Steuerbuchung (z. B. Auslage)</td>
           <td>Verwalter: Artikel unter Konfiguration XRechnung → Auslage-Artikel eintragen oder Buchung prüfen</td></tr>
-      <tr><td>Anzahlung nicht automatisch abbildbar</td><td>Rechnung mit Anzahlung, die Slim nicht sicher umsetzen kann</td>
+      <tr><td>Anzahlung nicht automatisch abbildbar</td><td>Rechnung mit Anzahlung, die Slim nicht sicher umsetzen kann (z. B. Anzahlungsrechnung ohne Nummer, Gutschrift mit Anzahlungsverrechnung)</td>
           <td>Rechnung prüfen. Ist sie richtig (z. B. reine Umbuchung einer Anzahlung ohne Leistung), kann der
             Verwalter sie auf der Seite <a href="/rechnung">Rechnung</a> „Ohne XRechnung freigeben“. Ein Override hilft hier nicht.</td></tr>
       <tr><td>ZINV mit Nummer … nicht gefunden</td><td>Die Nummer aus dem Betreff gibt es in Suite8 nicht</td>
