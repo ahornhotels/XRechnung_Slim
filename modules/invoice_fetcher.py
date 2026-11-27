@@ -459,11 +459,26 @@ def apply_deposit_refund(invoice: dict) -> dict:
         return invoice
     if not all(is_deposit_line(ln) for ln in lines):
         return invoice
+    # Wurde die Abbuchung erst storniert und dann erneut gebucht, stehen auch
+    # Paare +x / -x auf der Rechnung. Sie heben sich auf und gehoeren nicht in
+    # die Gutschrift - massgeblich ist, was danach uebrig bleibt.
+    from modules.xml_builder import ohne_storno_paare
+    rest = ohne_storno_paare(lines)
     try:
-        if not all(float(ln.get("lineextensionamountnet") or 0) < 0 for ln in lines):
+        # Anzahlungszeilen ueber 0,00 tragen nichts bei und waeren in der
+        # Gutschrift eine leere Position.
+        rest = [ln for ln in rest if abs(float(ln.get("lineextensionamountnet") or 0)) >= 0.005]
+    except (TypeError, ValueError):
+        return invoice
+    if not rest:
+        return invoice
+    try:
+        if not all(float(ln.get("lineextensionamountnet") or 0) < 0 for ln in rest):
             return invoice
     except (TypeError, ValueError):
         return invoice
+    if len(rest) != len(lines):
+        lines[:] = rest
     refs = set()
     for ln in lines:
         nr = str(ln.get("depositinvoicenumber") or "").strip()
