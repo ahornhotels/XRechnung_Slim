@@ -260,9 +260,15 @@ Einstellung, nicht in den Trigger.
 
 **Angepasster Trigger:** Slim liest den Trigger `WMAI_XRECHNUNG_BLOCK` aus
 Suite8 (`GET /api/trigger-pruefung`, nur SELECT) und warnt oben auf
-Konfiguration → XRechnung, wenn er nicht dem Standard entspricht: anderer
-Auslöser, zusätzliche Tabellen, Abfragen ohne Fehlerbehandlung, andere
-Erkennung als die eingestellten Muster.
+Konfiguration → XRechnung, wenn er nicht dem Standard entspricht. Die Warnung
+nennt nur die Tatsache; der Text des Triggers lässt sich aufklappen.
+
+**Vermerk in Suite8:** Hat Slim die XRechnung angehängt und die Mail
+freigegeben, steht in `WMAI_ERROR` der Text `XRechnung OK`. Das heißt:
+angehängt und zum Versand freigegeben. Ob Suite8 die Mail verschickt hat, zeigt
+`WMAI_SENT`; meldet der Mailservice einen Versandfehler, überschreibt er den
+Vermerk mit seiner Fehlermeldung. Ohne XRechnung freigegebene Mails bekommen
+keinen Vermerk.
 
 **Abrechnungsbericht (nur Kanal TBH):** Unter Konfiguration → System trägt
 der Verwalter die E-Mail und den Versandtag (1 bis 28) ein. Ab diesem Tag legt
