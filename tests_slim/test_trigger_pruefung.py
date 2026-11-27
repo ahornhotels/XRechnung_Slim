@@ -161,3 +161,10 @@ def test_einstellungsseite_warnt_oben():
     html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "settings.html").read_text(encoding="utf-8")
     assert "/api/trigger-pruefung" in html and "angepasster Trigger" in html
     assert html.index('id="trigger-warnung"') < html.index('id="sections"')
+
+
+def test_warnung_nennt_nur_die_tatsache_ohne_deutung():
+    html = (Path(__file__).resolve().parent.parent / "slim" / "frontend" / "settings.html").read_text(encoding="utf-8")
+    teil = html[html.index("async function triggerWarnung"):html.index('w.style.display = "block"')]
+    assert "Achtung: angepasster Trigger in Suite8." in teil and "t.quelltext" in teil
+    assert "abweichungen" not in teil and "durchlässt" not in teil

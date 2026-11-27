@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 WMAA_FILENAME_MAX = 128
 
 
+# Steht nach erfolgreichem Anhaengen der XRechnung im Feld WMAI_ERROR.
+OK_VERMERK = "XRechnung OK"
+
+
 def attach_xml_to_wmai(
     wmai_id: int,
     xml_bytes: bytes,
@@ -130,10 +134,12 @@ def attach_xml_to_wmai(
                 f"erwartet BLOCKSEND=1 + SENT=0, betroffene Zeilen={cur.rowcount})"
             )
 
-        # 6) WMAI_ERROR clearen (Reset falls vorheriger Versuch failed war)
+        # 6) Vermerk in WMAI_ERROR (in Suite8 sichtbar); ersetzt zugleich den
+        #    Fehlertext eines frueheren Versuchs. Meldet der Suite8-Mailservice
+        #    spaeter einen Versandfehler, ueberschreibt er den Vermerk.
         cur.execute(
-            "UPDATE WMAI SET WMAI_ERROR = NULL WHERE WMAI_ID = :wmai_id",
-            {"wmai_id": wmai_id},
+            "UPDATE WMAI SET WMAI_ERROR = :vermerk WHERE WMAI_ID = :wmai_id",
+            {"vermerk": OK_VERMERK, "wmai_id": wmai_id},
         )
 
         conn.commit()
