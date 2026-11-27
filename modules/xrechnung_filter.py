@@ -122,6 +122,29 @@ def ausschlussgrund(inv: dict, cfg: dict) -> Optional[dict]:
     return None
 
 
+def karteitypen_liste() -> dict:
+    """Die Kartei-Kategorien, wie sie jetzt in dieser Suite8 stehen (nur
+    SELECT): {"zeilen": [{"typ", "name", "bezeichnung", "anzahl", "inaktiv"}],
+    "fehler"}. typ ist der Wert, den die Einstellung speichert; name der feste
+    Name dazu; bezeichnung der Text aus Suite8."""
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(_AUSWAHL_SQL)
+            rows = cur.fetchall()
+    except Exception as e:
+        logger.warning("Karteitypen nicht lesbar: %s", e)
+        return {"zeilen": [], "fehler": "Suite8 ist nicht erreichbar oder die Tabelle XCCA nicht lesbar."}
+    zeilen = []
+    for kat, bezeichnung, inaktiv, n in rows:
+        typ = _typ(kat)
+        if typ is None:
+            continue
+        zeilen.append({"typ": typ, "name": typname(typ), "bezeichnung": str(bezeichnung or "").strip(),
+                       "anzahl": int(n or 0), "inaktiv": bool(inaktiv)})
+    return {"zeilen": zeilen, "fehler": None}
+
+
 def karteitypen_auswahl() -> list[tuple[str, str]]:
     """Karteitypen, die es in dieser Suite8 gibt: [(Wert, Beschriftung)] mit
     der Bezeichnung aus XCCA und der Anzahl der Karteien. Nur SELECT. Ohne
