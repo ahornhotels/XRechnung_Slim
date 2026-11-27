@@ -261,7 +261,10 @@ Einstellung, nicht in den Trigger.
 **Angepasster Trigger:** Slim liest den Trigger `WMAI_XRECHNUNG_BLOCK` aus
 Suite8 (`GET /api/trigger-pruefung`, nur SELECT) und warnt oben auf
 Konfiguration → XRechnung, wenn er nicht dem Standard entspricht. Die Warnung
-nennt nur die Tatsache; der Text des Triggers lässt sich aufklappen.
+nennt nur die Tatsache; der Text des Triggers lässt sich aufklappen. Der
+Trigger enthält die Erkennungsmuster als festen Text. Wurden sie in Slim
+geändert und der Trigger nicht neu ausgeführt, meldet Slim das getrennt
+(`muster_veraltet`) und zeigt die Muster im Trigger neben den eingestellten.
 
 **Vermerk in Suite8:** Hat Slim die XRechnung angehängt und die Mail
 freigegeben, steht in `WMAI_ERROR` der Text `XRechnung OK`. Das heißt:
