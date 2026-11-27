@@ -431,3 +431,19 @@ def test_rueckbuchung_ignoriert_anzahlungszeile_ueber_null():
                          _line("Deposit 7%", 0.00, 0.00, 7, ANZ_1)])
     assert inv["deposit_refund"] is True and len(inv["lines"]) == 1
     assert invoice_validator.validate(inv) == []
+
+
+def test_rueckbuchung_drei_anzahlungsbelege_bezug_auf_die_offene():
+    """Anzahlung berechnet, erstattet (eigener Beleg), neu berechnet; beim
+    Check-in werden alle drei gegengebucht. Abbuchung der ersten und Ruecknahme
+    ihrer Erstattung heben sich auf - der Bezug zeigt auf die ZWEITE
+    Anzahlungsrechnung, egal in welcher Reihenfolge die Zeilen kommen."""
+    erste, erstattung, zweite = (91, "100010", "2026-09-01"), (92, "100011", "2026-09-30"), (93, "100012", "2026-10-05")
+    zeilen = [_line("Deposit 19%", -304.00, -255.46, 19, erste),
+              _line("Deposit 19%", 304.00, 255.46, 19, erstattung),
+              _line("Deposit 19%", -304.00, -255.46, 19, zweite)]
+    for reihenfolge in (zeilen, zeilen[::-1], [zeilen[2], zeilen[0], zeilen[1]]):
+        inv = _rueckbuchung([dict(z) for z in reihenfolge])
+        assert inv["deposit_refund"] is True and len(inv["lines"]) == 1
+        assert inv["billing_references"] == [{"id": "100012", "issuedate": "2026-10-05"}]
+        assert "Nr. 100012 vom 05.10.2026" in inv["lines"][0]["itemname"]

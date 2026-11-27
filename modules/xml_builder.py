@@ -73,12 +73,23 @@ def ohne_storno_paare(deps: list) -> list:
         if not any(pos is r for r in remaining):
             continue
         key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
-        for neg in remaining:
-            if (_net(neg) == -_net(pos)
-                    and _cat_key(neg.get("classifiedtaxcategoryid"),
-                                 neg.get("classifiedtaxcategorypercent")) == key):
-                remaining = [r for r in remaining if r is not pos and r is not neg]
-                break
+        kandidaten = [neg for neg in remaining
+                      if _net(neg) == -_net(pos)
+                      and _cat_key(neg.get("classifiedtaxcategoryid"),
+                                   neg.get("classifiedtaxcategorypercent")) == key]
+        if not kandidaten:
+            continue
+        # Die Plus-Zeile nimmt eine Erstattung zurueck. Die Erstattung kann nur
+        # eine Anzahlung betreffen, die VOR ihr berechnet wurde - also gehoert
+        # die juengste Abbuchung dazu, deren Anzahlungsrechnung nicht juenger
+        # ist. Sonst bliebe der Bezug auf die falsche Anzahlungsrechnung stehen.
+        d_pos = str(pos.get("depositinvoicedate") or "")[:10]
+        frueher = [n for n in kandidaten
+                   if d_pos and str(n.get("depositinvoicedate") or "")[:10]
+                   and str(n.get("depositinvoicedate"))[:10] <= d_pos]
+        neg = (max(frueher, key=lambda n: str(n.get("depositinvoicedate"))[:10])
+               if frueher else kandidaten[0])
+        remaining = [r for r in remaining if r is not pos and r is not neg]
     return remaining
 
 
