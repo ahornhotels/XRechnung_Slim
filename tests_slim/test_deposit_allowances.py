@@ -305,3 +305,100 @@ def test_erstatteter_anzahlungsueberhang_weist_auszahlung_aus():
     assert tot.findtext("cbc:TaxInclusiveAmount", namespaces=NS) == "-1.07"
     assert tot.findtext("cbc:PrepaidAmount", namespaces=NS) == "-1.07"
     assert tot.findtext("cbc:PayableAmount", namespaces=NS) == "0.00"
+
+
+# ───────────────── Rueckbuchung einer Anzahlung = Gutschrift ─────────────────
+# Befund BHF 26.11.2026: Anzahlung storniert und zurueckueberwiesen. Suite8
+# bucht das negative Paar mit Verweis auf die Anzahlungsrechnung und checkt
+# auf Debitor aus. Die Rechnung traegt nur diese Zeilen - das ist eine
+# Gutschrift zur Anzahlungsrechnung, kein Abschlag.
+
+def _rueckbuchung(lines=None):
+    from modules.invoice_fetcher import apply_deposit_refund
+    inv = _invoice(lines or [_line("Deposit 7%", -1600.00, -1495.33, 7, ANZ_1)],
+                   gross=-1600.00, net=-1495.33, tax=-104.67)
+    inv["totals"]["spay_cl"] = -1600.00
+    inv["header"]["payableamount"], inv["header"]["prepaidamount"] = "-1600.00", "0.00"
+    inv["header"]["customerendpointid"] = "einkauf@firma.example"
+    inv["tax_breakdown"][0]["taxcategorypercent"] = "7.00"
+    apply_deposit_refund(inv)
+    return inv
+
+
+def test_rueckbuchung_einer_anzahlung_wird_gutschrift_mit_bezug():
+    from tests_slim.test_creditnote_xsd import _CN_XSD
+    inv = _rueckbuchung()
+    assert inv["deposit_refund"] is True and is_credit_note(inv)
+    assert inv["header"]["invoicetypecode"] == "381"
+    assert inv["header"]["billingreferenceid"] == "100001"
+    assert inv["header"]["billingreferenceissuedate"] == "2026-02-06"
+    assert invoice_validator.validate(inv) == []
+    xml, doc = _render(inv)
+    _assert_xsd_valid(xml, _CN_XSD)
+    assert doc.tag.endswith("CreditNote")
+    assert doc.findtext("cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID", namespaces=NS) == "100001"
+    assert doc.findtext("cac:CreditNoteLine/cbc:LineExtensionAmount", namespaces=NS) == "1495.33"
+    assert doc.findtext("cac:CreditNoteLine/cac:Item/cbc:Name", namespaces=NS) == "Deposit 7% (Anzahlungsrechnung Nr. 100001 vom 06.02.2026)"
+    assert doc.findtext("cac:TaxTotal/cbc:TaxAmount", namespaces=NS) == "104.67"
+    # Menge x Preis = Positionsbetrag, beide positiv (PEPPOL-EN16931-R120)
+    assert doc.findtext("cac:CreditNoteLine/cbc:CreditedQuantity", namespaces=NS) == "1"
+    assert doc.findtext("cac:CreditNoteLine/cac:Price/cbc:PriceAmount", namespaces=NS) == "1495.33"
+    tot = doc.find("cac:LegalMonetaryTotal", NS)
+    assert tot.findtext("cbc:TaxInclusiveAmount", namespaces=NS) == "1600.00"
+    assert tot.findtext("cbc:PayableAmount", namespaces=NS) == "1600.00"
+    assert not doc.findall("cac:AllowanceCharge", NS)
+
+
+def test_rueckbuchung_menge_minus_eins_mal_positiver_preis():
+    """Suite8 bucht die Rueckbuchung je nach Weg als 1 x -Preis oder -1 x +Preis."""
+    ln = _line("Deposit 7%", -1600.00, -1495.33, 7, ANZ_1)
+    ln["invoicedquantity"], ln["priceamount"] = "-1", "1495.33"
+    _, doc = _render(_rueckbuchung([ln]))
+    assert doc.findtext("cac:CreditNoteLine/cbc:CreditedQuantity", namespaces=NS) == "1"
+    assert doc.findtext("cac:CreditNoteLine/cac:Price/cbc:PriceAmount", namespaces=NS) == "1495.33"
+
+
+def test_rueckbuchung_mit_leistung_bleibt_abschlag():
+    inv = _rueckbuchung([_line("Uebernachtung", 107.00, 100.00, 7),
+                         _line("Deposit 7%", -53.50, -50.00, 7, ANZ_1)])
+    assert "deposit_refund" not in inv and inv["lines"][1]["depositzinvid"] == ANZ_1[0]
+
+
+def test_rueckbuchung_mehrerer_anzahlungen_nennt_jeden_bezug():
+    """Mehrere Anzahlungen in einer Rechnung storniert: EINE Gutschrift, je
+    Anzahlung eine Position mit ihrer Rechnungsnummer, BG-3 je Anzahlungsrechnung."""
+    from tests_slim.test_creditnote_xsd import _CN_XSD
+    from modules.invoice_fetcher import apply_deposit_refund
+    inv = _invoice([_line("Deposit 7%", -107.00, -100.00, 7, ANZ_2),
+                    _line("Deposit 7%", -53.50, -50.00, 7, ANZ_1)],
+                   gross=-160.50, net=-150.00, tax=-10.50)
+    inv["header"].update(payableamount="-160.50", prepaidamount="0.00",
+                         customerendpointid="einkauf@firma.example")
+    apply_deposit_refund(inv)
+    assert inv["deposit_refund"] is True and invoice_validator.validate(inv) == []
+    xml, doc = _render(inv)
+    _assert_xsd_valid(xml, _CN_XSD)
+    bezuege = [(b.findtext("cbc:ID", namespaces=NS), b.findtext("cbc:IssueDate", namespaces=NS))
+               for b in doc.findall("cac:BillingReference/cac:InvoiceDocumentReference", NS)]
+    assert bezuege == [("100001", "2026-02-06"), ("100002", "2026-05-27")]
+    namen = [n.text for n in doc.findall("cac:CreditNoteLine/cac:Item/cbc:Name", NS)]
+    assert namen == ["Deposit 7% (Anzahlungsrechnung Nr. 100002 vom 27.05.2026)",
+                     "Deposit 7% (Anzahlungsrechnung Nr. 100001 vom 06.02.2026)"]
+    assert doc.findtext("cac:LegalMonetaryTotal/cbc:PayableAmount", namespaces=NS) == "160.50"
+
+
+def test_rueckbuchung_ohne_rechnungsnummer_oder_mit_pluszeile_bleibt_geblockt():
+    for lines in ([_line("Deposit 7%", -107.00, -100.00, 7, (90001, "", None))],
+                  [_line("Deposit 7%", -107.00, -100.00, 7, ANZ_1),
+                   _line("Deposit 7%", 53.50, 50.00, 7, ANZ_1)]):
+        inv = _rueckbuchung(lines)
+        assert "deposit_refund" not in inv
+        assert any(i["field"] == "deposit" for i in invoice_validator.validate(inv))
+
+
+def test_void_storno_wird_nicht_als_rueckbuchung_umgedeutet():
+    from modules.invoice_fetcher import apply_deposit_refund
+    inv = _invoice([_line("Deposit 7%", -107.00, -100.00, 7, ANZ_1)], gross=-107.00, net=-100.00, tax=-7.00)
+    inv["header"]["zinv_void_zinv_id"] = 4711
+    apply_deposit_refund(inv)
+    assert "deposit_refund" not in inv
