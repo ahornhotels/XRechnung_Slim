@@ -130,6 +130,9 @@ def _field_view(s: schema.Setting, data: dict) -> dict:
         view["gesetzt"] = bool(data.get(s.key))
     else:
         view["value"] = data.get(s.key, s.default)
+        if s.type == "multi":
+            view["value"] = [str(v) for v in (view["value"] or [])]
+            view["choices"] += [v for v in view["value"] if v not in view["choices"]]
     return view
 
 
