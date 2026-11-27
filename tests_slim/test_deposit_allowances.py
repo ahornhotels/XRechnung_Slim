@@ -402,3 +402,25 @@ def test_void_storno_wird_nicht_als_rueckbuchung_umgedeutet():
     inv["header"]["zinv_void_zinv_id"] = 4711
     apply_deposit_refund(inv)
     assert "deposit_refund" not in inv
+
+
+def test_rueckbuchung_mit_storniertem_und_neu_gebuchtem_abzug():
+    """Abbuchung, deren Storno und erneute Abbuchung auf einer Rechnung: das
+    Paar hebt sich auf, uebrig bleibt EINE Rueckbuchung -> Gutschrift mit einer Position."""
+    from tests_slim.test_creditnote_xsd import _CN_XSD
+    inv = _rueckbuchung([_line("Deposit 7%", -1600.00, -1495.33, 7, ANZ_1),
+                         _line("Deposit 7%", 1600.00, 1495.33, 7, ANZ_1),
+                         _line("Deposit 7%", -1600.00, -1495.33, 7, ANZ_1)])
+    assert inv["deposit_refund"] is True and len(inv["lines"]) == 1
+    assert invoice_validator.validate(inv) == []
+    xml, doc = _render(inv)
+    _assert_xsd_valid(xml, _CN_XSD)
+    assert len(doc.findall("cac:CreditNoteLine", NS)) == 1
+    assert doc.findtext("cac:CreditNoteLine/cbc:LineExtensionAmount", namespaces=NS) == "1495.33"
+    assert doc.findtext("cac:LegalMonetaryTotal/cbc:PayableAmount", namespaces=NS) == "1600.00"
+
+
+def test_rueckbuchung_nur_aufgehobene_paare_bleibt_keine_gutschrift():
+    inv = _rueckbuchung([_line("Deposit 7%", -107.00, -100.00, 7, ANZ_1),
+                         _line("Deposit 7%", 107.00, 100.00, 7, ANZ_1)])
+    assert "deposit_refund" not in inv and len(inv["lines"]) == 2

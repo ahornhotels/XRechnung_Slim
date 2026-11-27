@@ -58,6 +58,30 @@ class XmlBuildError(Exception):
 from modules.invoice_enrich import de_date as _de_date  # noqa: E402
 
 
+def ohne_storno_paare(deps: list) -> list:
+    """Anzahlungszeilen ohne die Paare, die sich aufheben (+x / -x, gleiche
+    Kategorie und gleicher Satz): Suite8 bucht den Storno einer Anzahlungs-
+    abbuchung als Plus-Zeile mit gleichem Betrag dazu."""
+    def _net(ln) -> Decimal:
+        try:
+            return Decimal(str(ln.get("lineextensionamountnet") or 0)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return Decimal(0)
+
+    remaining = list(deps)
+    for pos in [ln for ln in deps if _net(ln) > 0]:
+        if not any(pos is r for r in remaining):
+            continue
+        key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
+        for neg in remaining:
+            if (_net(neg) == -_net(pos)
+                    and _cat_key(neg.get("classifiedtaxcategoryid"),
+                                 neg.get("classifiedtaxcategorypercent")) == key):
+                remaining = [r for r in remaining if r is not pos and r is not neg]
+                break
+    return remaining
+
+
 def deposit_allowances(lines: list) -> tuple[list, list, list]:
     """Anzahlungsabbuchungen der Schlussrechnung -> Abschlaege (OPERA-Muster).
 
@@ -89,18 +113,7 @@ def deposit_allowances(lines: list) -> tuple[list, list, list]:
         return [], [], []
 
     # Storno-Paare (+x / -x, gleiche Kategorie/Satz) aufheben.
-    remaining = list(deps)
-    for pos in [ln for ln in deps if _net(ln) > 0]:
-        if pos not in remaining:
-            continue
-        key = _cat_key(pos.get("classifiedtaxcategoryid"), pos.get("classifiedtaxcategorypercent"))
-        for neg in remaining:
-            if (_net(neg) == -_net(pos)
-                    and _cat_key(neg.get("classifiedtaxcategoryid"),
-                                 neg.get("classifiedtaxcategorypercent")) == key):
-                remaining.remove(pos)
-                remaining.remove(neg)
-                break
+    remaining = ohne_storno_paare(deps)
 
     problems = []
     if any(_net(ln) > 0 for ln in remaining):
