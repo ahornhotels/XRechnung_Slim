@@ -424,3 +424,10 @@ def test_rueckbuchung_nur_aufgehobene_paare_bleibt_keine_gutschrift():
     inv = _rueckbuchung([_line("Deposit 7%", -107.00, -100.00, 7, ANZ_1),
                          _line("Deposit 7%", 107.00, 100.00, 7, ANZ_1)])
     assert "deposit_refund" not in inv and len(inv["lines"]) == 2
+
+
+def test_rueckbuchung_ignoriert_anzahlungszeile_ueber_null():
+    inv = _rueckbuchung([_line("Deposit 7%", -1600.00, -1495.33, 7, ANZ_1),
+                         _line("Deposit 7%", 0.00, 0.00, 7, ANZ_1)])
+    assert inv["deposit_refund"] is True and len(inv["lines"]) == 1
+    assert invoice_validator.validate(inv) == []

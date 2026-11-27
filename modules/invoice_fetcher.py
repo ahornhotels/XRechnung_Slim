@@ -464,6 +464,12 @@ def apply_deposit_refund(invoice: dict) -> dict:
     # die Gutschrift - massgeblich ist, was danach uebrig bleibt.
     from modules.xml_builder import ohne_storno_paare
     rest = ohne_storno_paare(lines)
+    try:
+        # Anzahlungszeilen ueber 0,00 tragen nichts bei und waeren in der
+        # Gutschrift eine leere Position.
+        rest = [ln for ln in rest if abs(float(ln.get("lineextensionamountnet") or 0)) >= 0.005]
+    except (TypeError, ValueError):
+        return invoice
     if not rest:
         return invoice
     try:
